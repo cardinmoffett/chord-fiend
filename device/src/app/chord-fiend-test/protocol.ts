@@ -17,6 +17,7 @@ export const OUT = {
   cf_prune: "cf_prune",
   cf_clear: "cf_clear",
   cf_loop: "cf_loop",
+  cf_unloop: "cf_unloop",
   cf_play: "cf_play",
   cf_stop: "cf_stop",
 } as const;

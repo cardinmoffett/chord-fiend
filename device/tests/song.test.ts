@@ -5,10 +5,12 @@ import { describe, expect, it } from "vitest";
 import { defaultBlock } from "../../engine/src/engine.js";
 import {
   DEFAULT_SONG,
+  blockLabel,
   editingBlocks,
   layoutSong,
   normalizeSong,
   planSongWrite,
+  sectionColor,
   withEditingBlocks,
   type Song,
 } from "../src/app/chord-fiend-test/song";
@@ -30,14 +32,19 @@ function setup() {
 }
 
 describe("song layout", () => {
-  it("places the song order end to end from the start bar", () => {
-    const placed = layoutSong({ ...DEFAULT_SONG, startBar: 3 });
+  it("places the song order end to end from bar 1", () => {
+    const placed = layoutSong(DEFAULT_SONG);
     expect(placed.map((p) => [p.label, p.start, p.length])).toEqual([
-      ["Verse", 8, 16],
-      ["Chorus", 24, 16],
-      ["Verse", 40, 16],
-      ["Chorus", 56, 16],
+      ["Verse", 0, 16],
+      ["Chorus", 16, 16],
+      ["Verse", 32, 16],
+      ["Chorus", 48, 16],
     ]);
+  });
+
+  it("always writes bass: a block's old bass-off setting from the app is ignored", () => {
+    const s = withEditingBlocks({ ...DEFAULT_SONG, editing: { kind: "section", id: 1 } }, [{ ...defaultBlock(), bassToneIndex: -1 }]);
+    expect(layoutSong(s)[0].notes.bass.length).toBe(4);
   });
 
   it("editing a section changes every linked slot, and a detached slot keeps its own copy", () => {
@@ -79,6 +86,9 @@ describe("writing the song to a fake Live set", () => {
     ]);
     expect(t.clips(t.d).map((x: any) => x[0])).toEqual(["Chord Fiend: 1 Verse - drums", "Chord Fiend: 2 Chorus - drums", "Chord Fiend: 3 Verse - drums", "Chord Fiend: 4 Chorus - drums"]);
     // the chords of song part 2 (Chorus: IV V I vi) start with F major
+    // each section's clips take its colour (Verse is section 1, Chorus section 2)
+    expect(t.c.arrangement_clips.map((x: any) => x.color)).toEqual([sectionColor(1).live, sectionColor(2).live, sectionColor(1).live, sectionColor(2).live]);
+    expect(sectionColor(1).live).not.toBe(sectionColor(2).live);
     const chorus = t.c.arrangement_clips.find((x: any) => x.name.includes("2 Chorus"));
     expect(chorus.notes.filter((n: any) => n.start_time === 0).map((n: any) => n.pitch)).toEqual([65, 69, 72]);
   });
@@ -97,6 +107,13 @@ describe("writing the song to a fake Live set", () => {
     expect(calls.filter((x: any) => x[0] === "create_midi_clip" || x[0] === "delete_clip")).toEqual([]);
     const verse = t.c.arrangement_clips.find((x: any) => x.name.includes("1 Verse"));
     expect(verse.notes.filter((n: any) => n.start_time === 0).map((n: any) => n.pitch)).toEqual([62, 65, 69]); // D minor
+  });
+
+  it("a change that does not touch the Arrangement sends nothing", () => {
+    const t = setup();
+    t.write(t.song, true);
+    const plan = t.write({ ...t.song, editing: { kind: "section", id: 2 } });
+    expect(plan.messages).toEqual([]);
   });
 
   it("reordering and removing parts moves the clips, with no leftovers", () => {
@@ -155,5 +172,31 @@ describe("writing the song to a fake Live set", () => {
     t.write(t.song, true);
     expect(t.clips(t.c).map((x: any) => x[0])).not.toContain("Chord Fiend: chords");
     expect(t.c.arrangement_clips).toHaveLength(4);
+  });
+});
+
+describe("block labels: the degree large, the chord name small", () => {
+  const b = (o: object) => ({ ...defaultBlock(), ...o });
+  const label = (o: object, song: Song = DEFAULT_SONG) => blockLabel(b(o), song);
+  it("diatonic", () => {
+    expect(label({ degreeIndex: 4, extensionIndex: 2 })).toEqual({ degree: "V7", name: "G7" });
+    expect(label({ degreeIndex: 1 })).toEqual({ degree: "ii", name: "Dm" });
+    expect(label({ degreeIndex: 4, extensionIndex: 2, flat5: 1 })).toEqual({ degree: "V7\u266D5", name: "G7b5" });
+    expect(label({ degreeIndex: 0, susIndex: 2 }).degree).toBe("Isus4");
+    expect(label({ degreeIndex: 0, aug: 1 }).degree).toBe("I+");
+  });
+  it("a borrowed chord shows its degree in the borrowed mode", () => {
+    expect(label({ degreeIndex: 5, blockModeIndex: 6 })).toEqual({ degree: "\u266DVI", name: "A\u266D" });
+  });
+  it("applied", () => {
+    expect(label({ chordSource: "applied", appliedFunction: "dominant", appliedTargetIndex: 4, extensionIndex: 2 })).toEqual({ degree: "V7/V", name: "D7" });
+    expect(label({ chordSource: "applied", appliedFunction: "tritoneSub", appliedTargetIndex: 0, extensionIndex: 2 }).degree).toBe("subV7/I");
+    expect(label({ chordSource: "applied", appliedFunction: "leadingTone", appliedTargetIndex: 4 }).degree).toBe("vii\u00B07/V");
+  });
+  it("free", () => {
+    expect(label({ chordSource: "free", freeRoot: 4, freeQuality: "major" })).toEqual({ degree: "E", name: "E" });
+    expect(label({ chordSource: "free", freeRoot: 5, freeQuality: "minor", extensionIndex: 2 }).degree).toBe("Fm7");
+    expect(label({ chordSource: "free", freeRoot: 0, freeQuality: "major", extensionIndex: 2 }).degree).toBe("Cmaj7");
+    expect(label({ chordSource: "free", freeRoot: 10, freeQuality: "dominant" }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("B\u266D7");
   });
 });

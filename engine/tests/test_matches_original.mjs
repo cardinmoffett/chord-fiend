@@ -22,7 +22,7 @@ var T = {start: function () { return {then: function (cb) { cb(); return {catch:
 
 var names = Object.keys(engine);
 var app = new Function('document', 'localStorage', 'Tone', code +
-  '\nreturn {S: function () { return state; }, fns: {' + names.map(function (n) { return n + ':' + n; }).join(',') + '}};'
+  '\nreturn {S: function () { return state; }, fns: {' + names.map(function (n) { return n + ': typeof ' + n + ' === "undefined" ? undefined : ' + n; }).join(',') + '}};'
 )(doc, {getItem: function () { return null; }, setItem: function () {}}, T);
 var orig = app.fns;
 var state = app.S();
@@ -35,9 +35,20 @@ function same(label, a, b) {
 }
 function report(t) { console.log((failures === 0 ? 'PASS' : 'FAIL') + '  ' + t + '  (' + passes + ' checks' + (failures ? ', ' + failures + ' FAILED' : '') + ')'); passes = 0; failures = 0; }
 function blk(o) { return Object.assign(orig.defaultBlock(), o); }
+// The engine's chord carries two fields the app's does not (isFree, flat5). For the app's
+// own blocks both must be false; everything else must match exactly.
+function appShape(ch) {
+  var c = Object.assign({}, ch);
+  if (c.isFree !== false || c.flat5 !== false) return {unexpected: {isFree: c.isFree, flat5: c.flat5}};
+  delete c.isFree; delete c.flat5;
+  return c;
+}
 
 console.log('=== constants ===');
-names.forEach(function (n) { if (typeof engine[n] !== 'function') same(n, orig[n], engine[n]); });
+// Names the app never had (free mode) are the engine's own additions, checked in test_free_flat5.
+var additions = names.filter(function (n) { return orig[n] === undefined; });
+names.forEach(function (n) { if (typeof engine[n] !== 'function' && additions.indexOf(n) < 0) same(n, orig[n], engine[n]); });
+same('the only additions are the free-mode constants', additions, ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
@@ -57,7 +68,7 @@ for (var root = 0; root < 12; root++) {
               var b = blk({degreeIndex: deg, blockModeIndex: bm, extensionIndex: ext, susIndex: sus, aug: aug,
                 inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
               var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
-              same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, e1);
+              same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, appShape(e1));
               same('getChordSymbol ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
             }
   }
@@ -79,7 +90,7 @@ for (root = 0; root < 12; root++) {
               var b = blk({chordSource: 'applied', appliedTargetIndex: tgt, appliedFunction: fn, extensionIndex: ext, susIndex: sus, aug: aug,
                 inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
               var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
-              same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, e1);
+              same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, appShape(e1));
               same('getChordSymbol ' + JSON.stringify(b), orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
               same('appliedFunctionLabel ' + JSON.stringify(b) + ' mode ' + mm, orig.appliedFunctionLabel(b), engine.appliedFunctionLabel(b, mm));
             }

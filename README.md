@@ -13,7 +13,7 @@ A Max for Live device for Ableton Live: a block editor for chord progressions th
 
 ## Run the tests
 
-    sh engine/run_tests.sh      # the engine package: seven ok lines
+    sh engine/run_tests.sh      # the engine package: eight ok lines
     sh original/run_tests.sh    # the original app: six ok lines
     cd device && pnpm install && pnpm build && pnpm test    # the device
 

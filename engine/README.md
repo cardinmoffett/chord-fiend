@@ -14,7 +14,14 @@ Plain JavaScript with no dependencies. It builds chords from blocks, names and s
 | `activeBeatPattern(beatKey, customBeatPatterns)` | the project's edited beats | `state.customBeatPatterns` |
 | `computeBassPitchForBlock(block, chord, pattern, bassWrapLow)` | the beat in use and bass lowest note | `state.drumBeat`, `state.bassWrapLow` |
 
-`buildChord(block, rootIndex, modeIndex)` already took the key and mode, and is unchanged.
+`buildChord(block, rootIndex, modeIndex)` already took the key and mode.
+
+## Additions the app does not have
+
+Two optional block fields. A block without them builds exactly as the app's did, which `test_matches_original.mjs` checks.
+
+- `flat5`: lowers the 5th a semitone on any chord (diatonic, applied or free). Named `C(b5)`, `G7b5`, `Cmaj7b5`; a minor chord with a ♭5 is the usual `m7b5`. Aug wins if both are set; the leading-tone chord already has one.
+- `chordSource: "free"` with `freeRoot` (pitch class 0-11) and `freeQuality` (`major`, `minor` or `dominant`): a chord on any root, outside the key's scale, with every extension, sus, aug, ♭5, inversion, drop and octave option. Its root sits within the octave above the key root, as degrees do.
 
 ## Notes for clips
 
@@ -26,9 +33,10 @@ Plain JavaScript with no dependencies. It builds chords from blocks, names and s
 
     sh run_tests.sh
 
-Expect seven `ok` lines.
+Expect eight `ok` lines.
 
 - `test_matches_original.mjs` loads the original app and checks that the engine gives identical answers across about 1.4 million checks: every key, home mode, borrowed mode, degree, extension, sus and aug setting, all applied chords, and every beat and bass setting.
 - The other five are the original tests, pointed at the engine. Their checks are unchanged; only the setup at the top differs. `test_inversion_labels` leaves out its final section, which tests the app's editor dropdown rather than the engine and belongs with the editor (build plan step 5).
+- `test_free_flat5.mjs` checks free mode and flat five against hand-written expectations.
 - `test_notes.mjs` checks `src/notes.js` against hand-written expectations.
 - `test_extension_fix` is not ported. It tests the Learn lessons, which the device does not carry over. It still runs against the original app with `sh original/run_tests.sh`.

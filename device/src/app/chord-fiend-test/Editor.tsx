@@ -1,32 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, decodeBase64, encodeBase64, outlet } from "@m4l-jweb/bridge";
 import { useStateSync } from "@m4l-jweb/surface/react";
-import {
-  BLOCK_MODE_NAMES,
-  BUILTIN_BEAT_PATTERNS,
-  DURATION_NAMES,
-  EXTENSION_NAMES,
-  MASTER_MODE_NAMES,
-  buildChord,
-  beatPatternLabel,
-  defaultBlock,
-  degreeLabels,
-  getChordSymbol,
-  noteChoiceLabel,
-  pitchToFullNoteName,
-} from "../../../../engine/src/engine.js";
+import { BUILTIN_BEAT_PATTERNS, MASTER_MODE_NAMES, beatPatternLabel, defaultBlock, noteChoiceLabel, pitchToFullNoteName } from "../../../../engine/src/engine.js";
 import { useDevice } from "../shared/device";
+import { Inspector } from "./Inspector";
 import { IN, OUT } from "./protocol";
 import surface from "./surface";
 import {
   BEATS_PER_BAR,
   ROLES,
+  blockColor,
+  blockLabel,
   blockLength,
   editingBlocks,
   findSection,
   layoutSong,
   normalizeSong,
   planSongWrite,
+  sectionColor,
   withEditingBlocks,
   type Block,
   type PlacedSlot,
@@ -34,6 +25,7 @@ import {
   type Song,
   type TrackRef,
 } from "./song";
+import "./editor.css";
 
 interface LiveTrack {
   id: number;
@@ -41,33 +33,36 @@ interface LiveTrack {
   midi: boolean;
 }
 
-function send(selector: string, value: unknown) {
-  outlet(selector, encodeBase64(JSON.stringify(value)));
-}
+/** What the transport's Loop is holding: a chord in a song part, a song part, or the whole song. */
+type LoopTarget = { kind: "block"; slotId: number; blockIndex: number } | { kind: "slot"; slotId: number } | { kind: "song" };
 
-const bar = (beats: number) => Math.floor(beats / BEATS_PER_BAR) + 1;
-const sectionColor = (id: number, light = false) => `hsl(${(id * 67) % 360} 45% ${light ? 42 : 30}%)`;
-const PX_PER_BEAT = 12;
+const BEATS_PER_ROW = 4 * BEATS_PER_BAR;
+const send = (selector: string, value: unknown) => outlet(selector, encodeBase64(JSON.stringify(value)));
+const barBeat = (beats: number) => `Bar ${Math.floor(beats / BEATS_PER_BAR) + 1} · ${Math.floor(beats % BEATS_PER_BAR) + 1}`;
+const bars = (p: PlacedSlot) => `bars ${p.start / BEATS_PER_BAR + 1}-${Math.ceil((p.start + p.length) / BEATS_PER_BAR)}`;
 
-/** The editor window. The window owns the song; the Arrangement is its output. */
+/** The editor window. The window owns the song; the Arrangement follows it automatically. */
 export default function Editor() {
   const device = useDevice();
   const [stored, setStored] = useStateSync(surface, "song");
   const song = normalizeSong(stored);
-  const [tracks, setTracks] = useState<LiveTrack[]>([]);
-  const [log, setLog] = useState<string[]>([]);
-  const [paste, setPaste] = useState("");
-
   const songRef = useRef(song);
   songRef.current = song;
   const save = (next: Song) => setStored(next);
   const update = (change: Partial<Song>) => save({ ...songRef.current, ...change });
-  const say = (line: string) => setLog((l) => [new Date().toLocaleTimeString() + "  " + line, ...l].slice(0, 14));
 
-  // What was last sent for each clip ("<trackId>|<name>"), so an edit rewrites only the clips it changed.
-  const lastSent = useRef(new Map<string, string>());
-  // Rewrite on edit only once the song is on the Arrangement: after a Write, or in a Set that already has tracks chosen.
-  const [written, setWritten] = useState(() => ROLES.some((r) => song.tracks[r]));
+  const [view, setView] = useState<"song" | "section">("song");
+  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [selectedBlock, setSelectedBlock] = useState<number | null>(0);
+  const [picker, setPicker] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [loop, setLoop] = useState<LoopTarget | null>(null);
+  const [tracks, setTracks] = useState<LiveTrack[] | null>(null);
+  const [activity, setActivity] = useState<string[]>([]);
+  const [synced, setSynced] = useState<string | null>(null);
+  const say = (line: string) => setActivity((l) => [new Date().toLocaleTimeString() + "  " + line, ...l].slice(0, 30));
+
+  /* ---------------- Live: tracks and results ---------------- */
 
   useEffect(() => {
     bindInlet(IN.cf_tracks, (b64) => setTracks(JSON.parse(decodeBase64(String(b64)))));
@@ -84,7 +79,7 @@ export default function Editor() {
 
   // Track ids are not stable across reopening a Set, so a saved choice is found again by name.
   useEffect(() => {
-    if (!tracks.length) return;
+    if (!tracks) return;
     const next = { ...songRef.current.tracks };
     let changed = false;
     for (const role of ROLES) {
@@ -97,347 +92,519 @@ export default function Editor() {
     if (changed) update({ tracks: next });
   }, [tracks]);
 
+  /* ---------------- the Arrangement follows the song ---------------- */
+
   const placed = useMemo(() => layoutSong(song), [song]);
-  const songStart = (Math.max(1, song.startBar) - 1) * BEATS_PER_BAR;
-  const songEnd = placed.length ? placed[placed.length - 1].start + placed[placed.length - 1].length : songStart;
+  const songLength = placed.length ? placed[placed.length - 1].start + placed[placed.length - 1].length : 0;
+  const hasTracks = ROLES.some((r) => song.tracks[r]);
+  const lastSent = useRef(new Map<string, string>());
 
-  function writeSong(everything: boolean) {
-    const s = songRef.current;
-    if (!ROLES.some((r) => s.tracks[r])) {
-      say("pick at least one track first");
-      return;
-    }
-    const plan = planSongWrite(s, lastSent.current, everything);
-    for (const [selector, payload] of plan.messages) send(selector, payload);
-    setWritten(true);
-    say(`song: ${plan.sent} clip(s) written${plan.same ? `, ${plan.same} unchanged` : ""} (bars ${bar(songStart)}-${bar(songEnd - 0.001)})`);
-  }
-
-  // Rewrite on every edit: only the clips the edit changed, plus removing clips no longer in the song.
-  const firstRender = useRef(true);
+  // Every change is written, and only the clips it changed. The first write after the window
+  // opens sends everything, so the Arrangement always matches the song. It waits for the track
+  // list, because track ids saved in the Set may have changed.
   useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false;
+    if (!tracks || !hasTracks) return;
+    const t = setTimeout(() => {
+      const plan = planSongWrite(songRef.current, lastSent.current, false);
+      for (const [selector, payload] of plan.messages) send(selector, payload);
+      if (plan.sent) say(`song: ${plan.sent} clip(s) written, ${plan.same} unchanged`);
+      setSynced(new Date().toLocaleTimeString());
+    }, 150);
+    return () => clearTimeout(t);
+  }, [placed, tracks, song.tracks]);
+
+  /* ---------------- what is being edited ---------------- */
+
+  const editingSection = song.editing.kind === "section" ? findSection(song, song.editing.id) : undefined;
+  const editingSlot = song.editing.kind === "slot" ? song.slots.find((x) => x.id === song.editing.id) : undefined;
+  const blocks = editingBlocks(song);
+  const usesOfSection = editingSection ? placed.filter((p) => !p.slot.blocks && p.slot.sectionId === editingSection.id) : [];
+  // Where the section being edited is heard: the detached part being edited, or the first place the section is used.
+  const hearing: PlacedSlot | undefined = editingSlot ? placed.find((p) => p.slot.id === editingSlot.id) : usesOfSection[0];
+  const block = selectedBlock !== null ? blocks[selectedBlock] : undefined;
+
+  function openEditor(slot: Slot | null, sectionId?: number) {
+    if (slot) update({ editing: slot.blocks ? { kind: "slot", id: slot.id } : { kind: "section", id: slot.sectionId } });
+    else if (sectionId) update({ editing: { kind: "section", id: sectionId } });
+    setSelectedBlock(0);
+    setView("section");
+  }
+
+  /* ---------------- transport ---------------- */
+
+  function rangeOf(target: LoopTarget | null): { start: number; length: number; label: string } | null {
+    if (!target) return null;
+    if (target.kind === "song") return songLength ? { start: 0, length: songLength, label: "Whole song" } : null;
+    const p = placed.find((x) => x.slot.id === target.slotId);
+    if (!p) return null;
+    if (target.kind === "slot") return { start: p.start, length: p.length, label: `${p.index + 1} ${p.label}` };
+    const b = p.blocks[target.blockIndex];
+    if (!b) return null;
+    return { start: p.start + p.blockStarts[target.blockIndex], length: blockLength(b), label: `${p.index + 1} ${p.label} · chord ${target.blockIndex + 1}` };
+  }
+
+  function selectionTarget(): LoopTarget | null {
+    if (view === "section") {
+      if (!hearing) return null;
+      return selectedBlock !== null && selectedBlock < hearing.blocks.length ? { kind: "block", slotId: hearing.slot.id, blockIndex: selectedBlock } : { kind: "slot", slotId: hearing.slot.id };
+    }
+    return selectedSlotId !== null ? { kind: "slot", slotId: selectedSlotId } : { kind: "song" };
+  }
+
+  const loopRange = rangeOf(loop);
+  const selection = selectionTarget();
+  const selectionDiffers = loop && JSON.stringify(selection) !== JSON.stringify(loop);
+
+  // A loop whose target is gone ends; one whose range moved (an edit made a chord longer) follows it.
+  const sentLoop = useRef("");
+  useEffect(() => {
+    if (!loop) {
+      sentLoop.current = "";
       return;
     }
-    if (!song.autoWrite || !written) return;
-    const t = setTimeout(() => writeSong(false), 120);
-    return () => clearTimeout(t);
-  }, [placed]);
+    if (!loopRange) {
+      outlet(OUT.cf_unloop);
+      setLoop(null);
+      return;
+    }
+    const key = `${loopRange.start}|${loopRange.length}`;
+    if (sentLoop.current && sentLoop.current !== key) outlet(OUT.cf_loop, loopRange.start, loopRange.length, 0);
+    sentLoop.current = key;
+  }, [loop, loopRange?.start, loopRange?.length]);
 
-  function removeOurClips() {
-    const ids = ROLES.map((r) => song.tracks[r]?.id).filter((x): x is number => !!x);
-    send(OUT.cf_clear, { trackIds: ids });
-    lastSent.current.clear();
-    setWritten(false);
+  function startLoop(target: LoopTarget | null) {
+    const r = rangeOf(target);
+    if (!target || !r) return;
+    sentLoop.current = `${r.start}|${r.length}`;
+    setLoop(target);
+    outlet(OUT.cf_loop, r.start, r.length, 1);
   }
+  function toggleLoop() {
+    if (loop) {
+      outlet(OUT.cf_unloop);
+      setLoop(null);
+    } else startLoop(selection);
+  }
+  function play() {
+    if (loopRange) return outlet(OUT.cf_loop, loopRange.start, loopRange.length, 1);
+    const from = view === "section" ? (hearing?.start ?? 0) : (placed.find((p) => p.slot.id === selectedSlotId)?.start ?? 0);
+    outlet(OUT.cf_play, from);
+  }
+  function stop() {
+    outlet(OUT.cf_stop);
+    setLoop(null);
+  }
+
+  const playingSlot = device.playing ? placed.find((p) => device.beats >= p.start && device.beats < p.start + p.length) : undefined;
+  const playingHere = playingSlot && (editingSlot ? playingSlot.slot.id === editingSlot.id : !playingSlot.slot.blocks && playingSlot.slot.sectionId === editingSection?.id);
+  const playingBlock = playingHere
+    ? playingSlot!.blockStarts.findIndex((s, i) => device.beats >= playingSlot!.start + s && device.beats < playingSlot!.start + s + blockLength(playingSlot!.blocks[i]))
+    : -1;
 
   /* ---------------- song order and sections ---------------- */
 
-  const newId = () => songRef.current.nextId;
-  function addSlot(sectionId: number) {
+  function insertSlot(sectionId: number) {
     const s = songRef.current;
-    save({ ...s, slots: [...s.slots, { id: s.nextId, sectionId, blocks: null }], nextId: s.nextId + 1 });
+    const slot: Slot = { id: s.nextId, sectionId, blocks: null };
+    const at = selectedSlotId !== null ? s.slots.findIndex((x) => x.id === selectedSlotId) + 1 : s.slots.length;
+    const slots = [...s.slots.slice(0, at), slot, ...s.slots.slice(at)];
+    save({ ...s, slots, nextId: s.nextId + 1 });
+    setSelectedSlotId(slot.id);
+    setPicker(false);
   }
-  function moveSlot(i: number, dir: -1 | 1) {
-    const slots = [...song.slots];
+  function moveSlot(id: number, dir: -1 | 1) {
+    const i = song.slots.findIndex((x) => x.id === id);
     const j = i + dir;
-    if (j < 0 || j >= slots.length) return;
+    if (i < 0 || j < 0 || j >= song.slots.length) return;
+    const slots = [...song.slots];
     [slots[i], slots[j]] = [slots[j], slots[i]];
     update({ slots });
   }
   function removeSlot(id: number) {
     if (song.slots.length < 2) return;
-    const slots = song.slots.filter((x) => x.id !== id);
-    const editing = song.editing.kind === "slot" && song.editing.id === id ? { kind: "section" as const, id: song.slots.find((x) => x.id === id)!.sectionId } : song.editing;
-    update({ slots, editing });
-  }
-  function editSlot(slot: Slot) {
-    update({ editing: slot.blocks ? { kind: "slot", id: slot.id } : { kind: "section", id: slot.sectionId } });
+    const slot = song.slots.find((x) => x.id === id)!;
+    const editing = song.editing.kind === "slot" && song.editing.id === id ? { kind: "section" as const, id: slot.sectionId } : song.editing;
+    update({ slots: song.slots.filter((x) => x.id !== id), editing });
+    setSelectedSlotId(null);
   }
   function detachSlot(slot: Slot) {
-    const blocks = (findSection(song, slot.sectionId)?.blocks ?? []).map((b) => ({ ...b }));
-    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks } : x)), editing: { kind: "slot", id: slot.id } });
+    const copy = (findSection(song, slot.sectionId)?.blocks ?? []).map((b) => ({ ...b }));
+    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: copy } : x)), editing: song.editing.kind === "section" ? song.editing : { kind: "slot", id: slot.id } });
   }
   function relinkSlot(slot: Slot) {
-    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: null } : x)), editing: { kind: "section", id: slot.sectionId } });
+    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: null } : x)), editing: song.editing.kind === "slot" && song.editing.id === slot.id ? { kind: "section", id: slot.sectionId } : song.editing });
   }
   function newSection() {
     const s = songRef.current;
     const id = s.nextId;
     save({ ...s, sections: [...s.sections, { id, name: `Section ${s.sections.length + 1}`, blocks: [defaultBlock()] }], nextId: id + 1, editing: { kind: "section", id } });
+    setSelectedBlock(0);
+    setView("section");
   }
   function duplicateSection(id: number) {
     const src = findSection(song, id);
     if (!src) return;
-    const nid = newId();
+    const nid = song.nextId;
     update({ sections: [...song.sections, { id: nid, name: src.name + " copy", blocks: src.blocks.map((b) => ({ ...b })) }], nextId: nid + 1, editing: { kind: "section", id: nid } });
   }
   function deleteSection(id: number) {
     if (song.sections.length < 2) return;
     const sections = song.sections.filter((x) => x.id !== id);
     let slots = song.slots.filter((x) => x.sectionId !== id);
-    if (!slots.length) slots = [{ id: song.nextId, sectionId: sections[0].id, blocks: null }];
-    update({ sections, slots, nextId: song.nextId + 1, editing: { kind: "section", id: sections[0].id } });
-  }
-  function renameSection(id: number, name: string) {
-    update({ sections: song.sections.map((x) => (x.id === id ? { ...x, name } : x)) });
+    let nextId = song.nextId;
+    if (!slots.length) slots = [{ id: nextId++, sectionId: sections[0].id, blocks: null }];
+    update({ sections, slots, nextId, editing: { kind: "section", id: sections[0].id } });
+    setView("song");
   }
 
-  /* ---------------- the blocks being edited ---------------- */
+  /* ---------------- blocks ---------------- */
 
-  const blocks = editingBlocks(song);
-  const editingSection = song.editing.kind === "section" ? findSection(song, song.editing.id) : undefined;
-  const editingSlot = song.editing.kind === "slot" ? song.slots.find((x) => x.id === song.editing.id) : undefined;
-  const editingSlotPlaced = editingSlot ? placed.find((p) => p.slot.id === editingSlot.id) : undefined;
-  const usesOfSection = editingSection ? placed.filter((p) => !p.slot.blocks && p.slot.sectionId === editingSection.id) : [];
-  // Where a block's Loop goes: the slot being edited, or the first place this section is used.
-  const loopTarget: PlacedSlot | undefined = editingSlotPlaced ?? usesOfSection[0];
   const setBlocks = (next: Block[]) => save(withEditingBlocks(songRef.current, next));
-  const setBlock = (i: number, change: Partial<Block>) => setBlocks(blocks.map((b, j) => (j === i ? { ...b, ...change } : b)));
+  const changeBlock = (i: number, change: Partial<Block>) => setBlocks(blocks.map((b, j) => (j === i ? { ...b, ...change } : b)));
+  function addBlock() {
+    const at = selectedBlock !== null ? selectedBlock + 1 : blocks.length;
+    setBlocks([...blocks.slice(0, at), defaultBlock(), ...blocks.slice(at)]);
+    setSelectedBlock(at);
+  }
+  function moveBlock(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= blocks.length) return;
+    const next = [...blocks];
+    [next[i], next[j]] = [next[j], next[i]];
+    setBlocks(next);
+    setSelectedBlock(j);
+  }
+  function removeBlock(i: number) {
+    if (blocks.length < 2) return;
+    setBlocks(blocks.filter((_, j) => j !== i));
+    setSelectedBlock(Math.min(i, blocks.length - 2));
+  }
 
-  const playingSlot = device.playing ? placed.find((p) => device.beats >= p.start && device.beats < p.start + p.length) : undefined;
-  const showsPlayingSlot =
-    playingSlot && (editingSlot ? playingSlot.slot.id === editingSlot.id : !playingSlot.slot.blocks && playingSlot.slot.sectionId === editingSection?.id);
-  const playingBlock = showsPlayingSlot
-    ? playingSlot!.blockStarts.findIndex((s, i) => device.beats >= playingSlot!.start + s && device.beats < playingSlot!.start + s + blockLength(playingSlot!.blocks[i]))
-    : -1;
-  const homeLabels = degreeLabels(MASTER_MODE_NAMES[song.modeIndex]);
+  // Blocks laid out in rows of 4 bars; a block that crosses a row edge is drawn in pieces.
+  const segments = useMemo(() => {
+    const out: { block: number; row: number; left: number; width: number; cont: boolean; split: boolean }[] = [];
+    let cursor = 0;
+    blocks.forEach((b, i) => {
+      let start = cursor;
+      let remaining = blockLength(b);
+      let first = true;
+      while (remaining > 0.0001) {
+        const row = Math.floor(start / BEATS_PER_ROW + 1e-9);
+        const pos = start - row * BEATS_PER_ROW;
+        const len = Math.min(remaining, BEATS_PER_ROW - pos);
+        out.push({ block: i, row, left: pos / BEATS_PER_ROW, width: len / BEATS_PER_ROW, cont: !first, split: remaining - len > 0.0001 });
+        first = false;
+        start += len;
+        remaining -= len;
+      }
+      cursor += blockLength(b);
+    });
+    return out;
+  }, [blocks]);
+  const rowCount = segments.length ? segments[segments.length - 1].row + 1 : 1;
+
+  const selectedSlot = song.slots.find((x) => x.id === selectedSlotId);
+  const selectedPlaced = placed.find((p) => p.slot.id === selectedSlotId);
 
   return (
-    <main style={{ padding: 16, fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#ddd", background: "#1e1e1e", minHeight: "100vh", boxSizing: "border-box" }}>
-      <header style={row}>
-        <strong style={{ fontSize: 16, marginRight: 8 }}>Chord Fiend - feel test</strong>
-        <Pick inline label="Key" value={song.rootIndex} options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))} onChange={(v) => update({ rootIndex: v })} />
-        <Pick inline label="Mode" value={song.modeIndex} options={MASTER_MODE_NAMES} onChange={(v) => update({ modeIndex: v })} />
-        <label>
-          Beat{" "}
-          <select value={song.drumBeat} onChange={(e) => update({ drumBeat: e.target.value })}>
-            {Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => (
-              <option key={k} value={k}>
-                {beatPatternLabel(k)}
-              </option>
-            ))}
-            <option value="off">Off</option>
-          </select>
-        </label>
-        <label>
-          <input type="checkbox" checked={song.bassEnabled} onChange={(e) => update({ bassEnabled: e.target.checked })} /> Bass
-        </label>
-        <label>
-          Bass lowest note{" "}
-          <select value={song.bassWrapLow} onChange={(e) => update({ bassWrapLow: Number(e.target.value) })}>
-            {Array.from({ length: 25 }, (_, i) => 24 + i).map((p) => (
-              <option key={p} value={p}>
-                {pitchToFullNoteName(p)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Song starts at bar{" "}
-          <input type="number" min={1} value={song.startBar} style={{ width: 56 }} onChange={(e) => update({ startBar: Math.max(1, Number(e.target.value) || 1) })} />
-        </label>
-      </header>
-
-      <section style={row}>
-        {ROLES.map((role) => (
-          <label key={role}>
-            {role[0].toUpperCase() + role.slice(1)} track{" "}
-            <select
-              value={song.tracks[role]?.id ?? ""}
-              onChange={(e) => {
-                const t = tracks.find((x) => x.id === Number(e.target.value));
-                update({ tracks: { ...song.tracks, [role]: t ? ({ id: t.id, name: t.name } as TrackRef) : null } });
-              }}
-            >
-              <option value="">(none)</option>
-              {tracks.map((t) => (
-                <option key={t.id} value={t.id} disabled={!t.midi}>
-                  {t.name}
-                  {t.midi ? "" : " (audio)"}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-        <button onClick={() => outlet(OUT.cf_tracks)}>Refresh tracks</button>
-      </section>
-
-      <h3 style={h3}>Song</h3>
-      <section style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 6, marginBottom: 8, alignItems: "stretch" }}>
-        {placed.map((p, i) => {
-          const isEditing = editingSlot ? editingSlot.id === p.slot.id : !p.slot.blocks && editingSection?.id === p.slot.sectionId;
-          const isPlaying = playingSlot?.slot.id === p.slot.id;
-          return (
-            <div
-              key={p.slot.id}
-              onClick={() => editSlot(p.slot)}
-              style={{
-                minWidth: Math.max(130, p.length * PX_PER_BEAT),
-                padding: 8,
-                borderRadius: 6,
-                cursor: "pointer",
-                background: sectionColor(p.slot.sectionId, isPlaying),
-                border: isEditing ? "2px solid #fff" : "2px solid transparent",
-                boxSizing: "border-box",
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {i + 1}. {p.label}
-              </div>
-              <div style={{ opacity: 0.8, marginBottom: 6 }}>
-                bars {bar(p.start)}-{bar(p.start + p.length - 0.001)}
-              </div>
-              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
-                <button title="Move earlier" disabled={i === 0} onClick={() => moveSlot(i, -1)}>
-                  ◀
-                </button>
-                <button title="Move later" disabled={i === placed.length - 1} onClick={() => moveSlot(i, 1)}>
-                  ▶
-                </button>
-                <button onClick={() => outlet(OUT.cf_loop, p.start, p.length)}>Loop</button>
-                {p.slot.blocks ? <button onClick={() => relinkSlot(p.slot)}>Relink</button> : <button onClick={() => detachSlot(p.slot)}>Detach</button>}
-                <button title="Remove from the song" disabled={placed.length < 2} onClick={() => removeSlot(p.slot.id)}>
-                  ✕
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        <select value="" onChange={(e) => e.target.value && addSlot(Number(e.target.value))} style={{ alignSelf: "center" }}>
-          <option value="">+ Add to song...</option>
-          {song.sections.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.name}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      <h3 style={h3}>Sections</h3>
-      <section style={row}>
-        {song.sections.map((x) => (
-          <button
-            key={x.id}
-            onClick={() => update({ editing: { kind: "section", id: x.id } })}
-            style={{ background: sectionColor(x.id), color: "#fff", border: editingSection?.id === x.id ? "2px solid #fff" : "2px solid transparent", borderRadius: 6, padding: "4px 10px" }}
-          >
-            {x.name}
+    <div className="cf" onClick={() => setPicker(false)}>
+      {/* ---------------- transport ---------------- */}
+      <div className="transport">
+        <div className="where">
+          {view === "section" ? (
+            <>
+              <button onClick={() => setView("song")}>← Song</button>
+              <span>{editingSection ? editingSection.name : editingSlot ? `${findSection(song, editingSlot.sectionId)?.name}*` : ""}</span>
+            </>
+          ) : (
+            <span>Song</span>
+          )}
+        </div>
+        <div className="controls">
+          <button className="tbtn" title="Play" onClick={play} disabled={!hasTracks}>
+            ▶
           </button>
-        ))}
-        <button onClick={newSection}>+ New section</button>
-      </section>
+          <button className="tbtn" title="Stop" onClick={stop}>
+            ■
+          </button>
+          <button className={loop ? "tbtn on" : "tbtn"} title={loop ? "Stop looping" : "Loop the selection"} onClick={toggleLoop} disabled={!hasTracks || (!loop && !selection)}>
+            ⟲
+          </button>
+          {selectionDiffers && selection && <button onClick={() => startLoop(selection)}>Loop selection</button>}
+        </div>
+        <span className="loopinfo">{loopRange ? `Looping: ${loopRange.label}` : ""}</span>
+        <span className="position">
+          {device.playing ? "▶ " : ""}
+          {barBeat(device.beats)}
+        </span>
+        <span className="spacer" />
+        <span className={hasTracks ? "sync" : "sync off"}>
+          <span className="dot" />
+          {hasTracks ? (synced ? "Arrangement in sync" : "Syncing...") : "Choose tracks in settings"}
+        </span>
+        <button title="Settings" onClick={() => setSettingsOpen(true)}>
+          ⚙
+        </button>
+      </div>
 
-      <section style={{ ...row, background: "#262626", padding: 8, borderRadius: 6 }}>
-        {editingSection ? (
-          <>
-            <span>Editing section</span>
-            <input value={editingSection.name} onChange={(e) => renameSection(editingSection.id, e.target.value)} style={{ width: 140 }} />
-            <span style={{ opacity: 0.7 }}>
-              {usesOfSection.length === 0
-                ? "not in the song yet - add it above"
-                : usesOfSection.length === 1
-                  ? "used once in the song"
-                  : `used ${usesOfSection.length} times - changes apply to all of them`}
-            </span>
-            <button onClick={() => duplicateSection(editingSection.id)}>Duplicate</button>
-            <button disabled={song.sections.length < 2} onClick={() => deleteSection(editingSection.id)}>
-              Delete section
-            </button>
-          </>
-        ) : editingSlot ? (
-          <>
-            <span>
-              Editing song part {placed.findIndex((p) => p.slot.id === editingSlot.id) + 1}, a detached copy of {findSection(song, editingSlot.sectionId)?.name}: changes apply here only
-            </span>
-            <button onClick={() => relinkSlot(editingSlot)}>Relink to the section</button>
-          </>
-        ) : null}
-      </section>
+      {/* ---------------- song view ---------------- */}
+      {view === "song" && (
+        <div className="view">
+          <div className="heading">Song</div>
+          <div className="cards">
+            {placed.map((p) => (
+              <div
+                key={p.slot.id}
+                className={`card${p.slot.id === selectedSlotId ? " selected" : ""}${playingSlot?.slot.id === p.slot.id ? " playing" : ""}`}
+                onClick={() => setSelectedSlotId(p.slot.id === selectedSlotId ? null : p.slot.id)}
+                onDoubleClick={() => openEditor(p.slot)}
+                title="Click to select, double-click to edit"
+              >
+                <span className="strip" style={{ background: sectionColor(p.slot.sectionId).css }} />
+                <span className="badge">{p.slot.blocks ? "detached" : "🔗"}</span>
+                <span className="name">{p.label}</span>
+                <span className="sub">
+                  {p.index + 1} · {bars(p)}
+                </span>
+              </div>
+            ))}
+            <div className="picker" onClick={(e) => e.stopPropagation()}>
+              <div className="card add" title={selectedSlot ? "Insert after the selected part" : "Add to the end"} onClick={() => setPicker(!picker)}>
+                +
+              </div>
+              {picker && (
+                <div className="picker-menu">
+                  {song.sections.map((x) => (
+                    <button key={x.id} onClick={() => insertSlot(x.id)}>
+                      <span style={{ color: sectionColor(x.id).css }}>●</span> {x.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
-      <section style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        {blocks.map((b, i) => {
-          const chord = buildChord(b, song.rootIndex, song.modeIndex);
-          const active = i === playingBlock;
-          return (
-            <div key={i} style={{ width: 170, padding: 10, borderRadius: 8, background: active ? "#3d6b4f" : "#2c2c2c", border: active ? "2px solid #7fd19b" : "2px solid #3a3a3a" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>{getChordSymbol(chord, song.rootIndex)}</div>
-              <Pick label="Degree" value={b.degreeIndex} options={homeLabels} onChange={(v) => setBlock(i, { degreeIndex: v })} />
-              <Pick label="Mode" value={b.blockModeIndex} options={BLOCK_MODE_NAMES} onChange={(v) => setBlock(i, { blockModeIndex: v })} />
-              <Pick label="Ext" value={b.extensionIndex} options={EXTENSION_NAMES} onChange={(v) => setBlock(i, { extensionIndex: v })} />
-              <Pick label="Inversion" value={chord.inversion} options={chord.toneLabels} onChange={(v) => setBlock(i, { inversion: v })} />
-              <Pick label="Length" value={b.durationIndex} options={DURATION_NAMES} onChange={(v) => setBlock(i, { durationIndex: v })} />
-              <label style={{ display: "block", margin: "4px 0" }}>
-                <input type="checkbox" checked={b.bassToneIndex !== -1} onChange={(e) => setBlock(i, { bassToneIndex: e.target.checked ? 0 : -1 })} /> Bass
-              </label>
-              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                <button
-                  disabled={!loopTarget}
-                  title={loopTarget ? `Loops this chord in song part ${loopTarget.index + 1}` : "Add this section to the song to loop it"}
-                  onClick={() => loopTarget && outlet(OUT.cf_loop, loopTarget.start + loopTarget.blockStarts[i], blockLength(b))}
-                >
-                  Loop
+          <div className="toolbar">
+            {selectedSlot && selectedPlaced ? (
+              <>
+                <span>
+                  Part {selectedPlaced.index + 1}: <b>{selectedPlaced.label}</b>, {bars(selectedPlaced)}
+                </span>
+                <button onClick={() => openEditor(selectedSlot)}>Edit</button>
+                <button title="Move earlier" disabled={selectedPlaced.index === 0} onClick={() => moveSlot(selectedSlot.id, -1)}>
+                  ←
                 </button>
-                <button disabled={blocks.length < 2} onClick={() => setBlocks(blocks.filter((_, j) => j !== i))}>
+                <button title="Move later" disabled={selectedPlaced.index === placed.length - 1} onClick={() => moveSlot(selectedSlot.id, 1)}>
+                  →
+                </button>
+                {selectedSlot.blocks ? <button onClick={() => relinkSlot(selectedSlot)}>Relink</button> : <button onClick={() => detachSlot(selectedSlot)}>Detach</button>}
+                <button className="danger" disabled={placed.length < 2} onClick={() => removeSlot(selectedSlot.id)}>
                   Remove
                 </button>
-              </div>
+              </>
+            ) : (
+              <span className="note">Click a part to select it. Double-click to edit it. + adds a section after the selected part.</span>
+            )}
+          </div>
+
+          <div className="heading">Sections</div>
+          <div className="cards">
+            {song.sections.map((x) => {
+              const uses = song.slots.filter((s) => s.sectionId === x.id && !s.blocks).length;
+              return (
+                <div key={x.id} className="card" onClick={() => openEditor(null, x.id)} title="Click to edit">
+                  <span className="strip" style={{ background: sectionColor(x.id).css }} />
+                  <span className="name">{x.name}</span>
+                  <span className="sub">
+                    {x.blocks.length} chord{x.blocks.length === 1 ? "" : "s"} · {uses ? `in song ${uses}×` : "not in song"}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="card add" title="New section" onClick={newSection}>
+              +
             </div>
-          );
-        })}
-        <button style={{ width: 80 }} onClick={() => setBlocks([...blocks, defaultBlock()])}>
-          + Block
-        </button>
-      </section>
-
-      <section style={{ ...row, marginBottom: 12 }}>
-        <button onClick={() => writeSong(true)} style={{ padding: "6px 12px", fontWeight: 600 }}>
-          Write song to Arrangement
-        </button>
-        <label>
-          <input type="checkbox" checked={song.autoWrite} onChange={(e) => update({ autoWrite: e.target.checked })} /> Rewrite on every edit
-        </label>
-        <button onClick={removeOurClips}>Remove our clips</button>
-        <span style={{ width: 16 }} />
-        <button onClick={() => outlet(OUT.cf_loop, songStart, songEnd - songStart)}>Loop song</button>
-        <button onClick={() => outlet(OUT.cf_play, songStart)}>Play from start</button>
-        <button onClick={() => outlet(OUT.cf_stop)}>Stop</button>
-        <span style={{ opacity: 0.7 }}>
-          {device.playing ? "playing" : "stopped"} at bar {bar(device.beats)}
-          {playingSlot ? ` (song part ${playingSlot.index + 1}, ${playingSlot.label})` : ""}
-        </span>
-      </section>
-
-      <section style={{ display: "flex", gap: 16 }}>
-        <div style={{ flex: 2 }}>
-          <div style={{ opacity: 0.7, marginBottom: 4 }}>Log</div>
-          <pre style={{ margin: 0, padding: 8, background: "#151515", borderRadius: 6, minHeight: 120, whiteSpace: "pre-wrap" }}>{log.join("\n") || "-"}</pre>
+          </div>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ opacity: 0.7, marginBottom: 4 }}>Paste test: paste any text here</div>
-          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} style={{ width: "100%", height: 120, boxSizing: "border-box" }} />
-          <div style={{ opacity: 0.7 }}>{paste.length} characters</div>
+      )}
+
+      {/* ---------------- section view ---------------- */}
+      {view === "section" && (
+        <div className="view">
+          <div className="toolbar">
+            {editingSection ? (
+              <>
+                <input value={editingSection.name} onChange={(e) => update({ sections: song.sections.map((x) => (x.id === editingSection.id ? { ...x, name: e.target.value } : x)) })} style={{ width: 150 }} />
+                <span className="note">
+                  {usesOfSection.length > 1 ? `In the song ${usesOfSection.length} times: changes apply to all of them` : usesOfSection.length === 1 ? "In the song once" : ""}
+                </span>
+                <button onClick={() => duplicateSection(editingSection.id)}>Duplicate</button>
+                <button className="danger" disabled={song.sections.length < 2} onClick={() => deleteSection(editingSection.id)}>
+                  Delete section
+                </button>
+              </>
+            ) : editingSlot ? (
+              <>
+                <span className="note">Detached copy in part {(hearing?.index ?? 0) + 1}: changes apply here only</span>
+                <button onClick={() => relinkSlot(editingSlot)}>Relink to {findSection(song, editingSlot.sectionId)?.name}</button>
+              </>
+            ) : null}
+            <span style={{ flex: 1 }} />
+            <button onClick={addBlock} title="Insert a chord after the selected one">
+              + Add
+            </button>
+          </div>
+
+          {editingSection && !usesOfSection.length && (
+            <div className="banner">
+              This section is not in the song, so it is not on the Arrangement and cannot play yet.
+              <button
+                onClick={() => {
+                  setSelectedSlotId(null);
+                  insertSlot(editingSection.id);
+                }}
+              >
+                Add to the end of the song
+              </button>
+            </div>
+          )}
+
+          <div className="timeline">
+            {Array.from({ length: rowCount }, (_, row) => (
+              <div className="trow" key={row}>
+                {segments
+                  .filter((sg) => sg.row === row)
+                  .map((sg, k) => {
+                    const b = blocks[sg.block];
+                    const label = blockLabel(b, song);
+                    const cls = ["block", sg.block === selectedBlock && "selected", sg.block === playingBlock && "playing", sg.cont && "cont", sg.split && "split", b.chordSource === "applied" && "applied"].filter(Boolean).join(" ");
+                    return (
+                      <div
+                        key={k}
+                        className={cls}
+                        style={{ left: `calc(${sg.left * 100}% + 1px)`, width: `calc(${sg.width * 100}% - 2px)`, background: blockColor(b) }}
+                        onClick={() => setSelectedBlock(sg.block)}
+                        title={`${label.degree}  ${label.name}`}
+                      >
+                        {!sg.cont && (
+                          <>
+                            <span className="deg">{label.degree}</span>
+                            <span className="nm">{label.name}</span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ))}
+          </div>
+
+          {block && selectedBlock !== null ? (
+            <Inspector
+              block={block}
+              song={song}
+              canRemove={blocks.length > 1}
+              isFirst={selectedBlock === 0}
+              isLast={selectedBlock === blocks.length - 1}
+              onChange={(c) => changeBlock(selectedBlock, c)}
+              onReset={() => changeBlock(selectedBlock, defaultBlock())}
+              onMove={(d) => moveBlock(selectedBlock, d)}
+              onRemove={() => removeBlock(selectedBlock)}
+            />
+          ) : (
+            <div className="empty-hint">Click a chord to edit it</div>
+          )}
         </div>
-      </section>
-    </main>
-  );
-}
+      )}
 
-const row = { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const, marginBottom: 10 };
-const h3 = { margin: "8px 0 6px", fontSize: 13, textTransform: "uppercase" as const, letterSpacing: 1, opacity: 0.7 };
-
-function Pick({ label, value, options, onChange, inline }: { label: string; value: number; options: readonly string[]; onChange: (v: number) => void; inline?: boolean }) {
-  return (
-    <label style={{ display: inline ? "inline-block" : "block", margin: "3px 0" }}>
-      <span style={{ display: "inline-block", minWidth: inline ? 0 : 64, marginRight: 4, opacity: 0.7 }}>{label}</span>
-      <select value={value} onChange={(e) => onChange(Number(e.target.value))}>
-        {options.map((o, i) => (
-          <option key={i} value={i}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
+      {/* ---------------- settings drawer ---------------- */}
+      {settingsOpen && (
+        <>
+          <div className="drawer-shade" onClick={() => setSettingsOpen(false)} />
+          <div className="drawer">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <strong>Settings</strong>
+              <button onClick={() => setSettingsOpen(false)}>✕</button>
+            </div>
+            <h4>Song</h4>
+            <label className="field">
+              <span className="field-label">Key</span>
+              <select value={song.rootIndex} onChange={(e) => update({ rootIndex: Number(e.target.value) })}>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {noteChoiceLabel(i)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Mode</span>
+              <select value={song.modeIndex} onChange={(e) => update({ modeIndex: Number(e.target.value) })}>
+                {MASTER_MODE_NAMES.map((m, i) => (
+                  <option key={i} value={i}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Beat</span>
+              <select value={song.drumBeat} onChange={(e) => update({ drumBeat: e.target.value })}>
+                {Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => (
+                  <option key={k} value={k}>
+                    {beatPatternLabel(k)}
+                  </option>
+                ))}
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <h4>Tracks</h4>
+            {ROLES.map((role) => (
+              <label className="field" key={role}>
+                <span className="field-label">{role[0].toUpperCase() + role.slice(1)}</span>
+                <select
+                  value={song.tracks[role]?.id ?? ""}
+                  onChange={(e) => {
+                    const t = tracks?.find((x) => x.id === Number(e.target.value));
+                    update({ tracks: { ...song.tracks, [role]: t ? ({ id: t.id, name: t.name } as TrackRef) : null } });
+                  }}
+                >
+                  <option value="">(none)</option>
+                  {(tracks ?? []).map((t) => (
+                    <option key={t.id} value={t.id} disabled={!t.midi}>
+                      {t.name}
+                      {t.midi ? "" : " (audio)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <button onClick={() => outlet(OUT.cf_tracks)}>Refresh track list</button>
+            <label className="field">
+              <span className="field-label">Bass lowest note</span>
+              <select value={song.bassWrapLow} onChange={(e) => update({ bassWrapLow: Number(e.target.value) })}>
+                {Array.from({ length: 25 }, (_, i) => 24 + i).map((p) => (
+                  <option key={p} value={p}>
+                    {pitchToFullNoteName(p)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="danger"
+              onClick={() => {
+                send(OUT.cf_clear, { trackIds: ROLES.map((r) => song.tracks[r]?.id).filter(Boolean) });
+                lastSent.current.clear();
+              }}
+              title="Deletes every Chord Fiend clip on the chosen tracks. The next edit writes the song again."
+            >
+              Remove Chord Fiend clips
+            </button>
+            <h4>Activity</h4>
+            <div className="activity">{activity.join("\n") || "-"}</div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

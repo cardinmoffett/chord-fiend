@@ -12,7 +12,9 @@ pnpm test     # the Live-side logic against a fake Live set (needs a build first
 
 | File | What it is |
 |---|---|
-| `src/app/chord-fiend-test/Editor.tsx` | The editor window, where the feel test happens. |
+| `src/app/chord-fiend-test/Editor.tsx` | The editor window: transport, song view, section view, settings drawer, and syncing the Arrangement. |
+| `src/app/chord-fiend-test/Inspector.tsx` | The editor for the selected chord. |
+| `src/app/chord-fiend-test/editor.css` | The window's styles. |
 | `src/app/chord-fiend-test/App.tsx` | The device strip on the track (169 px tall): opens the editor. |
 | `src/app/chord-fiend-test/song.ts` | The song model: sections, song order, linking and detaching, laying the song out on the Arrangement, and planning a write. |
 | `src/app/chord-fiend-test/surface.ts` | The window and the saved song (`state`). |

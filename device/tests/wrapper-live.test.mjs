@@ -129,4 +129,23 @@ describe("feel test wrapper against a fake Live set", () => {
     vm.runInContext("retryPages()", w.ctx);
     expect([urlsTo("device"), urlsTo("editor")]).toEqual([2, 2]);
   });
+
+  it("moves a running loop without jumping the playhead, and unloop keeps playing", () => {
+    const live = fakeLive();
+    const w = load(live);
+    w.send("cf_loop", 4, 4, 1);
+    live.song.current_song_time = 6.5;
+    w.send("cf_loop", 4, 8, 0); // an edit made the looped chord longer
+    expect([live.song.loop_start, live.song.loop_length, live.song.current_song_time, live.song.is_playing]).toEqual([4, 8, 6.5, 1]);
+    w.send("cf_unloop");
+    expect([live.song.loop, live.song.loop_start, live.song.loop_length, live.song.is_playing]).toEqual([1, 16, 8, 1]);
+  });
+
+  it("sets the clip colour it is given", () => {
+    const live = fakeLive();
+    const w = load(live);
+    const chords = live.song.tracks[0];
+    w.send("cf_write", w.b64({ role: "chords", name: "1 Verse - chords", trackId: chords.id, start: 0, length: 4, color: 0xe0a33a, notes: [[60, 0, 4, 96]] }));
+    expect(chords.arrangement_clips[0].color).toBe(0xe0a33a);
+  });
 });

@@ -10,6 +10,14 @@
 //   computeBassPitchForBlock(block, chord, pattern, bassWrapLow)
 //   activeBeatPattern(beatKey, customBeatPatterns)
 //
+// Two additions the app never had, both optional block fields, so a block without
+// them builds exactly as the app's did:
+//
+//   flat5        lowers the chord's 5th a semitone (a ♭5), on any chord source
+//   chordSource "free", with freeRoot (pitch class 0-11) and freeQuality
+//                ("major" | "minor" | "dominant"): a chord on any root, not tied
+//                to the key's scale, that takes every extension and voicing option
+//
 // Nothing here touches the DOM, audio, storage or timers.
 // tests/test_matches_original.mjs checks that it gives the same answers as the app.
 
@@ -129,11 +137,25 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
   var susName = SUS_NAMES[block.susIndex];
 
   var isApplied = block.chordSource === "applied";
+  var isFree = block.chordSource === "free";
   var fn = isApplied ? (block.appliedFunction || "dominant") : null;
   var degreeIndex, chordRootOffset, offsets;
   var effectiveSus = susName, effectiveAug = !!block.aug, effectiveIs6 = is6;
+  var effectiveFlat5 = !block.aug && !!block.flat5;
 
-  if (isApplied) {
+  if (isFree) {
+    // FREE: a root anywhere, measured up from the key's root so the octave
+    // setting means the same as for every other block, with a fixed quality.
+    var quality = FREE_QUALITY_INTERVALS[block.freeQuality] ? block.freeQuality : "major";
+    var qualityIntervals = FREE_QUALITY_INTERVALS[quality];
+    degreeIndex = -1; // not a degree of the key
+    chordRootOffset = (((block.freeRoot || 0) - masterRootIndex) % 12 + 12) % 12;
+    offsets = is6 ? qualityIntervals.slice(0, 3).concat([9]) : qualityIntervals.slice(0, toneCount);
+    if (susName === "sus2") offsets[1] = 2;
+    else if (susName === "sus4") offsets[1] = 5;
+    if (block.aug) offsets[2] = 8;
+    else if (effectiveFlat5) offsets[2] = 6;
+  } else if (isApplied) {
     // The target's OWN diatonic root -- same scale-walk the plain diatonic
     // path below uses, just to locate where the target sits, not to shape
     // the applied chord's own quality (that's fixed by the function).
@@ -146,6 +168,7 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
       chordRootOffset = targetRootOffset - 1; // a half-step below the target
       offsets = DIMINISHED7_INTERVALS.slice(); // always this exact tetrad
       effectiveSus = "none"; effectiveAug = false; effectiveIs6 = false; // not meaningful on a fixed dim7
+      effectiveFlat5 = false; // already has one
     } else {
       chordRootOffset = targetRootOffset + (fn === "tritoneSub" ? 1 : 7);
       if (is6) {
@@ -155,6 +178,7 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
         if (susName === "sus2") offsets[1] = 2; // fixed major 2nd -- not scale-derived, dominant quality is fixed
         else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
         if (block.aug) offsets[2] = 8;
+        else if (effectiveFlat5) offsets[2] = 6;
       }
     }
   } else {
@@ -167,6 +191,7 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     if (susName === "sus2") offsets[1] = extended[degreeIndex+1] - chordRootOffset;
     else if (susName === "sus4") offsets[1] = extended[degreeIndex+3] - chordRootOffset;
     if (block.aug) offsets[2] = 8;
+    else if (effectiveFlat5) offsets[2] = 6;
     if (is6) offsets.push(extended[degreeIndex+5] - chordRootOffset);
   }
 
@@ -202,7 +227,8 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
   return {pitches:pitches, chordRootPitch:chordRootPitch, offsets:offsets, toneLabels:toneLabels, inversion:inv, sus:effectiveSus, aug:effectiveAug, is6:effectiveIs6,
           dropIndex:block.dropIndex||0, resolvedMode:resolvedMode, isThru:isThru,
           chordDegreeIndex:degreeIndex, blockOctave:block.octave,
-          isApplied:isApplied, appliedFunction:fn};
+          isApplied:isApplied, appliedFunction:fn,
+          isFree:isFree, flat5:effectiveFlat5 && offsets[2] === 6};
 }
 
 function pitchToNoteName(pitch, preferFlats) { return (preferFlats ? NOTE_NAMES_FLAT : NOTE_NAMES)[((pitch%12)+12)%12]; }
@@ -237,7 +263,7 @@ function getChordSymbol(chord, masterRootIndex) {
   var base;
   if (chord.sus === "sus2" || chord.sus === "sus4") {
     var d = chord.is6?"6":(o.length===4?"7":o.length===5?"9":o.length===6?"11":o.length===7?"13":"");
-    base = rootName + d + chord.sus;
+    base = rootName + d + chord.sus + (chord.flat5 ? "b5" : "");
   } else {
     var q;
     if (chord.aug) q = "aug";
@@ -245,9 +271,10 @@ function getChordSymbol(chord, masterRootIndex) {
     else if (third===3 && fifth===7) q = "min";
     else if (third===3 && fifth===6) q = "dim";
     else if (third===4 && fifth===8) q = "aug";
+    else if (third===4 && fifth===6) q = "b5";
     else q = "?";
-    if (chord.is6) base = q==="maj" ? rootName+"6" : q==="min" ? rootName+"m6" : rootName+q+"6";
-    else if (o.length===3) base = q==="maj"?rootName : q==="min"?rootName+"m" : q==="dim"?rootName+"dim" : q==="aug"?rootName+"aug" : rootName+"?";
+    if (chord.is6) base = q==="maj" ? rootName+"6" : q==="min" ? rootName+"m6" : q==="b5" ? rootName+"6(b5)" : rootName+q+"6";
+    else if (o.length===3) base = q==="maj"?rootName : q==="min"?rootName+"m" : q==="dim"?rootName+"dim" : q==="aug"?rootName+"aug" : q==="b5"?rootName+"(b5)" : rootName+"?";
     else {
       var d2 = o.length===4?"7":o.length===5?"9":o.length===6?"11":o.length===7?"13":"";
       if (q==="maj" && seventh===11) base = rootName+"maj"+d2;
@@ -257,6 +284,8 @@ function getChordSymbol(chord, masterRootIndex) {
       else if (q==="dim" && seventh===9) base = rootName+"dim"+d2;
       else if (q==="dim" && seventh===10) base = rootName+"m"+d2+"b5";
       else if (q==="aug" && seventh===11) base = rootName+"maj"+d2+"#5";
+      else if (q==="b5" && seventh===10) base = rootName+d2+"b5";
+      else if (q==="b5" && seventh===11) base = rootName+"maj"+d2+"b5";
       else base = rootName+"?"+d2;
     }
   }
@@ -299,6 +328,9 @@ var APPLIED_FUNCTIONS = ["dominant", "tritoneSub", "leadingTone"];
 var APPLIED_FUNCTION_LABELS = {dominant: "Dominant of", tritoneSub: "Tritone sub of", leadingTone: "Leading-tone into"};
 var DOMINANT_INTERVALS = [0, 4, 7, 10, 14, 17, 21]; // root, 3rd, 5th, b7, 9th, 11th, 13th
 var DIMINISHED7_INTERVALS = [0, 3, 6, 9]; // root, m3, dim5, dim7 -- always this exact tetrad
+// FREE chords (an addition, not from the app): stacked thirds for each quality, up to the 13th.
+var FREE_QUALITIES = ["major", "minor", "dominant"];
+var FREE_QUALITY_INTERVALS = {major: [0, 4, 7, 11, 14, 17, 21], minor: [0, 3, 7, 10, 14, 17, 21], dominant: DOMINANT_INTERVALS};
 
 // ---- Chord-degree names (1, 3, 5, 7, 9...) --------------------------------
 // Every tone of a chord has a ROLE (which numbered degree of the chord it is)
@@ -476,7 +508,7 @@ export {
   FLAT_PREFERRING_MAJOR_ROOT, MASTER_MODE_RELATIVE_MAJOR_OFFSET,
   DURATION_NAMES, DURATION_BEATS, DURATION_MODIFIER_NAMES,
   ROMAN_BASE, APPLIED_FUNCTIONS, APPLIED_FUNCTION_LABELS,
-  DOMINANT_INTERVALS, DIMINISHED7_INTERVALS,
+  DOMINANT_INTERVALS, DIMINISHED7_INTERVALS, FREE_QUALITIES, FREE_QUALITY_INTERVALS,
   CHORD_DEGREE_REFERENCE, STACKED_THIRD_ROLES,
   BASS_VOICES, BUILTIN_BEAT_PATTERNS,
   // chords

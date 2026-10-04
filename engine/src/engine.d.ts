@@ -13,9 +13,15 @@ export interface Block {
   durationModifier: number;
   /** -1 = bass off for this block, 0+ = on. */
   bassToneIndex: number;
-  chordSource: "diatonic" | "applied";
+  chordSource: "diatonic" | "applied" | "free";
   appliedTargetIndex: number;
   appliedFunction: "dominant" | "tritoneSub" | "leadingTone";
+  /** Lowers the 5th a semitone. An engine addition; missing means off. */
+  flat5?: number | boolean;
+  /** Free mode's root, as a pitch class 0-11. An engine addition. */
+  freeRoot?: number;
+  /** Free mode's quality. An engine addition; missing means major. */
+  freeQuality?: "major" | "minor" | "dominant";
 }
 
 export interface Chord {
@@ -34,6 +40,8 @@ export interface Chord {
   blockOctave: number;
   isApplied: boolean;
   appliedFunction: string | null;
+  isFree: boolean;
+  flat5: boolean;
 }
 
 export interface BeatHit { beat: number; dur: number }
@@ -62,6 +70,8 @@ export const APPLIED_FUNCTIONS: string[];
 export const APPLIED_FUNCTION_LABELS: Record<string, string>;
 export const DOMINANT_INTERVALS: number[];
 export const DIMINISHED7_INTERVALS: number[];
+export const FREE_QUALITIES: ("major" | "minor" | "dominant")[];
+export const FREE_QUALITY_INTERVALS: Record<string, number[]>;
 export const CHORD_DEGREE_REFERENCE: Record<number, number>;
 export const STACKED_THIRD_ROLES: number[];
 export const BASS_VOICES: string[];

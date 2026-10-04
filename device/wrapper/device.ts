@@ -11,7 +11,7 @@
  *   cf_tracks                      -> cf_tracks <b64 [{id, name, midi}]>
  *   cf_prune <b64 {role, trackId, keep:[{name, start, length}]}>
  *                                  -> cf_result <b64 {role, op:"prune", ok, deleted, error}>
- *   cf_write <b64 {role, name, trackId, start, length, notes:[[p,s,d,v]...]}>
+ *   cf_write <b64 {role, name, trackId, start, length, color, notes:[[p,s,d,v]...]}>
  *                                  -> cf_result <b64 {role, name, ok, action, clipId, notes, error}>
  *   cf_clear <b64 {trackIds:[...]}> -> cf_result
  *
@@ -19,7 +19,8 @@
  * track ("2 Chorus - bass"). A song write is one cf_prune per track, which deletes our
  * clips for that role that are no longer in the song, then a cf_write per clip that is new
  * or changed.
- *   cf_loop <start> <length>       Live's loop on that range, playhead there, play
+ *   cf_loop <start> <length> [jump] Live's loop on that range; with jump (default) playhead there, play
+ *   cf_unloop                      the user's loop restored, playback continues
  *   cf_play <start>                playhead there, play (the user's loop restored)
  *   cf_stop                        stop, and restore the user's loop
  */
@@ -224,6 +225,8 @@ function cf_write(b64: unknown): void {
       result.clipId = clipId;
     }
 
+    // Live snaps an RGB colour to the nearest one in its clip palette.
+    if (req.color !== undefined && req.color !== null) target.set("color", Number(req.color));
     if (req.notes.length) target.call("add_new_notes", cfNotesDict(req.notes));
     result.notes = req.notes.length;
     result.ok = true;
@@ -308,12 +311,17 @@ function cfRestoreUserLoop(song: LiveAPI): void {
   savedLoop = null;
 }
 
-function cf_loop(start: number, length: number): void {
+/**
+ * Loop a range. `jump` 1 (the default) moves the playhead there and plays; 0 only moves
+ * the loop, for when an edit shifts the range of something that is already looping.
+ */
+function cf_loop(start: number, length: number, jump?: number): void {
   var song = new LiveAPI("live_set");
   cfSaveUserLoop(song);
   song.set("loop_start", Number(start));
   song.set("loop_length", Number(length));
   song.set("loop", 1);
+  if (jump === 0) return;
   song.set("back_to_arranger", 0);
   song.set("current_song_time", Number(start));
   if (cfNum(song, "is_playing") !== 1) song.call("start_playing");
@@ -328,6 +336,11 @@ function cf_play(start: number): void {
   if (cfNum(song, "is_playing") !== 1) song.call("start_playing");
 }
 
+/** Stop looping and put the user's loop back, without stopping playback. */
+function cf_unloop(): void {
+  cfRestoreUserLoop(new LiveAPI("live_set"));
+}
+
 function cf_stop(): void {
   var song = new LiveAPI("live_set");
   song.call("stop_playing");
@@ -336,13 +349,14 @@ function cf_stop(): void {
 
 /* ---------------- hooks into the packaged wrapper ---------------- */
 
-function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: unknown): void {
+function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: unknown, a3?: unknown): void {
   try {
     if (selector === "cf_tracks") cf_tracks();
     else if (selector === "cf_write") cf_write(a1);
     else if (selector === "cf_prune") cf_prune(a1);
     else if (selector === "cf_clear") cf_clear(a1);
-    else if (selector === "cf_loop") cf_loop(Number(a1), Number(a2));
+    else if (selector === "cf_loop") cf_loop(Number(a1), Number(a2), a3 === undefined ? 1 : Number(a3));
+    else if (selector === "cf_unloop") cf_unloop();
     else if (selector === "cf_play") cf_play(Number(a1));
     else if (selector === "cf_stop") cf_stop();
     else post("chord-fiend: window " + windowId + " sent unhandled '" + selector + "'\n");
