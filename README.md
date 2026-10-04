@@ -6,6 +6,7 @@ A Max for Live device for Ableton Live: a block editor for chord progressions th
 
 - `docs/build-plan.md`: the build plan (what we're building, scope, build order, open decisions, technical notes).
 - `engine/`: the chord engine as a standalone package, taking key and mode as parameters (build plan step 4). See [`engine/README.md`](engine/README.md).
+- `spike/`: four test devices to load in Live on the Mac, with step-by-step instructions (build plan step 2). See [`spike/README.md`](spike/README.md).
 - `original/`: a snapshot of the mobile web app taken on 2026-10-04, plus the six chord-engine tests. This is the reference copy and is not edited. See [`original/README.md`](original/README.md).
 
 ## Run the tests
