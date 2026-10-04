@@ -130,6 +130,13 @@ var beats = Object.keys(engine.BUILTIN_BEAT_PATTERNS).concat(['off', 'unknown'])
   });
 });
 engine.BASS_VOICES.concat(['kick', 'snare', 'hihat']).forEach(function (v) { same('bassSlotForVoice ' + v, orig.bassSlotForVoice(v), engine.bassSlotForVoice(v)); });
+Object.keys(engine.BUILTIN_BEAT_PATTERNS).forEach(function (k) {
+  var pat = engine.BUILTIN_BEAT_PATTERNS[k];
+  ['kick', 'snare', 'hihat', 'bass1', 'bass5', 'none'].forEach(function (v) {
+    same('laneByVoice ' + k + ' ' + v, orig.laneByVoice(pat, v), engine.laneByVoice(pat, v));
+    for (var st = 0; st < 16; st++) same('patternHasHitAtStep ' + k + ' ' + v + ' ' + st, orig.patternHasHitAtStep(orig.laneByVoice(pat, v), st, 4), engine.patternHasHitAtStep(engine.laneByVoice(pat, v), st, 4));
+  });
+});
 report('bass pitches, octave shift, chord tones and pattern lookup');
 
 console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');

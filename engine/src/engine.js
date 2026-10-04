@@ -420,6 +420,9 @@ function beatPatternLabel(beatKey) {
 function laneByVoice(pattern, voice) {
   return pattern.lanes.filter(function (l) { return l.voice === voice; })[0] || null;
 }
+function patternHasHitAtStep(lane, step, stepsPerBeat) {
+  return !!lane && lane.hits.some(function (h) { return Math.round(h.beat * stepsPerBeat) === step; });
+}
 
 // The chord's own already-computed tone at a given SLOT (0=root, 1=3rd or
 // sus-substitute, 2=5th or augmented, 3=7th) -- exactly the tones the chord
@@ -481,6 +484,6 @@ export {
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
   getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel,
   // bass and drums
-  bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice,
+  bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock
 };
