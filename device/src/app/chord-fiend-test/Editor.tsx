@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, decodeBase64, encodeBase64, outlet } from "@m4l-jweb/bridge";
 import { useStateSync } from "@m4l-jweb/surface/react";
 import {
@@ -137,7 +137,7 @@ export default function Editor() {
     setConfirmRelink(false);
     if (slot) update({ editing: { kind: "slot", id: slot.id } });
     else if (sectionId) update({ editing: { kind: "section", id: sectionId } });
-    setSelectedBlock(0);
+    setSelectedBlock(null);
     setView("section");
   }
 
@@ -244,7 +244,7 @@ export default function Editor() {
       nextId: id + 1,
       editing: { kind: "section", id },
     });
-    setSelectedBlock(0);
+    setSelectedBlock(null);
     setView("section");
   }
   function duplicateSection(id: number) {
@@ -309,6 +309,49 @@ export default function Editor() {
     return out;
   }, [blocks]);
   const rowCount = segments.length ? segments[segments.length - 1].row + 1 : 1;
+
+  // The selected chord's editor is a flyout attached to the block: below it, or above when
+  // there is no room below, with its arrow on the block.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const [flyout, setFlyout] = useState({ left: 0, top: 0, width: 760, arrow: 40, above: false });
+  const [winSize, setWinSize] = useState(0);
+  useEffect(() => {
+    const onResize = () => setWinSize(window.innerWidth * 10000 + window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  useLayoutEffect(() => {
+    if (selectedBlock === null || !wrapRef.current) return;
+    const el = wrapRef.current.querySelector<HTMLElement>(`.block[data-block="${selectedBlock}"]`);
+    if (!el) return;
+    const wrap = wrapRef.current.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const width = Math.min(780, wrap.width);
+    const center = r.left - wrap.left + Math.min(r.width, 160) / 2;
+    const left = Math.max(0, Math.min(wrap.width - width, center - width / 2));
+    const height = flyoutRef.current?.offsetHeight ?? 220;
+    const above = r.bottom + height + 16 > window.innerHeight && r.top - height - 16 > 0;
+    const top = above ? r.top - wrap.top - height - 10 : r.bottom - wrap.top + 10;
+    setFlyout({ left, top, width, arrow: Math.max(16, Math.min(width - 16, center - left)), above });
+  }, [selectedBlock, segments, view, song.editing, winSize, block?.chordSource]);
+
+  // Escape, or a click on the page away from the blocks and the flyout, closes the editor.
+  useEffect(() => {
+    if (selectedBlock === null) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setSelectedBlock(null);
+    const away = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest(".block, .flyout, .transport, .drawer, .drawer-shade")) return;
+      setSelectedBlock(null);
+    };
+    document.addEventListener("keydown", esc);
+    document.addEventListener("mousedown", away);
+    return () => {
+      document.removeEventListener("keydown", esc);
+      document.removeEventListener("mousedown", away);
+    };
+  }, [selectedBlock]);
 
   const selectedSlot = song.slots.find((x) => x.id === selectedSlotId);
   const selectedPlaced = placed.find((p) => p.slot.id === selectedSlotId);
@@ -469,10 +512,6 @@ export default function Editor() {
                 <button onClick={() => setConfirmRelink(true)}>Relink</button>
               )
             ) : null}
-            <span style={{ flex: 1 }} />
-            <button onClick={addBlock} disabled={locked} title="Insert a chord after the selected one">
-              + Add
-            </button>
           </div>
 
           {editingSection && !usesOfSection.length && (
@@ -489,67 +528,75 @@ export default function Editor() {
             </div>
           )}
 
-          <div className="timeline">
-            {Array.from({ length: rowCount }, (_, row) => (
-              <div className="trow" key={row}>
-                {segments
-                  .filter((sg) => sg.row === row)
-                  .map((sg, k) => {
-                    const b = blocks[sg.block];
-                    const label = blockLabel(b, song);
-                    const cls = [
-                      "block",
-                      sg.block === selectedBlock && "selected",
-                      sg.block === playingBlock && "playing",
-                      sg.cont && "cont",
-                      sg.split && "split",
-                      b.chordSource === "applied" && "applied",
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-                    return (
-                      <div
-                        key={k}
-                        className={cls}
-                        style={{ left: `calc(${sg.left * 100}% + 1px)`, width: `calc(${sg.width * 100}% - 2px)`, background: blockColor(b) }}
-                        onClick={() => {
-                          setSelectedBlock(sg.block);
-                          audition(b);
-                        }}
-                        title={`${label.degree}  ${label.name}`}
-                      >
-                        {!sg.cont && (
-                          <>
-                            <span className="deg">{label.degree}</span>
-                            <span className="nm">{label.name}</span>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            ))}
-          </div>
+          <div className="timeline-wrap" ref={wrapRef}>
+            <div className="timeline">
+              {Array.from({ length: rowCount }, (_, row) => (
+                <div className="trow" key={row}>
+                  {segments
+                    .filter((sg) => sg.row === row)
+                    .map((sg, k) => {
+                      const b = blocks[sg.block];
+                      const label = blockLabel(b, song);
+                      const cls = [
+                        "block",
+                        sg.block === selectedBlock && "selected",
+                        sg.block === playingBlock && "playing",
+                        sg.cont && "cont",
+                        sg.split && "split",
+                        b.chordSource === "applied" && "applied",
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+                      return (
+                        <div
+                          key={k}
+                          data-block={sg.cont ? undefined : sg.block}
+                          className={cls}
+                          style={{ left: `calc(${sg.left * 100}% + 1px)`, width: `calc(${sg.width * 100}% - 2px)`, background: blockColor(b) }}
+                          onClick={() => {
+                            if (sg.block === selectedBlock) return setSelectedBlock(null); // a second click closes the editor
+                            setSelectedBlock(sg.block);
+                            audition(b);
+                          }}
+                          title={`${label.degree}  ${label.name}`}
+                        >
+                          {!sg.cont && (
+                            <>
+                              <span className="deg">{label.degree}</span>
+                              <span className="nm">{label.name}</span>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              ))}
+            </div>
 
-          <div className="section-bottom">
-            {block && selectedBlock !== null ? (
-              <Inspector
-                block={block}
-                song={song}
-                locked={locked}
-                canRemove={blocks.length > 1}
-                isFirst={selectedBlock === 0}
-                isLast={selectedBlock === blocks.length - 1}
-                onChange={(c) => {
-                  changeBlock(selectedBlock, c);
-                  audition({ ...block, ...c });
-                }}
-                onReset={() => changeBlock(selectedBlock, defaultBlock())}
-                onMove={(d) => moveBlock(selectedBlock, d)}
-                onRemove={() => removeBlock(selectedBlock)}
-              />
-            ) : (
-              <div className="empty-hint">Click a chord to edit it</div>
+            {block && selectedBlock !== null && (
+              <div
+                ref={flyoutRef}
+                className={flyout.above ? "flyout above" : "flyout"}
+                style={{ left: flyout.left, top: flyout.top, width: flyout.width }}
+              >
+                <span className="flyout-arrow" style={{ left: flyout.arrow }} />
+                <Inspector
+                  block={block}
+                  song={song}
+                  locked={locked}
+                  canRemove={blocks.length > 1}
+                  isFirst={selectedBlock === 0}
+                  isLast={selectedBlock === blocks.length - 1}
+                  onChange={(c) => {
+                    changeBlock(selectedBlock, c);
+                    audition({ ...block, ...c });
+                  }}
+                  onReset={() => changeBlock(selectedBlock, defaultBlock())}
+                  onMove={(d) => moveBlock(selectedBlock, d)}
+                  onRemove={() => removeBlock(selectedBlock)}
+                  onAdd={addBlock}
+                />
+              </div>
             )}
           </div>
         </div>

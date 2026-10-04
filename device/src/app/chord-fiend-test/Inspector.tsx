@@ -36,6 +36,7 @@ export function Inspector({
   onReset,
   onMove,
   onRemove,
+  onAdd,
 }: {
   block: Block;
   song: Song;
@@ -48,6 +49,8 @@ export function Inspector({
   onReset: () => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
+  /** Insert a new chord after this one. */
+  onAdd: () => void;
 }) {
   const chord = buildChord(block, song.rootIndex, song.modeIndex);
   const homeLabels = degreeLabels(MASTER_MODE_NAMES[song.modeIndex]);
@@ -144,7 +147,7 @@ export function Inspector({
         <Field label="Duration">
           <Select value={block.durationIndex} options={DURATION_NAMES} onChange={(v) => onChange({ durationIndex: v })} />
         </Field>
-        <Field label="Feel" wide>
+        <Field label="Feel">
           <Segmented options={DURATION_MODIFIER_NAMES} value={block.durationModifier} onChange={(i) => onChange({ durationModifier: i })} />
         </Field>
       </div>
@@ -161,6 +164,9 @@ export function Inspector({
         </button>
         <button title="Remove" className="danger" disabled={!canRemove} onClick={onRemove}>
           ✕
+        </button>
+        <button title="Insert a new chord after this one" className="add" onClick={onAdd}>
+          + Add
         </button>
       </div>
     </fieldset>
