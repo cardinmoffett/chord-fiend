@@ -31,6 +31,11 @@ check('6 chord on free minor: Dm6 = D F A B', notes({chordSource: 'free', freeRo
 check('inversion and drops work on free chords (E major, 1st inversion: G# B E)', notes({chordSource: 'free', freeRoot: 4, freeQuality: 'major', inversion: 1}), [68, 71, 76]);
 check('free chord tone labels', chord({chordSource: 'free', freeRoot: 4, freeQuality: 'minor', extensionIndex: 2}).toneLabels, ['1', F + '3', '5', F + '7']);
 check('isFree is set, and the degree is not one of the key\'s', [chord({chordSource: 'free'}).isFree, chord({chordSource: 'free'}).chordDegreeIndex], [true, -1]);
+check('B diminished triad: B D F', notes({chordSource: 'free', freeRoot: 11, freeQuality: 'diminished'}), [71, 74, 77]);
+check('...named Bdim', sym({chordSource: 'free', freeRoot: 11, freeQuality: 'diminished'}), 'Bdim');
+check('C# diminished 7th: C# E G Bb (a fully diminished 7th)', notes({chordSource: 'free', freeRoot: 1, freeQuality: 'diminished', extensionIndex: 2}), [61, 64, 67, 70]);
+check('...named C#dim7', sym({chordSource: 'free', freeRoot: 1, freeQuality: 'diminished', extensionIndex: 2}), 'C#dim7');
+check('diminished tone labels', chord({chordSource: 'free', freeRoot: 11, freeQuality: 'diminished', extensionIndex: 2}).toneLabels, ['1', F + '3', F + '5', F + F + '7']);
 check('a missing quality means major', notes({chordSource: 'free', freeRoot: 0}), [60, 64, 67]);
 
 console.log('\n=== flat five ===');

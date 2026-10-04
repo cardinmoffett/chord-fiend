@@ -15,7 +15,7 @@
 //
 //   flat5        lowers the chord's 5th a semitone (a ♭5), on any chord source
 //   chordSource "free", with freeRoot (pitch class 0-11) and freeQuality
-//                ("major" | "minor" | "dominant"): a chord on any root, not tied
+//                ("major" | "minor" | "dominant" | "diminished"): a chord on any root, not tied
 //                to the key's scale, that takes every extension and voicing option
 //
 // Nothing here touches the DOM, audio, storage or timers.
@@ -329,8 +329,9 @@ var APPLIED_FUNCTION_LABELS = {dominant: "Dominant of", tritoneSub: "Tritone sub
 var DOMINANT_INTERVALS = [0, 4, 7, 10, 14, 17, 21]; // root, 3rd, 5th, b7, 9th, 11th, 13th
 var DIMINISHED7_INTERVALS = [0, 3, 6, 9]; // root, m3, dim5, dim7 -- always this exact tetrad
 // FREE chords (an addition, not from the app): stacked thirds for each quality, up to the 13th.
-var FREE_QUALITIES = ["major", "minor", "dominant"];
-var FREE_QUALITY_INTERVALS = {major: [0, 4, 7, 11, 14, 17, 21], minor: [0, 3, 7, 10, 14, 17, 21], dominant: DOMINANT_INTERVALS};
+// Diminished stacks a fully diminished 7th (bb7 = 9), then the 9th, 11th and b13.
+var FREE_QUALITIES = ["major", "minor", "dominant", "diminished"];
+var FREE_QUALITY_INTERVALS = {major: [0, 4, 7, 11, 14, 17, 21], minor: [0, 3, 7, 10, 14, 17, 21], dominant: DOMINANT_INTERVALS, diminished: [0, 3, 6, 9, 14, 17, 20]};
 
 // ---- Chord-degree names (1, 3, 5, 7, 9...) --------------------------------
 // Every tone of a chord has a ROLE (which numbered degree of the chord it is)

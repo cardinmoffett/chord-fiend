@@ -21,7 +21,7 @@ export interface Block {
   /** Free mode's root, as a pitch class 0-11. An engine addition. */
   freeRoot?: number;
   /** Free mode's quality. An engine addition; missing means major. */
-  freeQuality?: "major" | "minor" | "dominant";
+  freeQuality?: "major" | "minor" | "dominant" | "diminished";
 }
 
 export interface Chord {
@@ -70,7 +70,7 @@ export const APPLIED_FUNCTIONS: string[];
 export const APPLIED_FUNCTION_LABELS: Record<string, string>;
 export const DOMINANT_INTERVALS: number[];
 export const DIMINISHED7_INTERVALS: number[];
-export const FREE_QUALITIES: ("major" | "minor" | "dominant")[];
+export const FREE_QUALITIES: ("major" | "minor" | "dominant" | "diminished")[];
 export const FREE_QUALITY_INTERVALS: Record<string, number[]>;
 export const CHORD_DEGREE_REFERENCE: Record<number, number>;
 export const STACKED_THIRD_ROLES: number[];

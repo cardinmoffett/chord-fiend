@@ -22,13 +22,14 @@ const SOURCES = [
   { value: "applied", label: "Applied" },
   { value: "free", label: "Free" },
 ] as const;
-const QUALITY_LABELS: Record<string, string> = { major: "Major", minor: "Minor", dominant: "Dominant" };
+const QUALITY_LABELS: Record<string, string> = { major: "Major", minor: "Minor", dominant: "Dominant", diminished: "Diminished" };
 
 /** The editor for the selected block: every setting a block has, as in the app's editor panel. */
 export function Inspector({
   block,
   song,
   canRemove,
+  locked,
   isFirst,
   isLast,
   onChange,
@@ -39,6 +40,8 @@ export function Inspector({
   block: Block;
   song: Song;
   canRemove: boolean;
+  /** A linked part: its settings are shown, but cannot be changed. */
+  locked?: boolean;
   isFirst: boolean;
   isLast: boolean;
   onChange: (change: Partial<Block>) => void;
@@ -53,7 +56,8 @@ export function Inspector({
   const isLeadingTone = block.chordSource === "applied" && block.appliedFunction === "leadingTone";
 
   return (
-    <div className="inspector">
+    // A disabled fieldset disables every control inside it, buttons and menus alike.
+    <fieldset className={locked ? "inspector locked" : "inspector"} disabled={locked}>
       <div className="inspector-grid">
         <Field label="Chord" wide>
           <Segmented
@@ -69,7 +73,11 @@ export function Inspector({
               <Select value={block.degreeIndex} options={degreeLabels(degreeMode)} onChange={(v) => onChange({ degreeIndex: v })} />
             </Field>
             <Field label="Mode">
-              <Select value={block.blockModeIndex} options={BLOCK_MODE_NAMES.map((m, i) => (i === 0 ? "Thru (the key's mode)" : m))} onChange={(v) => onChange({ blockModeIndex: v })} />
+              <Select
+                value={block.blockModeIndex}
+                options={BLOCK_MODE_NAMES.map((m, i) => (i === 0 ? "Thru (the key's mode)" : m))}
+                onChange={(v) => onChange({ blockModeIndex: v })}
+              />
             </Field>
           </>
         )}
@@ -90,7 +98,11 @@ export function Inspector({
         {block.chordSource === "free" && (
           <>
             <Field label="Root">
-              <Select value={block.freeRoot ?? 0} options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))} onChange={(v) => onChange({ freeRoot: v })} />
+              <Select
+                value={block.freeRoot ?? 0}
+                options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))}
+                onChange={(v) => onChange({ freeRoot: v })}
+              />
             </Field>
             <Field label="Quality">
               <Select
@@ -123,7 +135,11 @@ export function Inspector({
           <Select value={block.dropIndex} options={DROP_NAMES} onChange={(v) => onChange({ dropIndex: v })} />
         </Field>
         <Field label="Octave">
-          <Select value={OCTAVES.indexOf(block.octave)} options={OCTAVES.map((o) => (o > 0 ? "+" + o : String(o)))} onChange={(v) => onChange({ octave: OCTAVES[v] })} />
+          <Select
+            value={OCTAVES.indexOf(block.octave)}
+            options={OCTAVES.map((o) => (o > 0 ? "+" + o : String(o)))}
+            onChange={(v) => onChange({ octave: OCTAVES[v] })}
+          />
         </Field>
         <Field label="Duration">
           <Select value={block.durationIndex} options={DURATION_NAMES} onChange={(v) => onChange({ durationIndex: v })} />
@@ -147,7 +163,7 @@ export function Inspector({
           ✕
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -160,11 +176,31 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
   );
 }
 
-function Select({ value, options, onChange, disabled }: { value: number; options: readonly string[]; onChange: (v: number) => void; disabled?: boolean }) {
+function Select({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  options: readonly string[];
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) {
   return <IndexDropdown value={value} options={options} onChange={onChange} disabled={disabled} />;
 }
 
-export function Segmented({ options, value, onChange, disabled }: { options: readonly string[]; value: number; onChange: (i: number) => void; disabled?: boolean }) {
+export function Segmented({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: readonly string[];
+  value: number;
+  onChange: (i: number) => void;
+  disabled?: boolean;
+}) {
   return (
     <span className="segmented">
       {options.map((o, i) => (

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, decodeBase64, encodeBase64, outlet } from "@m4l-jweb/bridge";
 import { useStateSync } from "@m4l-jweb/surface/react";
-import { BUILTIN_BEAT_PATTERNS, MASTER_MODE_NAMES, beatPatternLabel, buildChord, defaultBlock, noteChoiceLabel, pitchToFullNoteName } from "../../../../engine/src/engine.js";
+import {
+  BUILTIN_BEAT_PATTERNS,
+  MASTER_MODE_NAMES,
+  beatPatternLabel,
+  buildChord,
+  defaultBlock,
+  noteChoiceLabel,
+  pitchToFullNoteName,
+} from "../../../../engine/src/engine.js";
 import { Dropdown, IndexDropdown } from "./Dropdown";
 import { useDevice } from "../shared/device";
 import { Inspector } from "./Inspector";
@@ -14,6 +22,7 @@ import {
   blockLabel,
   blockLength,
   editingBlocks,
+  editingLocked,
   findSection,
   layoutSong,
   normalizeSong,
@@ -34,11 +43,9 @@ interface LiveTrack {
   midi: boolean;
 }
 
-
 const BEATS_PER_ROW = 4 * BEATS_PER_BAR;
 const send = (selector: string, value: unknown) => outlet(selector, encodeBase64(JSON.stringify(value)));
 const barBeat = (beats: number) => `Bar ${Math.floor(beats / BEATS_PER_BAR) + 1} · ${Math.floor(beats % BEATS_PER_BAR) + 1}`;
-const bars = (p: PlacedSlot) => `bars ${p.start / BEATS_PER_BAR + 1}-${Math.ceil((p.start + p.length) / BEATS_PER_BAR)}`;
 
 /** The editor window. The window owns the song; the Arrangement follows it automatically. */
 export default function Editor() {
@@ -53,6 +60,7 @@ export default function Editor() {
   const [view, setView] = useState<"song" | "section">("song");
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
+  const [confirmRelink, setConfirmRelink] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(0);
   const [picker, setPicker] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -119,12 +127,15 @@ export default function Editor() {
   const editingSlot = song.editing.kind === "slot" ? song.slots.find((x) => x.id === song.editing.id) : undefined;
   const blocks = editingBlocks(song);
   const usesOfSection = editingSection ? placed.filter((p) => !p.slot.blocks && p.slot.sectionId === editingSection.id) : [];
-  // Where the section being edited is heard: the detached part being edited, or the first place the section is used.
+  // Where the blocks being edited are heard: the part being edited, or the first place the section is used.
   const hearing: PlacedSlot | undefined = editingSlot ? placed.find((p) => p.slot.id === editingSlot.id) : usesOfSection[0];
   const block = selectedBlock !== null ? blocks[selectedBlock] : undefined;
+  const locked = editingLocked(song);
 
+  // A song part opens as itself: locked if it is linked to its section, editable if inline.
   function openEditor(slot: Slot | null, sectionId?: number) {
-    if (slot) update({ editing: slot.blocks ? { kind: "slot", id: slot.id } : { kind: "section", id: slot.sectionId } });
+    setConfirmRelink(false);
+    if (slot) update({ editing: { kind: "slot", id: slot.id } });
     else if (sectionId) update({ editing: { kind: "section", id: sectionId } });
     setSelectedBlock(0);
     setView("section");
@@ -179,9 +190,13 @@ export default function Editor() {
   }
 
   const playingSlot = device.playing ? placed.find((p) => device.beats >= p.start && device.beats < p.start + p.length) : undefined;
-  const playingHere = playingSlot && (editingSlot ? playingSlot.slot.id === editingSlot.id : !playingSlot.slot.blocks && playingSlot.slot.sectionId === editingSection?.id);
+  const playingHere =
+    playingSlot &&
+    (editingSlot ? playingSlot.slot.id === editingSlot.id : !playingSlot.slot.blocks && playingSlot.slot.sectionId === editingSection?.id);
   const playingBlock = playingHere
-    ? playingSlot!.blockStarts.findIndex((s, i) => device.beats >= playingSlot!.start + s && device.beats < playingSlot!.start + s + blockLength(playingSlot!.blocks[i]))
+    ? playingSlot!.blockStarts.findIndex(
+        (s, i) => device.beats >= playingSlot!.start + s && device.beats < playingSlot!.start + s + blockLength(playingSlot!.blocks[i]),
+      )
     : -1;
 
   /* ---------------- song order and sections ---------------- */
@@ -210,17 +225,25 @@ export default function Editor() {
     update({ slots: song.slots.filter((x) => x.id !== id), editing });
     setSelectedSlotId(null);
   }
-  function detachSlot(slot: Slot) {
+  // Make inline: this part gets its own copy of the section's chords, edited on its own.
+  function makeInline(slot: Slot) {
     const copy = (findSection(song, slot.sectionId)?.blocks ?? []).map((b) => ({ ...b }));
-    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: copy } : x)), editing: song.editing.kind === "section" ? song.editing : { kind: "slot", id: slot.id } });
+    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: copy } : x)) });
   }
+  // Relink: the part follows its section again, and its own changes are gone (asked first).
   function relinkSlot(slot: Slot) {
-    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: null } : x)), editing: song.editing.kind === "slot" && song.editing.id === slot.id ? { kind: "section", id: slot.sectionId } : song.editing });
+    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: null } : x)) });
+    setConfirmRelink(false);
   }
   function newSection() {
     const s = songRef.current;
     const id = s.nextId;
-    save({ ...s, sections: [...s.sections, { id, name: `Section ${s.sections.length + 1}`, blocks: [defaultBlock()] }], nextId: id + 1, editing: { kind: "section", id } });
+    save({
+      ...s,
+      sections: [...s.sections, { id, name: `Section ${s.sections.length + 1}`, blocks: [defaultBlock()] }],
+      nextId: id + 1,
+      editing: { kind: "section", id },
+    });
     setSelectedBlock(0);
     setView("section");
   }
@@ -298,7 +321,7 @@ export default function Editor() {
           {view === "section" ? (
             <>
               <button onClick={() => setView("song")}>← Song</button>
-              <span>{editingSection ? editingSection.name : editingSlot ? `${findSection(song, editingSlot.sectionId)?.name}*` : ""}</span>
+              <span>{editingSection ? editingSection.name : editingSlot ? (hearing?.label ?? "") : ""}</span>
             </>
           ) : (
             <span>Song</span>
@@ -334,7 +357,7 @@ export default function Editor() {
 
       {/* ---------------- song view ---------------- */}
       {view === "song" && (
-        <div className="view">
+        <div className="song-view">
           <div className="heading">Song</div>
           <div className="cards">
             {placed.map((p) => (
@@ -346,14 +369,10 @@ export default function Editor() {
                   setSelectedSectionId(null);
                 }}
                 onDoubleClick={() => openEditor(p.slot)}
-                title="Click to select, double-click to edit"
               >
                 <span className="strip" style={{ background: sectionColor(p.slot.sectionId).css }} />
-                <span className="badge">{p.slot.blocks ? "detached" : "🔗"}</span>
+                {!p.slot.blocks && <span className="badge">🔗</span>}
                 <span className="name">{p.label}</span>
-                <span className="sub">
-                  {p.index + 1} · {bars(p)}
-                </span>
               </div>
             ))}
             <div className="picker" onClick={(e) => e.stopPropagation()}>
@@ -371,35 +390,26 @@ export default function Editor() {
               )}
             </div>
           </div>
-
-          <div className="toolbar">
-            {selectedSlot && selectedPlaced ? (
+          <div className="toolbar slim">
+            {selectedSlot && selectedPlaced && (
               <>
-                <span>
-                  Part {selectedPlaced.index + 1}: <b>{selectedPlaced.label}</b>, {bars(selectedPlaced)}
-                </span>
-                <button onClick={() => openEditor(selectedSlot)}>Edit</button>
                 <button title="Move earlier" disabled={selectedPlaced.index === 0} onClick={() => moveSlot(selectedSlot.id, -1)}>
                   ←
                 </button>
                 <button title="Move later" disabled={selectedPlaced.index === placed.length - 1} onClick={() => moveSlot(selectedSlot.id, 1)}>
                   →
                 </button>
-                {selectedSlot.blocks ? <button onClick={() => relinkSlot(selectedSlot)}>Relink</button> : <button onClick={() => detachSlot(selectedSlot)}>Detach</button>}
-                <button className="danger" disabled={placed.length < 2} onClick={() => removeSlot(selectedSlot.id)}>
-                  Remove
+                <button title="Remove from the song" className="danger" disabled={placed.length < 2} onClick={() => removeSlot(selectedSlot.id)}>
+                  ✕
                 </button>
               </>
-            ) : (
-              <span className="note">Click a part to select it. Double-click to edit it. + adds a section after the selected part.</span>
             )}
           </div>
 
-          <div className="heading">Sections</div>
-          <div className="cards">
-            {song.sections.map((x) => {
-              const uses = song.slots.filter((s) => s.sectionId === x.id && !s.blocks).length;
-              return (
+          <div className="palette">
+            <div className="heading">Sections</div>
+            <div className="cards">
+              {song.sections.map((x) => (
                 <div
                   key={x.id}
                   className={x.id === selectedSectionId ? "card selected" : "card"}
@@ -408,31 +418,20 @@ export default function Editor() {
                     setSelectedSlotId(null);
                   }}
                   onDoubleClick={() => openEditor(null, x.id)}
-                  title="Click to select, double-click to edit"
                 >
                   <span className="strip" style={{ background: sectionColor(x.id).css }} />
                   <span className="name">{x.name}</span>
-                  <span className="sub">
-                    {x.blocks.length} chord{x.blocks.length === 1 ? "" : "s"} · {uses ? `in song ${uses}×` : "not in song"}
-                  </span>
                 </div>
-              );
-            })}
-            <div className="card add" title="New section" onClick={newSection}>
-              +
+              ))}
+              <div className="card add" title="New section" onClick={newSection}>
+                +
+              </div>
             </div>
-          </div>
-          <div className="toolbar">
-            {selectedSectionId !== null && findSection(song, selectedSectionId) ? (
-              <>
-                <span>
-                  Section <b>{findSection(song, selectedSectionId)!.name}</b>
-                </span>
+            <div className="toolbar slim">
+              {selectedSectionId !== null && findSection(song, selectedSectionId) && (
                 <button onClick={() => duplicateSection(selectedSectionId)}>Duplicate</button>
-              </>
-            ) : (
-              <span className="note">Click a section to select it. Double-click to edit it.</span>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -443,36 +442,49 @@ export default function Editor() {
           <div className="toolbar">
             {editingSection ? (
               <>
-                <input value={editingSection.name} onChange={(e) => update({ sections: song.sections.map((x) => (x.id === editingSection.id ? { ...x, name: e.target.value } : x)) })} style={{ width: 150 }} />
-                <span className="note">
-                  {usesOfSection.length > 1 ? `In the song ${usesOfSection.length} times: changes apply to all of them` : usesOfSection.length === 1 ? "In the song once" : ""}
-                </span>
+                <input
+                  value={editingSection.name}
+                  onChange={(e) => update({ sections: song.sections.map((x) => (x.id === editingSection.id ? { ...x, name: e.target.value } : x)) })}
+                  style={{ width: 150 }}
+                />
                 <button className="danger" disabled={song.sections.length < 2} onClick={() => deleteSection(editingSection.id)}>
                   Delete section
                 </button>
               </>
-            ) : editingSlot ? (
+            ) : editingSlot && locked ? (
               <>
-                <span className="note">Detached copy in part {(hearing?.index ?? 0) + 1}: changes apply here only</span>
-                <button onClick={() => relinkSlot(editingSlot)}>Relink to {findSection(song, editingSlot.sectionId)?.name}</button>
+                <span className="locked-note">🔗 {findSection(song, editingSlot.sectionId)?.name}</span>
+                <button onClick={() => makeInline(editingSlot)}>Make inline</button>
               </>
+            ) : editingSlot ? (
+              confirmRelink ? (
+                <span className="confirm">
+                  Relink to {findSection(song, editingSlot.sectionId)?.name}? This part's own changes will be lost.
+                  <button className="danger" onClick={() => relinkSlot(editingSlot)}>
+                    Relink
+                  </button>
+                  <button onClick={() => setConfirmRelink(false)}>Cancel</button>
+                </span>
+              ) : (
+                <button onClick={() => setConfirmRelink(true)}>Relink</button>
+              )
             ) : null}
             <span style={{ flex: 1 }} />
-            <button onClick={addBlock} title="Insert a chord after the selected one">
+            <button onClick={addBlock} disabled={locked} title="Insert a chord after the selected one">
               + Add
             </button>
           </div>
 
           {editingSection && !usesOfSection.length && (
             <div className="banner">
-              This section is not in the song, so it is not on the Arrangement and cannot play yet.
+              Not in the song yet.
               <button
                 onClick={() => {
                   setSelectedSlotId(null);
                   insertSlot(editingSection.id);
                 }}
               >
-                Add to the end of the song
+                Add to song
               </button>
             </div>
           )}
@@ -485,7 +497,16 @@ export default function Editor() {
                   .map((sg, k) => {
                     const b = blocks[sg.block];
                     const label = blockLabel(b, song);
-                    const cls = ["block", sg.block === selectedBlock && "selected", sg.block === playingBlock && "playing", sg.cont && "cont", sg.split && "split", b.chordSource === "applied" && "applied"].filter(Boolean).join(" ");
+                    const cls = [
+                      "block",
+                      sg.block === selectedBlock && "selected",
+                      sg.block === playingBlock && "playing",
+                      sg.cont && "cont",
+                      sg.split && "split",
+                      b.chordSource === "applied" && "applied",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
                     return (
                       <div
                         key={k}
@@ -510,24 +531,27 @@ export default function Editor() {
             ))}
           </div>
 
-          {block && selectedBlock !== null ? (
-            <Inspector
-              block={block}
-              song={song}
-              canRemove={blocks.length > 1}
-              isFirst={selectedBlock === 0}
-              isLast={selectedBlock === blocks.length - 1}
-              onChange={(c) => {
-                changeBlock(selectedBlock, c);
-                audition({ ...block, ...c });
-              }}
-              onReset={() => changeBlock(selectedBlock, defaultBlock())}
-              onMove={(d) => moveBlock(selectedBlock, d)}
-              onRemove={() => removeBlock(selectedBlock)}
-            />
-          ) : (
-            <div className="empty-hint">Click a chord to edit it</div>
-          )}
+          <div className="section-bottom">
+            {block && selectedBlock !== null ? (
+              <Inspector
+                block={block}
+                song={song}
+                locked={locked}
+                canRemove={blocks.length > 1}
+                isFirst={selectedBlock === 0}
+                isLast={selectedBlock === blocks.length - 1}
+                onChange={(c) => {
+                  changeBlock(selectedBlock, c);
+                  audition({ ...block, ...c });
+                }}
+                onReset={() => changeBlock(selectedBlock, defaultBlock())}
+                onMove={(d) => moveBlock(selectedBlock, d)}
+                onRemove={() => removeBlock(selectedBlock)}
+              />
+            ) : (
+              <div className="empty-hint">Click a chord to edit it</div>
+            )}
+          </div>
         </div>
       )}
 
@@ -543,7 +567,11 @@ export default function Editor() {
             <h4>Song</h4>
             <div className="field">
               <span className="field-label">Key</span>
-              <IndexDropdown value={song.rootIndex} options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))} onChange={(v) => update({ rootIndex: v })} />
+              <IndexDropdown
+                value={song.rootIndex}
+                options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))}
+                onChange={(v) => update({ rootIndex: v })}
+              />
             </div>
             <div className="field">
               <span className="field-label">Mode</span>
@@ -553,7 +581,10 @@ export default function Editor() {
               <span className="field-label">Beat</span>
               <Dropdown
                 value={song.drumBeat}
-                options={[...Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => ({ value: k, label: beatPatternLabel(k) })), { value: "off", label: "Off" }]}
+                options={[
+                  ...Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => ({ value: k, label: beatPatternLabel(k) })),
+                  { value: "off", label: "Off" },
+                ]}
                 onChange={(v) => update({ drumBeat: String(v) })}
               />
             </div>
@@ -563,7 +594,10 @@ export default function Editor() {
                 <span className="field-label">{role[0].toUpperCase() + role.slice(1)}</span>
                 <Dropdown
                   value={song.tracks[role]?.id ?? ""}
-                  options={[{ value: "", label: "(none)" }, ...(tracks ?? []).map((t) => ({ value: t.id, label: t.name + (t.midi ? "" : " (audio)"), disabled: !t.midi }))]}
+                  options={[
+                    { value: "", label: "(none)" },
+                    ...(tracks ?? []).map((t) => ({ value: t.id, label: t.name + (t.midi ? "" : " (audio)"), disabled: !t.midi })),
+                  ]}
                   onChange={(v) => {
                     const t = tracks?.find((x) => x.id === v);
                     update({ tracks: { ...song.tracks, [role]: t ? ({ id: t.id, name: t.name } as TrackRef) : null } });

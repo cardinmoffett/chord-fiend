@@ -143,7 +143,8 @@
 
 /* ---------- inspector ---------- */
 .inspector {
-  margin-top: auto;
+  margin: 0;
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -210,3 +211,12 @@
 .cf .dd-option { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 6px 10px; white-space: nowrap; border-radius: 5px; }
 .cf .dd-option:hover:not(:disabled) { background: var(--panel-2); }
 .cf .dd-option.current { background: var(--accent); color: #1b1b1d; font-weight: 600; }
+
+fieldset.inspector.locked { opacity: 0.55; }
+.locked-note { color: var(--dim); }
+.confirm { display: inline-flex; gap: 8px; align-items: center; background: #3a2222; border: 1px solid #7a3a3a; border-radius: 8px; padding: 4px 8px; }
+/* Song view: the song builder at the top, the sections palette held at the bottom. */
+.song-view { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.palette { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.toolbar.slim { min-height: 32px; }
+.section-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }

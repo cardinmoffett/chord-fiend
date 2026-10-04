@@ -7,6 +7,7 @@ import {
   DEFAULT_SONG,
   blockLabel,
   editingBlocks,
+  editingLocked,
   layoutSong,
   normalizeSong,
   planSongWrite,
@@ -47,7 +48,7 @@ describe("song layout", () => {
     expect(layoutSong(s)[0].notes.bass.length).toBe(4);
   });
 
-  it("editing a section changes every linked slot, and a detached slot keeps its own copy", () => {
+  it("editing a section changes every linked part, and an inline part keeps its own copy", () => {
     let s: Song = { ...DEFAULT_SONG, editing: { kind: "section", id: 1 } };
     s = { ...s, slots: s.slots.map((x) => (x.id === 5 ? { ...x, blocks: editingBlocks(s).map((b) => ({ ...b })) } : x)) }; // detach song part 3
     s = withEditingBlocks(s, [{ ...defaultBlock(), degreeIndex: 1 }]);
@@ -55,12 +56,15 @@ describe("song layout", () => {
     expect(placed.map((p) => p.label)).toEqual(["Verse", "Chorus", "Verse*", "Chorus"]);
     expect(placed[0].blocks.map((b) => b.degreeIndex)).toEqual([1]);
     expect(placed[2].blocks.map((b) => b.degreeIndex)).toEqual([0, 5, 3, 4]);
-    // editing a linked slot edits its section
-    s = withEditingBlocks({ ...s, editing: { kind: "slot", id: 3 } }, [{ ...defaultBlock(), degreeIndex: 2 }]);
-    expect(layoutSong(s)[0].blocks[0].degreeIndex).toBe(2);
-    // editing the detached slot edits only it
-    s = withEditingBlocks({ ...s, editing: { kind: "slot", id: 5 } }, [{ ...defaultBlock(), degreeIndex: 6 }]);
-    expect(layoutSong(s).map((p) => p.blocks[0].degreeIndex)).toEqual([2, 3, 6, 3]);
+    // a linked part opens locked: editing it changes nothing
+    const lockedSong = { ...s, editing: { kind: "slot" as const, id: 3 } };
+    expect(editingLocked(lockedSong)).toBe(true);
+    expect(withEditingBlocks(lockedSong, [{ ...defaultBlock(), degreeIndex: 2 }])).toBe(lockedSong);
+    // an inline part is not locked, and editing it edits only it
+    s = { ...s, editing: { kind: "slot", id: 5 } };
+    expect(editingLocked(s)).toBe(false);
+    s = withEditingBlocks(s, [{ ...defaultBlock(), degreeIndex: 6 }]);
+    expect(layoutSong(s).map((p) => p.blocks[0].degreeIndex)).toEqual([1, 3, 6, 3]);
   });
 
   it("opens a Set saved by the first feel test as one section placed once", () => {
@@ -153,7 +157,7 @@ describe("writing the song to a fake Live set", () => {
     ]);
   });
 
-  it("detaching a part renames its clips and keeps it out of later section edits", () => {
+  it("making a part inline renames its clips and keeps it out of later section edits", () => {
     const t = setup();
     t.write(t.song, true);
     let s: Song = { ...t.song, slots: t.song.slots.map((x) => (x.id === 5 ? { ...x, blocks: editingBlocks(t.song).map((b) => ({ ...b })) } : x)) };
@@ -198,5 +202,6 @@ describe("block labels: the degree large, the chord name small", () => {
     expect(label({ chordSource: "free", freeRoot: 5, freeQuality: "minor", extensionIndex: 2 }).degree).toBe("Fm7");
     expect(label({ chordSource: "free", freeRoot: 0, freeQuality: "major", extensionIndex: 2 }).degree).toBe("Cmaj7");
     expect(label({ chordSource: "free", freeRoot: 10, freeQuality: "dominant" }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("B\u266D7");
+    expect(label({ chordSource: "free", freeRoot: 11, freeQuality: "diminished", extensionIndex: 2 })).toEqual({ degree: "B\u00B07", name: "Bdim7" });
   });
 });

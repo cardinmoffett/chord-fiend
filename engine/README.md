@@ -21,7 +21,7 @@ Plain JavaScript with no dependencies. It builds chords from blocks, names and s
 Two optional block fields. A block without them builds exactly as the app's did, which `test_matches_original.mjs` checks.
 
 - `flat5`: lowers the 5th a semitone on any chord (diatonic, applied or free). Named `C(b5)`, `G7b5`, `Cmaj7b5`; a minor chord with a ♭5 is the usual `m7b5`. Aug wins if both are set; the leading-tone chord already has one.
-- `chordSource: "free"` with `freeRoot` (pitch class 0-11) and `freeQuality` (`major`, `minor` or `dominant`): a chord on any root, outside the key's scale, with every extension, sus, aug, ♭5, inversion, drop and octave option. Its root sits within the octave above the key root, as degrees do.
+- `chordSource: "free"` with `freeRoot` (pitch class 0-11) and `freeQuality` (`major`, `minor`, `dominant` or `diminished`): a chord on any root, outside the key's scale, with every extension, sus, aug, ♭5, inversion, drop and octave option. Its root sits within the octave above the key root, as degrees do.
 
 ## Notes for clips
 

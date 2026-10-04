@@ -31,8 +31,9 @@ export interface Section {
 }
 
 /**
- * One place in the song order. A linked slot plays its section's blocks, so editing the
- * section changes every slot that uses it. A detached slot has its own copy (`blocks`).
+ * One place in the song order (a "part"). A linked part plays its section's blocks, so
+ * editing the section changes every part that uses it. An inline part has its own copy
+ * (`blocks`), made with Make inline; Relink drops the copy and follows the section again.
  */
 export interface Slot {
   id: number;
@@ -128,14 +129,24 @@ export function editingBlocks(song: Song): Block[] {
   return findSection(song, song.editing.id)?.blocks ?? song.sections[0].blocks;
 }
 
-/** A copy of the song with the edited blocks replaced. Editing a linked slot edits its section. */
+/** Is the editor showing a linked part? Then it is locked: Make inline to change that part. */
+export function editingLocked(song: Song): boolean {
+  if (song.editing.kind !== "slot") return false;
+  const slot = song.slots.find((x) => x.id === song.editing.id);
+  return !!slot && !slot.blocks;
+}
+
+/**
+ * A copy of the song with the edited blocks replaced: the section's blocks, or an inline
+ * part's own copy. A linked part is locked, so editing it changes nothing.
+ */
 export function withEditingBlocks(song: Song, blocks: Block[]): Song {
   let target = song.editing;
   if (target.kind === "slot") {
     const slot = song.slots.find((x) => x.id === target.id);
     if (!slot) target = { kind: "section", id: song.sections[0].id };
     else if (slot.blocks) return { ...song, slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks } : x)) };
-    else target = { kind: "section", id: slot.sectionId };
+    else return song;
   }
   return { ...song, sections: song.sections.map((x) => (x.id === target.id ? { ...x, blocks } : x)) };
 }
@@ -269,7 +280,7 @@ export function blockColor(b: Block): string {
 /* ---------------- block labels ---------------- */
 
 const FUNCTION_SHORT: Record<string, string> = { dominant: "V", tritoneSub: "subV", leadingTone: "vii\u00B0" };
-const QUALITY_SHORT: Record<string, string> = { major: "", minor: "m", dominant: "7" };
+const QUALITY_SHORT: Record<string, string> = { major: "", minor: "m", dominant: "7", diminished: "\u00B0" };
 
 /**
  * What a block shows: `degree` large (the chord's job in the key: V7, \u266DVI, V/ii) and
