@@ -1,0 +1,135 @@
+// Checks that the extracted engine gives exactly the same answers as the app it
+// came from. It loads original/modal-sketchpad.html with a mock DOM and a mock
+// Tone (as the original tests did), sets the app's `state`, and compares every
+// engine function against the app's own copy across a wide sweep of settings.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as engine from '../src/engine.js';
+
+var here = path.dirname(fileURLToPath(import.meta.url));
+var html = fs.readFileSync(path.join(here, '../../original/modal-sketchpad.html'), 'utf8');
+var m = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/);
+var full = m[1];
+var code = full.slice(full.indexOf('"use strict";') + '"use strict";'.length, full.lastIndexOf('})();'));
+
+function proxyObj() { var o = new Proxy({}, {get: function (t, p) { if (p === 'then') return undefined; if (!(p in t)) { t[p] = function () { return o; }; t[p].value = 0; } return t[p]; }, set: function (t, p, v) { t[p] = v; return true; }}); return o; }
+function fe() { var e = {style: {}, children: [], _h: {}, dataset: {}, addEventListener: function () {}, appendChild: function (c) { e.children.push(c); }, classList: {add: function () {}, remove: function () {}, toggle: function () {}}, querySelectorAll: function () { return []; }}; Object.defineProperty(e, 'innerHTML', {set: function () {}, get: function () { return ''; }}); return e; }
+var doc = {getElementById: fe, createElement: fe, querySelectorAll: function () { return []; }, body: fe(), addEventListener: function () {}};
+globalThis.window = {innerHeight: 800, addEventListener: function () {}};
+var T = {start: function () { return {then: function (cb) { cb(); return {catch: function () {}}; }}; }, Transport: {bpm: {value: 100}}, Draw: {}};
+['PolySynth', 'Synth', 'MonoSynth', 'FMSynth', 'AMSynth', 'MembraneSynth', 'MetalSynth', 'NoiseSynth', 'Reverb', 'FeedbackDelay', 'Gain', 'Filter', 'Distortion', 'Chorus', 'Limiter'].forEach(function (n) { T[n] = function () { return proxyObj(); }; });
+
+var names = Object.keys(engine);
+var app = new Function('document', 'localStorage', 'Tone', code +
+  '\nreturn {S: function () { return state; }, fns: {' + names.map(function (n) { return n + ':' + n; }).join(',') + '}};'
+)(doc, {getItem: function () { return null; }, setItem: function () {}}, T);
+var orig = app.fns;
+var state = app.S();
+
+var ok = true, passes = 0, failures = 0;
+function same(label, a, b) {
+  if (JSON.stringify(a) === JSON.stringify(b)) { passes++; return; }
+  failures++; ok = false;
+  if (failures <= 12) console.log('FAIL  ' + label + '\n      app:    ' + JSON.stringify(a) + '\n      engine: ' + JSON.stringify(b));
+}
+function report(t) { console.log((failures === 0 ? 'PASS' : 'FAIL') + '  ' + t + '  (' + passes + ' checks' + (failures ? ', ' + failures + ' FAILED' : '') + ')'); passes = 0; failures = 0; }
+function blk(o) { return Object.assign(orig.defaultBlock(), o); }
+
+console.log('=== constants ===');
+names.forEach(function (n) { if (typeof engine[n] !== 'function') same(n, orig[n], engine[n]); });
+same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
+report('every exported constant equals the app\'s');
+
+console.log('\n=== diatonic and borrowed chords: every key, home mode, block mode, degree, extension, sus and aug ===');
+var combo = 0;
+for (var root = 0; root < 12; root++) {
+  state.masterRootIndex = root;
+  for (var mm = 0; mm < engine.MASTER_MODE_NAMES.length; mm++) {
+    state.masterModeIndex = mm;
+    for (var bm = 0; bm < engine.BLOCK_MODE_NAMES.length; bm++)
+      for (var deg = 0; deg < 7; deg++)
+        for (var ext = 0; ext < engine.EXTENSION_NAMES.length; ext++)
+          for (var sus = 0; sus < 3; sus++)
+            for (var aug = 0; aug < 2; aug++) {
+              combo++;
+              // inversion, drop and octave cycle through their values across the sweep
+              var b = blk({degreeIndex: deg, blockModeIndex: bm, extensionIndex: ext, susIndex: sus, aug: aug,
+                inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
+              var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
+              same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, e1);
+              same('getChordSymbol ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
+            }
+  }
+}
+report('buildChord and getChordSymbol (' + combo + ' blocks)');
+
+console.log('\n=== applied chords: every key, home mode, target, function, extension, sus and aug ===');
+combo = 0;
+for (root = 0; root < 12; root++) {
+  state.masterRootIndex = root;
+  for (mm = 0; mm < engine.MASTER_MODE_NAMES.length; mm++) {
+    state.masterModeIndex = mm;
+    for (var tgt = 0; tgt < 7; tgt++)
+      engine.APPLIED_FUNCTIONS.forEach(function (fn) {
+        for (var ext = 0; ext < engine.EXTENSION_NAMES.length; ext++)
+          for (var sus = 0; sus < 3; sus++)
+            for (var aug = 0; aug < 2; aug++) {
+              combo++;
+              var b = blk({chordSource: 'applied', appliedTargetIndex: tgt, appliedFunction: fn, extensionIndex: ext, susIndex: sus, aug: aug,
+                inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
+              var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
+              same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, e1);
+              same('getChordSymbol ' + JSON.stringify(b), orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
+              same('appliedFunctionLabel ' + JSON.stringify(b) + ' mode ' + mm, orig.appliedFunctionLabel(b), engine.appliedFunctionLabel(b, mm));
+            }
+      });
+  }
+}
+report('applied buildChord, getChordSymbol and appliedFunctionLabel (' + combo + ' blocks)');
+
+console.log('\n=== smaller helpers ===');
+Object.keys(engine.MODES).forEach(function (mode) { same('degreeLabels ' + mode, orig.degreeLabels(mode), engine.degreeLabels(mode)); });
+for (root = 0; root < 12; root++) for (mm = 0; mm < 10; mm++) same('keyPrefersFlats ' + root + ' ' + mm, orig.keyPrefersFlats(root, mm), engine.keyPrefersFlats(root, mm));
+for (var p = 0; p < 128; p++) {
+  same('pitchToNoteName ' + p, orig.pitchToNoteName(p), engine.pitchToNoteName(p));
+  same('pitchToNoteName flat ' + p, orig.pitchToNoteName(p, true), engine.pitchToNoteName(p, true));
+  same('pitchToFullNoteName ' + p, orig.pitchToFullNoteName(p), engine.pitchToFullNoteName(p));
+}
+for (var pc = 0; pc < 12; pc++) { same('noteChoiceLabel ' + pc, orig.noteChoiceLabel(pc), engine.noteChoiceLabel(pc)); same('noteChoiceLabel ' + pc + ' 2', orig.noteChoiceLabel(pc, 2), engine.noteChoiceLabel(pc, 2)); }
+for (var di = 0; di < engine.DURATION_NAMES.length; di++) for (var dm = 0; dm < 3; dm++) {
+  var db = blk({durationIndex: di, durationModifier: dm});
+  same('getDurationBeats ' + di + ' ' + dm, orig.getDurationBeats(db), engine.getDurationBeats(db));
+}
+Object.keys(engine.BUILTIN_BEAT_PATTERNS).concat(['nope']).forEach(function (k) { same('beatPatternLabel ' + k, orig.beatPatternLabel(k), engine.beatPatternLabel(k)); });
+report('degreeLabels, keyPrefersFlats, note names, durations and beat labels');
+
+console.log('\n=== bass: every beat, bass lowest note, bass tone setting and chord tone ===');
+var custom = {rock: {label: 'Edited Rock', loopBeats: 4, lanes: [
+  {voice: 'kick', hits: [{beat: 0, dur: 0.25}]},
+  {voice: 'bass1', hits: [{beat: 1, dur: 1}]}, {voice: 'bass5', hits: [{beat: 0.5, dur: 0.5}]},
+  {voice: 'bass3', hits: []}, {voice: 'bass7', hits: []}]}};
+var beats = Object.keys(engine.BUILTIN_BEAT_PATTERNS).concat(['off', 'unknown']);
+[{}, custom].forEach(function (customPatterns) {
+  state.customBeatPatterns = customPatterns;
+  beats.forEach(function (beat) {
+    state.drumBeat = beat;
+    same('activeBeatPattern ' + beat, orig.activeBeatPattern(beat), engine.activeBeatPattern(beat, customPatterns));
+    for (var low = 20; low <= 52; low += 4) {
+      state.bassWrapLow = low;
+      for (var deg = 0; deg < 7; deg++) for (var ext = 0; ext < 6; ext += 2) for (var oct = -2; oct <= 2; oct++) [-1, 0, -2].forEach(function (bti) {
+        var b = blk({degreeIndex: deg, extensionIndex: ext, octave: oct, bassToneIndex: bti});
+        var ch = orig.buildChord(b, 0, 0);
+        same('computeBassPitchForBlock beat ' + beat + ' low ' + low + ' ' + JSON.stringify(b),
+          orig.computeBassPitchForBlock(b, ch),
+          engine.computeBassPitchForBlock(b, ch, engine.activeBeatPattern(beat, customPatterns), low));
+        same('bassOctaveShift ' + ch.chordRootPitch + ' low ' + low, orig.bassOctaveShift(ch.chordRootPitch), engine.bassOctaveShift(ch.chordRootPitch, low));
+        for (var slot = -1; slot < 8; slot++) same('chordTonePitch slot ' + slot, orig.chordTonePitch(ch, slot), engine.chordTonePitch(ch, slot));
+      });
+    }
+  });
+});
+engine.BASS_VOICES.concat(['kick', 'snare', 'hihat']).forEach(function (v) { same('bassSlotForVoice ' + v, orig.bassSlotForVoice(v), engine.bassSlotForVoice(v)); });
+report('bass pitches, octave shift, chord tones and pattern lookup');
+
+console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');
