@@ -318,6 +318,20 @@ function cfRestoreUserLoop(song: LiveAPI): void {
  * start) and plays; 0 only moves the loop, for when an edit shifts the range of
  * something that is already looping.
  */
+/**
+ * Start playing from a position. Live's start_playing may begin from its own start
+ * marker rather than the playhead set just before it while stopped, so the position is
+ * set again once playback has started; while already playing, setting it jumps there.
+ */
+function cfPlayFrom(song: LiveAPI, beats: number): void {
+  song.set("current_song_time", beats);
+  if (cfNum(song, "is_playing") !== 1) {
+    song.call("start_playing");
+    song.set("current_song_time", beats);
+  }
+  post("chord-fiend: play from beat " + beats + "\n");
+}
+
 function cf_loop(start: number, length: number, jump?: number, from?: number): void {
   var song = new LiveAPI("live_set");
   cfSaveUserLoop(song);
@@ -326,8 +340,7 @@ function cf_loop(start: number, length: number, jump?: number, from?: number): v
   song.set("loop", 1);
   if (jump === 0) return;
   song.set("back_to_arranger", 0);
-  song.set("current_song_time", from === undefined || isNaN(from) ? Number(start) : Number(from));
-  if (cfNum(song, "is_playing") !== 1) song.call("start_playing");
+  cfPlayFrom(song, from === undefined || isNaN(from) ? Number(start) : Number(from));
   post("chord-fiend: loop " + start + " + " + length + " beats\n");
 }
 
@@ -335,8 +348,7 @@ function cf_play(start: number): void {
   var song = new LiveAPI("live_set");
   cfRestoreUserLoop(song);
   song.set("back_to_arranger", 0);
-  song.set("current_song_time", Number(start));
-  if (cfNum(song, "is_playing") !== 1) song.call("start_playing");
+  cfPlayFrom(song, Number(start));
 }
 
 /** Stop looping and put the user's loop back, without stopping playback. */

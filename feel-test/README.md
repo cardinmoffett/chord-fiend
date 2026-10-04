@@ -23,6 +23,7 @@ A Set saved with an earlier round opens with its song intact.
 
 - **Click a part** in the song row and its menu opens as a flyout attached to the card: **←** **→** move it, **✕** removes it, and **+ Add** lists your sections, inserting the one you pick right after this part. Click away or press Escape to close it.
 - The chord editor is unchanged from 3.2.
+- **Fix:** Play in the song view started from the wrong place instead of the selected part. Live's start_playing can begin from its own start marker rather than the playhead set just before it while stopped, so the device now sets the position again once playback has started. The section editor's Play (from the selected chord) uses the same step.
 
 ## Round 3.2: linked and inline parts, a cleaner song view
 
@@ -86,7 +87,7 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `5ef8f00c2629c6ab6b443fd332391ef91f704789a9e1b1024694c743a24fa913`.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `c27365c147a80de88559eb2b22576e6e8d0bf751896d38278f360f312d8d8e5a`.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
 - The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.

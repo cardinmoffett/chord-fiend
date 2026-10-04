@@ -162,4 +162,17 @@ describe("feel test wrapper against a fake Live set", () => {
     w.send("cf_audition", "eyJwaXRjaGVzIjpbNjBdfQ==");
     expect(w.toReceivers).toContainEqual(["outlet", 0, "cf_audition", "eyJwaXRjaGVzIjpbNjBdfQ=="]);
   });
+
+  it("sets the position again after starting, so playback begins at the selected part", () => {
+    const live = fakeLive();
+    const w = load(live);
+    w.send("cf_play", 32);
+    const seq = live.calls.filter((c) => c[0] === "start_playing" || (c[0] === "set" && c[2] === "current_song_time")).map((c) => (c[0] === "set" ? "time " + c[3] : c[0]));
+    expect(seq).toEqual(["time 32", "start_playing", "time 32"]);
+    expect([live.song.current_song_time, live.song.is_playing]).toEqual([32, 1]);
+    // while already playing, Play just jumps
+    w.send("cf_play", 48);
+    expect(live.calls.filter((c) => c[0] === "start_playing")).toHaveLength(1);
+    expect(live.song.current_song_time).toBe(48);
+  });
 });
