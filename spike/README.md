@@ -2,7 +2,15 @@
 
 Four small test devices from the `m4l-jweb` build tool. Loading them in Live on your Mac answers the first big question in the plan: does this way of building devices work on your machine? If all four work, we go ahead with `m4l-jweb`. If not, we switch to `js2max` or a hand-made shell, and the chord engine is unaffected either way.
 
-The devices are in `chord-fiend-spike-devices.zip`. They are the tool's own demo devices, unchanged. None of them is Chord Fiend yet.
+The devices are in `chord-fiend-spike-devices.zip`. They are the tool's own demo devices, with one fix for the Mac (see below). None of them is Chord Fiend yet.
+
+## Replacing the first version
+
+The first zip showed "Your file couldn't be accessed" in every device on the Mac. The current zip fixes that. To swap them:
+
+1. In Live, delete the four old devices from your tracks. Live keeps its own copy of each device in the Set, so the old ones will not update by themselves.
+2. In Finder, delete the old **Chord Fiend Spike** folders, including the `.html` and `.stamp` files next to the devices. On your Mac, Live filed them under **User Library > Presets > MIDI Effects > Max MIDI Effect** and **User Library > Presets > Audio Effects > Max Audio Effect**.
+3. Download the new zip and follow the steps below again.
 
 ## What you need
 
@@ -72,13 +80,14 @@ For each device, tell Claude whether it worked or not. If something did not work
 
 ## Notes for Claude Code
 
-- Built on Linux from `m4l-jweb` commit `9193a1d3d212d6eec0d7745d05abf569e3c9605b` (v1.6.1, 2026-08-30) with `pnpm install --frozen-lockfile && pnpm build`. Its own test suite passed (348 tests). The devices are the unmodified `hello-midi`, `hello-state`, `hello-clip` and `hello-window` from `dist/m4l-jweb/`.
+- Built on Linux from `m4l-jweb` commit `9193a1d3d212d6eec0d7745d05abf569e3c9605b` (v1.6.1, 2026-08-30) plus `patches/m4l-jweb-mac-file-url.patch`, with `pnpm install --frozen-lockfile && pnpm build`. Its own test suite passed (348 tests). The devices are `hello-midi`, `hello-state`, `hello-clip` and `hello-window` from `dist/m4l-jweb/`.
+- **The Mac fix.** On macOS `this.patcher.filepath` comes back in Max's form, `Macintosh HD:/Users/...`. Max's `File` accepts that, so the page extracted fine (the `.html` and `.stamp` files were on disk), but the wrapper built `file:///Macintosh%20HD:/Users/...` from it and `[jweb]` showed "Your file couldn't be accessed". Seen in the Max console on the first run: `sent url file:///Macintosh%20HD:/Users/cardinmoffett/Music/Ableton/User%20Library/...`. The patch adds `pageUrl()` in `packages/wrapper/src/core.ts`, which turns `Volume:/rest` into `/rest` on the boot volume (a path into `Users`, `Applications`, `Library` and so on) or `/Volumes/Volume/rest` otherwise. Windows and plain POSIX paths give the same URL as before. It covers the device page and floating windows; `placeUrl()` for `[maxurl]` downloads has the same issue and is not patched, since we do not use downloads. Worth reporting upstream.
 - Each `.amxd` is self-contained: the UI rides inside it as a payload and is unpacked next to the device at load. The loose `.html` files and `wrapper.js` in `dist/` are not needed.
 - The plan's spike asked about building on the Mac. These were built in the cloud instead, so this tests whether the devices run on the Mac, not whether the build tool does. If we keep building in the cloud, the macOS build question does not need answering.
 - `hello-clip` writes with `writeClip`, which fills the first empty Session slot. The Arrangement path (`Track.create_midi_clip`) is not covered here.
 - SHA-256 of the four devices:
 
-      4c0a37bb44bc833fc46fd8faa137c79330625f61cfe9895529041f0d38353a2f  hello-clip.amxd
-      6b33e25d9d2b4382f22990685270cd566506fbc595e1ccab330d23e55ca4f1db  hello-midi.amxd
-      4f7901ae2d9b993ce37691e2c9b55c98b9c677ff158c7565df1ccb59827ae1e6  hello-state.amxd
-      408e4c9f23bca898828c4f1a17f5a85499358c887eeb3c1b18562ffe3485b4d9  hello-window.amxd
+      7f8ca688ae1759ac41c2b5e2c51a6b39538ffed9ce976b65bab9e2fae2c9a534  hello-clip.amxd
+      49e3b90f064137d3de25d33df2435935092d9ff7175af0e7fbee6ad21dcdf02c  hello-midi.amxd
+      f9c8762b3d8c0c5dd6e0759f03578bb4f2ad4bf94216a08478e9ae1f352f5486  hello-state.amxd
+      0589574a938ff6f255d4566ad876adf046e370d47432e8611cbeaf16fc4f1a01  hello-window.amxd
