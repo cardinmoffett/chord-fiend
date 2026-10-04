@@ -13,6 +13,7 @@ import {
   degreeLabels,
   noteChoiceLabel,
 } from "../../../../engine/src/engine.js";
+import { IndexDropdown } from "./Dropdown";
 import type { Block, Song } from "./song";
 
 const OCTAVES = [-2, -1, 0, 1, 2];
@@ -152,23 +153,15 @@ export function Inspector({
 
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   return (
-    <label className={wide ? "field wide" : "field"}>
+    <div className={wide ? "field wide" : "field"}>
       <span className="field-label">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
 
 function Select({ value, options, onChange, disabled }: { value: number; options: readonly string[]; onChange: (v: number) => void; disabled?: boolean }) {
-  return (
-    <select value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
-      {options.map((o, i) => (
-        <option key={i} value={i}>
-          {o}
-        </option>
-      ))}
-    </select>
-  );
+  return <IndexDropdown value={value} options={options} onChange={onChange} disabled={disabled} />;
 }
 
 export function Segmented({ options, value, onChange, disabled }: { options: readonly string[]; value: number; onChange: (i: number) => void; disabled?: boolean }) {

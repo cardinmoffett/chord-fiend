@@ -19,7 +19,9 @@
  * track ("2 Chorus - bass"). A song write is one cf_prune per track, which deletes our
  * clips for that role that are no longer in the song, then a cf_write per clip that is new
  * or changed.
- *   cf_loop <start> <length> [jump] Live's loop on that range; with jump (default) playhead there, play
+ *   cf_loop <start> <length> [jump] [from]  Live's loop on that range; with jump (default) the
+ *                                  playhead goes to `from` (default the loop start) and plays
+ *   cf_audition <b64 {pitches, velocity, durationMs}>  passed to the device page, which plays it
  *   cf_unloop                      the user's loop restored, playback continues
  *   cf_play <start>                playhead there, play (the user's loop restored)
  *   cf_stop                        stop, and restore the user's loop
@@ -312,10 +314,11 @@ function cfRestoreUserLoop(song: LiveAPI): void {
 }
 
 /**
- * Loop a range. `jump` 1 (the default) moves the playhead there and plays; 0 only moves
- * the loop, for when an edit shifts the range of something that is already looping.
+ * Loop a range. `jump` 1 (the default) moves the playhead to `from` (default: the loop
+ * start) and plays; 0 only moves the loop, for when an edit shifts the range of
+ * something that is already looping.
  */
-function cf_loop(start: number, length: number, jump?: number): void {
+function cf_loop(start: number, length: number, jump?: number, from?: number): void {
   var song = new LiveAPI("live_set");
   cfSaveUserLoop(song);
   song.set("loop_start", Number(start));
@@ -323,7 +326,7 @@ function cf_loop(start: number, length: number, jump?: number): void {
   song.set("loop", 1);
   if (jump === 0) return;
   song.set("back_to_arranger", 0);
-  song.set("current_song_time", Number(start));
+  song.set("current_song_time", from === undefined || isNaN(from) ? Number(start) : Number(from));
   if (cfNum(song, "is_playing") !== 1) song.call("start_playing");
   post("chord-fiend: loop " + start + " + " + length + " beats\n");
 }
@@ -349,13 +352,16 @@ function cf_stop(): void {
 
 /* ---------------- hooks into the packaged wrapper ---------------- */
 
-function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: unknown, a3?: unknown): void {
+function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: unknown, a3?: unknown, a4?: unknown): void {
   try {
     if (selector === "cf_tracks") cf_tracks();
     else if (selector === "cf_write") cf_write(a1);
     else if (selector === "cf_prune") cf_prune(a1);
     else if (selector === "cf_clear") cf_clear(a1);
-    else if (selector === "cf_loop") cf_loop(Number(a1), Number(a2), a3 === undefined ? 1 : Number(a3));
+    else if (selector === "cf_loop") cf_loop(Number(a1), Number(a2), a3 === undefined ? 1 : Number(a3), a4 === undefined ? undefined : Number(a4));
+    // Hearing a chord when it is tapped: the device's own page plays it out of this
+    // device's MIDI out (the midiout chain), into the instrument after it on the track.
+    else if (selector === "cf_audition") outlet(0, "cf_audition", a1);
     else if (selector === "cf_unloop") cf_unloop();
     else if (selector === "cf_play") cf_play(Number(a1));
     else if (selector === "cf_stop") cf_stop();

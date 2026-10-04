@@ -6,6 +6,7 @@ export const IN = {
   ...CHAIN_IN,
   cf_tracks: "cf_tracks",
   cf_result: "cf_result",
+  cf_audition: "cf_audition",
 } as const;
 
 /** Page -> wrapper. The cf_ requests come from the editor window (wrapper/device.ts). */
@@ -18,6 +19,7 @@ export const OUT = {
   cf_clear: "cf_clear",
   cf_loop: "cf_loop",
   cf_unloop: "cf_unloop",
+  cf_audition: "cf_audition",
   cf_play: "cf_play",
   cf_stop: "cf_stop",
 } as const;

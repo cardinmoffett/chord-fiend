@@ -14,13 +14,14 @@ pnpm test     # the Live-side logic against a fake Live set (needs a build first
 |---|---|
 | `src/app/chord-fiend-test/Editor.tsx` | The editor window: transport, song view, section view, settings drawer, and syncing the Arrangement. |
 | `src/app/chord-fiend-test/Inspector.tsx` | The editor for the selected chord. |
+| `src/app/chord-fiend-test/Dropdown.tsx` | Click-to-open menus, used instead of native selects. |
 | `src/app/chord-fiend-test/editor.css` | The window's styles. |
-| `src/app/chord-fiend-test/App.tsx` | The device strip on the track (169 px tall): opens the editor. |
+| `src/app/chord-fiend-test/App.tsx` | The device strip on the track (169 px tall): opens the editor, and plays tapped chords out of the device's MIDI out. |
 | `src/app/chord-fiend-test/song.ts` | The song model: sections, song order, linking and detaching, laying the song out on the Arrangement, and planning a write. |
 | `src/app/chord-fiend-test/surface.ts` | The window and the saved song (`state`). |
 | `src/app/chord-fiend-test/protocol.ts` | Every message between the pages and Max. |
 | `wrapper/device.ts` | The Live side: track list, writing Arrangement clips, the transport. Must compile to ES5. |
-| `patcher/devices.mjs` | The device manifest: a MIDI effect with no chains, so MIDI passes through. |
+| `patcher/devices.mjs` | The device manifest: a MIDI effect whose MIDI passes through, plus a `midiout` chain for tapped chords. |
 | `patches/@m4l-jweb__wrapper@1.6.1.patch` | Our two Mac fixes to the library: the page address, and retrying a page that did not load. |
 | `tests/fake-live.mjs` | A fake Max and Live set for running the built wrapper in Node. |
 | `tests/wrapper-live.test.mjs` | The Live side against the fake: tracks, clips, transport, the Mac fixes. |

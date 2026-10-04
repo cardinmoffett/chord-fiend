@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, decodeBase64, encodeBase64, outlet } from "@m4l-jweb/bridge";
 import { useStateSync } from "@m4l-jweb/surface/react";
-import { BUILTIN_BEAT_PATTERNS, MASTER_MODE_NAMES, beatPatternLabel, defaultBlock, noteChoiceLabel, pitchToFullNoteName } from "../../../../engine/src/engine.js";
+import { BUILTIN_BEAT_PATTERNS, MASTER_MODE_NAMES, beatPatternLabel, buildChord, defaultBlock, noteChoiceLabel, pitchToFullNoteName } from "../../../../engine/src/engine.js";
+import { Dropdown, IndexDropdown } from "./Dropdown";
 import { useDevice } from "../shared/device";
 import { Inspector } from "./Inspector";
 import { IN, OUT } from "./protocol";
@@ -33,8 +34,6 @@ interface LiveTrack {
   midi: boolean;
 }
 
-/** What the transport's Loop is holding: a chord in a song part, a song part, or the whole song. */
-type LoopTarget = { kind: "block"; slotId: number; blockIndex: number } | { kind: "slot"; slotId: number } | { kind: "song" };
 
 const BEATS_PER_ROW = 4 * BEATS_PER_BAR;
 const send = (selector: string, value: unknown) => outlet(selector, encodeBase64(JSON.stringify(value)));
@@ -53,10 +52,12 @@ export default function Editor() {
 
   const [view, setView] = useState<"song" | "section">("song");
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(0);
   const [picker, setPicker] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [loop, setLoop] = useState<LoopTarget | null>(null);
+  // The song part whose section Play is looping (Play in the section view), if any.
+  const [loopSlotId, setLoopSlotId] = useState<number | null>(null);
   const [tracks, setTracks] = useState<LiveTrack[] | null>(null);
   const [activity, setActivity] = useState<string[]>([]);
   const [synced, setSynced] = useState<string | null>(null);
@@ -95,7 +96,6 @@ export default function Editor() {
   /* ---------------- the Arrangement follows the song ---------------- */
 
   const placed = useMemo(() => layoutSong(song), [song]);
-  const songLength = placed.length ? placed[placed.length - 1].start + placed[placed.length - 1].length : 0;
   const hasTracks = ROLES.some((r) => song.tracks[r]);
   const lastSent = useRef(new Map<string, string>());
 
@@ -132,67 +132,50 @@ export default function Editor() {
 
   /* ---------------- transport ---------------- */
 
-  function rangeOf(target: LoopTarget | null): { start: number; length: number; label: string } | null {
-    if (!target) return null;
-    if (target.kind === "song") return songLength ? { start: 0, length: songLength, label: "Whole song" } : null;
-    const p = placed.find((x) => x.slot.id === target.slotId);
-    if (!p) return null;
-    if (target.kind === "slot") return { start: p.start, length: p.length, label: `${p.index + 1} ${p.label}` };
-    const b = p.blocks[target.blockIndex];
-    if (!b) return null;
-    return { start: p.start + p.blockStarts[target.blockIndex], length: blockLength(b), label: `${p.index + 1} ${p.label} · chord ${target.blockIndex + 1}` };
-  }
+  // Play in the section view loops the whole section (where it is heard), starting from the
+  // selected chord. Play in the song view plays the song from the selected part, without a loop.
+  const loopPart = loopSlotId !== null ? placed.find((p) => p.slot.id === loopSlotId) : undefined;
 
-  function selectionTarget(): LoopTarget | null {
-    if (view === "section") {
-      if (!hearing) return null;
-      return selectedBlock !== null && selectedBlock < hearing.blocks.length ? { kind: "block", slotId: hearing.slot.id, blockIndex: selectedBlock } : { kind: "slot", slotId: hearing.slot.id };
-    }
-    return selectedSlotId !== null ? { kind: "slot", slotId: selectedSlotId } : { kind: "song" };
-  }
-
-  const loopRange = rangeOf(loop);
-  const selection = selectionTarget();
-  const selectionDiffers = loop && JSON.stringify(selection) !== JSON.stringify(loop);
-
-  // A loop whose target is gone ends; one whose range moved (an edit made a chord longer) follows it.
+  // If an edit changes the looping section's length or position, the loop follows it without jumping.
   const sentLoop = useRef("");
   useEffect(() => {
-    if (!loop) {
+    if (loopSlotId === null) {
       sentLoop.current = "";
       return;
     }
-    if (!loopRange) {
+    if (!loopPart) {
       outlet(OUT.cf_unloop);
-      setLoop(null);
+      setLoopSlotId(null);
       return;
     }
-    const key = `${loopRange.start}|${loopRange.length}`;
-    if (sentLoop.current && sentLoop.current !== key) outlet(OUT.cf_loop, loopRange.start, loopRange.length, 0);
+    const key = `${loopPart.start}|${loopPart.length}`;
+    if (sentLoop.current && sentLoop.current !== key) outlet(OUT.cf_loop, loopPart.start, loopPart.length, 0);
     sentLoop.current = key;
-  }, [loop, loopRange?.start, loopRange?.length]);
+  }, [loopSlotId, loopPart?.start, loopPart?.length]);
 
-  function startLoop(target: LoopTarget | null) {
-    const r = rangeOf(target);
-    if (!target || !r) return;
-    sentLoop.current = `${r.start}|${r.length}`;
-    setLoop(target);
-    outlet(OUT.cf_loop, r.start, r.length, 1);
-  }
-  function toggleLoop() {
-    if (loop) {
-      outlet(OUT.cf_unloop);
-      setLoop(null);
-    } else startLoop(selection);
-  }
   function play() {
-    if (loopRange) return outlet(OUT.cf_loop, loopRange.start, loopRange.length, 1);
-    const from = view === "section" ? (hearing?.start ?? 0) : (placed.find((p) => p.slot.id === selectedSlotId)?.start ?? 0);
-    outlet(OUT.cf_play, from);
+    if (view === "section") {
+      if (!hearing) return;
+      const from = hearing.start + (selectedBlock !== null && selectedBlock < hearing.blocks.length ? hearing.blockStarts[selectedBlock] : 0);
+      sentLoop.current = `${hearing.start}|${hearing.length}`;
+      setLoopSlotId(hearing.slot.id);
+      outlet(OUT.cf_loop, hearing.start, hearing.length, 1, from);
+    } else {
+      setLoopSlotId(null);
+      outlet(OUT.cf_play, placed.find((p) => p.slot.id === selectedSlotId)?.start ?? 0);
+    }
   }
   function stop() {
     outlet(OUT.cf_stop);
-    setLoop(null);
+    setLoopSlotId(null);
+  }
+
+  // Tapping a chord plays it, but only while stopped: during playback a tap only selects, so
+  // you can edit along with the music.
+  function audition(b: Block) {
+    if (device.playing) return;
+    const chord = buildChord(b, songRef.current.rootIndex, songRef.current.modeIndex);
+    send(OUT.cf_audition, { pitches: chord.pitches, velocity: 96, durationMs: 900 });
   }
 
   const playingSlot = device.playing ? placed.find((p) => device.beats >= p.start && device.beats < p.start + p.length) : undefined;
@@ -245,7 +228,8 @@ export default function Editor() {
     const src = findSection(song, id);
     if (!src) return;
     const nid = song.nextId;
-    update({ sections: [...song.sections, { id: nid, name: src.name + " copy", blocks: src.blocks.map((b) => ({ ...b })) }], nextId: nid + 1, editing: { kind: "section", id: nid } });
+    update({ sections: [...song.sections, { id: nid, name: src.name + " copy", blocks: src.blocks.map((b) => ({ ...b })) }], nextId: nid + 1 });
+    setSelectedSectionId(nid);
   }
   function deleteSection(id: number) {
     if (song.sections.length < 2) return;
@@ -321,18 +305,19 @@ export default function Editor() {
           )}
         </div>
         <div className="controls">
-          <button className="tbtn" title="Play" onClick={play} disabled={!hasTracks}>
+          <button
+            className={device.playing ? "tbtn on" : "tbtn"}
+            title={view === "section" ? "Loop this section, from the selected chord" : "Play the song from the selected part"}
+            onClick={play}
+            disabled={!hasTracks || (view === "section" && !hearing)}
+          >
             ▶
           </button>
           <button className="tbtn" title="Stop" onClick={stop}>
             ■
           </button>
-          <button className={loop ? "tbtn on" : "tbtn"} title={loop ? "Stop looping" : "Loop the selection"} onClick={toggleLoop} disabled={!hasTracks || (!loop && !selection)}>
-            ⟲
-          </button>
-          {selectionDiffers && selection && <button onClick={() => startLoop(selection)}>Loop selection</button>}
         </div>
-        <span className="loopinfo">{loopRange ? `Looping: ${loopRange.label}` : ""}</span>
+        <span className="loopinfo">{loopPart && device.playing ? `Looping ${loopPart.label}` : ""}</span>
         <span className="position">
           {device.playing ? "▶ " : ""}
           {barBeat(device.beats)}
@@ -356,7 +341,10 @@ export default function Editor() {
               <div
                 key={p.slot.id}
                 className={`card${p.slot.id === selectedSlotId ? " selected" : ""}${playingSlot?.slot.id === p.slot.id ? " playing" : ""}`}
-                onClick={() => setSelectedSlotId(p.slot.id === selectedSlotId ? null : p.slot.id)}
+                onClick={() => {
+                  setSelectedSlotId(p.slot.id === selectedSlotId ? null : p.slot.id);
+                  setSelectedSectionId(null);
+                }}
                 onDoubleClick={() => openEditor(p.slot)}
                 title="Click to select, double-click to edit"
               >
@@ -412,7 +400,16 @@ export default function Editor() {
             {song.sections.map((x) => {
               const uses = song.slots.filter((s) => s.sectionId === x.id && !s.blocks).length;
               return (
-                <div key={x.id} className="card" onClick={() => openEditor(null, x.id)} title="Click to edit">
+                <div
+                  key={x.id}
+                  className={x.id === selectedSectionId ? "card selected" : "card"}
+                  onClick={() => {
+                    setSelectedSectionId(x.id === selectedSectionId ? null : x.id);
+                    setSelectedSlotId(null);
+                  }}
+                  onDoubleClick={() => openEditor(null, x.id)}
+                  title="Click to select, double-click to edit"
+                >
                   <span className="strip" style={{ background: sectionColor(x.id).css }} />
                   <span className="name">{x.name}</span>
                   <span className="sub">
@@ -424,6 +421,18 @@ export default function Editor() {
             <div className="card add" title="New section" onClick={newSection}>
               +
             </div>
+          </div>
+          <div className="toolbar">
+            {selectedSectionId !== null && findSection(song, selectedSectionId) ? (
+              <>
+                <span>
+                  Section <b>{findSection(song, selectedSectionId)!.name}</b>
+                </span>
+                <button onClick={() => duplicateSection(selectedSectionId)}>Duplicate</button>
+              </>
+            ) : (
+              <span className="note">Click a section to select it. Double-click to edit it.</span>
+            )}
           </div>
         </div>
       )}
@@ -438,7 +447,6 @@ export default function Editor() {
                 <span className="note">
                   {usesOfSection.length > 1 ? `In the song ${usesOfSection.length} times: changes apply to all of them` : usesOfSection.length === 1 ? "In the song once" : ""}
                 </span>
-                <button onClick={() => duplicateSection(editingSection.id)}>Duplicate</button>
                 <button className="danger" disabled={song.sections.length < 2} onClick={() => deleteSection(editingSection.id)}>
                   Delete section
                 </button>
@@ -483,7 +491,10 @@ export default function Editor() {
                         key={k}
                         className={cls}
                         style={{ left: `calc(${sg.left * 100}% + 1px)`, width: `calc(${sg.width * 100}% - 2px)`, background: blockColor(b) }}
-                        onClick={() => setSelectedBlock(sg.block)}
+                        onClick={() => {
+                          setSelectedBlock(sg.block);
+                          audition(b);
+                        }}
                         title={`${label.degree}  ${label.name}`}
                       >
                         {!sg.cont && (
@@ -506,7 +517,10 @@ export default function Editor() {
               canRemove={blocks.length > 1}
               isFirst={selectedBlock === 0}
               isLast={selectedBlock === blocks.length - 1}
-              onChange={(c) => changeBlock(selectedBlock, c)}
+              onChange={(c) => {
+                changeBlock(selectedBlock, c);
+                audition({ ...block, ...c });
+              }}
               onReset={() => changeBlock(selectedBlock, defaultBlock())}
               onMove={(d) => moveBlock(selectedBlock, d)}
               onRemove={() => removeBlock(selectedBlock)}
@@ -527,69 +541,45 @@ export default function Editor() {
               <button onClick={() => setSettingsOpen(false)}>✕</button>
             </div>
             <h4>Song</h4>
-            <label className="field">
+            <div className="field">
               <span className="field-label">Key</span>
-              <select value={song.rootIndex} onChange={(e) => update({ rootIndex: Number(e.target.value) })}>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {noteChoiceLabel(i)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
+              <IndexDropdown value={song.rootIndex} options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))} onChange={(v) => update({ rootIndex: v })} />
+            </div>
+            <div className="field">
               <span className="field-label">Mode</span>
-              <select value={song.modeIndex} onChange={(e) => update({ modeIndex: Number(e.target.value) })}>
-                {MASTER_MODE_NAMES.map((m, i) => (
-                  <option key={i} value={i}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
+              <IndexDropdown value={song.modeIndex} options={MASTER_MODE_NAMES} onChange={(v) => update({ modeIndex: v })} />
+            </div>
+            <div className="field">
               <span className="field-label">Beat</span>
-              <select value={song.drumBeat} onChange={(e) => update({ drumBeat: e.target.value })}>
-                {Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => (
-                  <option key={k} value={k}>
-                    {beatPatternLabel(k)}
-                  </option>
-                ))}
-                <option value="off">Off</option>
-              </select>
-            </label>
+              <Dropdown
+                value={song.drumBeat}
+                options={[...Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => ({ value: k, label: beatPatternLabel(k) })), { value: "off", label: "Off" }]}
+                onChange={(v) => update({ drumBeat: String(v) })}
+              />
+            </div>
             <h4>Tracks</h4>
             {ROLES.map((role) => (
-              <label className="field" key={role}>
+              <div className="field" key={role}>
                 <span className="field-label">{role[0].toUpperCase() + role.slice(1)}</span>
-                <select
+                <Dropdown
                   value={song.tracks[role]?.id ?? ""}
-                  onChange={(e) => {
-                    const t = tracks?.find((x) => x.id === Number(e.target.value));
+                  options={[{ value: "", label: "(none)" }, ...(tracks ?? []).map((t) => ({ value: t.id, label: t.name + (t.midi ? "" : " (audio)"), disabled: !t.midi }))]}
+                  onChange={(v) => {
+                    const t = tracks?.find((x) => x.id === v);
                     update({ tracks: { ...song.tracks, [role]: t ? ({ id: t.id, name: t.name } as TrackRef) : null } });
                   }}
-                >
-                  <option value="">(none)</option>
-                  {(tracks ?? []).map((t) => (
-                    <option key={t.id} value={t.id} disabled={!t.midi}>
-                      {t.name}
-                      {t.midi ? "" : " (audio)"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
             ))}
             <button onClick={() => outlet(OUT.cf_tracks)}>Refresh track list</button>
-            <label className="field">
+            <div className="field">
               <span className="field-label">Bass lowest note</span>
-              <select value={song.bassWrapLow} onChange={(e) => update({ bassWrapLow: Number(e.target.value) })}>
-                {Array.from({ length: 25 }, (_, i) => 24 + i).map((p) => (
-                  <option key={p} value={p}>
-                    {pitchToFullNoteName(p)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <Dropdown
+                value={song.bassWrapLow}
+                options={Array.from({ length: 25 }, (_, i) => ({ value: 24 + i, label: pitchToFullNoteName(24 + i) }))}
+                onChange={(v) => update({ bassWrapLow: Number(v) })}
+              />
+            </div>
             <button
               className="danger"
               onClick={() => {

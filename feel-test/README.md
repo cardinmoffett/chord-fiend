@@ -19,11 +19,20 @@ The device is in `chord-fiend-feel-test.zip`. This is **round 3**.
 
 A Set saved with an earlier round opens with its song intact.
 
+## Round 3.1: preview and loop
+
+From your notes on round 3:
+
+- **Play** depends on the view. In the **section editor** it loops the whole section, starting from the selected chord. In the **song view** it plays the song from the selected part (or the start). **■** stops. The separate loop button is gone.
+- **Tapping a chord plays it**, through the chords track's instrument, but only while stopped. During playback a tap only selects, so you can edit along with the music. Changing a setting in the inspector also plays the chord while stopped, as the app does.
+- **Dropdowns** open with one click and pick with another. The old ones only stayed open while the mouse button was held.
+- **Duplicate** moved to the song arranger: click a section there to select it, then **Duplicate**. Double-click a section to edit it. Rename and **Delete section** stay in the section editor.
+
 ## Round 3: what changed
 
 From your notes on round 2:
 
-- **One transport** across the top: **▶** play, **■** stop, **⟲** loop. Loop loops **whatever is selected**: a chord in the section you are editing, a song part, or the whole song (nothing selected in the song view). Clicking a chord only selects it, so a loop keeps playing while you click around and edit. To move the loop to what you just selected, click **Loop selection**, which appears next to the loop button.
+- **One transport** across the top (changed in 3.1, above).
 - **Two views, as in the app.** The **song view** has the song row (with the link icon) and the sections below it. Click a part to select it, double-click to edit it; **+** adds a section after the selected part. Click a section below to edit it, or **+** for a new one. The **section view** is the block editor; **← Song** goes back.
 - **Compact blocks** in rows of 4 bars, as wide as they are long, so long progressions fit. Each is coloured by degree (the app's colours: hue from the degree, richer for bigger extensions, darker for applied chords, grey for free chords) and shows the **degree large** and the chord name small.
 - **An inspector** for the selected block, with **Diatonic / Applied / Free**:
@@ -58,11 +67,12 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `c2365c7342307906a62a3eddaff8c6999c4e47434448c704c7693a9dc9eec869`.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `673638f7b6436957ce72bb8b885a578bb421edf9c2fc05c5eb5eff242960339b`.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
 - The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots (linked, or detached with their own blocks), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.
-- The window's requests (`cf_tracks`, `cf_prune`, `cf_write`, `cf_clear`, `cf_loop <start> <length> [jump]`, `cf_unloop`, `cf_play`, `cf_stop`) are handled in `device/wrapper/device.ts` through `onWindowMessage`, with base64 JSON payloads. `onTick` forwards the transport poll to the window. `cf_write` also sets the clip colour.
+- Tapping a chord while stopped sends `cf_audition` from the window; the wrapper passes it to the device page (`outlet 0`), which plays it with `sendNote` through the `midiout` chain. The patcher keeps its `midiin -> midiout` cord, so clips on the track still pass through. `Dropdown.tsx` replaces every native `<select>`: in the window, a native select's popup only stayed open while the mouse button was held.
+- The window's requests (`cf_tracks`, `cf_prune`, `cf_write`, `cf_clear`, `cf_loop <start> <length> [jump] [from]`, `cf_unloop`, `cf_audition`, `cf_play`, `cf_stop`) are handled in `device/wrapper/device.ts` through `onWindowMessage`, with base64 JSON payloads. `onTick` forwards the transport poll to the window. `cf_write` also sets the clip colour.
 - Our clips are recognized by name: `Chord Fiend: <name>`. A write whose clip already covers the same range replaces the notes in place (`remove_notes_extended` + `add_new_notes`); otherwise a new clip is created (`Track.create_midi_clip`) after `cf_prune` has deleted stale ones (`Track.delete_clip`). Clips moved or edited by hand in Live are not followed; the next sync overwrites them (hand-edit protection is build plan step 6).
 - Tests: `device/tests/wrapper-live.test.mjs` (the Live side against a fake Max and Live set) and `device/tests/song.test.ts` (the song model, labels, and whole-song syncs end to end through the wrapper into the fake). The fake follows the Live Object Model docs, so it checks our logic, not Live itself.
 - Engine additions for this round: `flat5` and `chordSource: "free"` in `engine/src/engine.js`, tested in `engine/tests/test_free_flat5.mjs`.

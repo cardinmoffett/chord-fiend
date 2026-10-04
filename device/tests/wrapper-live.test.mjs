@@ -148,4 +148,18 @@ describe("feel test wrapper against a fake Live set", () => {
     w.send("cf_write", w.b64({ role: "chords", name: "1 Verse - chords", trackId: chords.id, start: 0, length: 4, color: 0xe0a33a, notes: [[60, 0, 4, 96]] }));
     expect(chords.arrangement_clips[0].color).toBe(0xe0a33a);
   });
+
+  it("Play in the section view loops the section and starts the playhead at the selected chord", () => {
+    const live = fakeLive();
+    const w = load(live);
+    w.send("cf_loop", 16, 16, 1, 24);
+    expect([live.song.loop_start, live.song.loop_length, live.song.current_song_time, live.song.is_playing]).toEqual([16, 16, 24, 1]);
+  });
+
+  it("passes a tapped chord from the window to the device page, which plays it", () => {
+    const live = fakeLive();
+    const w = load(live);
+    w.send("cf_audition", "eyJwaXRjaGVzIjpbNjBdfQ==");
+    expect(w.toReceivers).toContainEqual(["outlet", 0, "cf_audition", "eyJwaXRjaGVzIjpbNjBdfQ=="]);
+  });
 });
