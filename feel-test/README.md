@@ -15,9 +15,13 @@ The device is in `chord-fiend-feel-test.zip`. This is **round 3**.
 1. Have three MIDI tracks with instruments: chords, bass, and a **Drum Rack** for drums. The drums use the General MIDI notes: kick C1 (36), snare D1 (38), closed hi-hat F#1 (42).
 2. Put **chord-fiend-test** on the chords track and switch to **Arrangement View** (Tab).
 3. Click **Open editor** on the device.
-4. Click **⚙** (top right of the window) and pick the three tracks under **Tracks**. The song appears on the Arrangement straight away, and the top bar says **Arrangement in sync**.
+4. Click **⚙** (top right of the window) and pick the three tracks under **Tracks**. From then on the Arrangement follows the song, and the top bar says **Arrangement in sync**.
 
 A Set saved with an earlier round opens with its song intact.
+
+## Starting empty
+
+A new device now starts with no song: one section, **Section 1**, holding the key's I chord, and nothing in the song row, as the app started a new project. Add sections and place them to build your song. A Set you have already saved keeps its song. (Earlier rounds started with a sample Verse, Chorus, Verse, Chorus; the tests still use it.)
 
 ## Round 3.3: the song part menu as a flyout
 
@@ -87,7 +91,7 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `c27365c147a80de88559eb2b22576e6e8d0bf751896d38278f360f312d8d8e5a`.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `84d556b72718168c9d555fbc205d879b0d9529ec563079b41b8948b41855da72`.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
 - The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.

@@ -57,27 +57,20 @@ export interface Song {
   tracks: Record<Role, TrackRef | null>;
 }
 
-function blk(o: Partial<Block>): Block {
-  return { ...defaultBlock(), ...o };
-}
-
+/**
+ * A new device starts with no song: one section holding the key's I chord (the section
+ * editor always shows at least one chord), and nothing placed in the song yet. This is
+ * how the app started a new project too.
+ */
 export const DEFAULT_SONG: Song = {
   version: 2,
   rootIndex: 0,
   modeIndex: 0,
   drumBeat: "rock",
   bassWrapLow: 28,
-  sections: [
-    { id: 1, name: "Verse", blocks: [blk({ degreeIndex: 0 }), blk({ degreeIndex: 5 }), blk({ degreeIndex: 3 }), blk({ degreeIndex: 4, extensionIndex: 2 })] },
-    { id: 2, name: "Chorus", blocks: [blk({ degreeIndex: 3 }), blk({ degreeIndex: 4 }), blk({ degreeIndex: 0 }), blk({ degreeIndex: 5 })] },
-  ],
-  slots: [
-    { id: 3, sectionId: 1, blocks: null },
-    { id: 4, sectionId: 2, blocks: null },
-    { id: 5, sectionId: 1, blocks: null },
-    { id: 6, sectionId: 2, blocks: null },
-  ],
-  nextId: 7,
+  sections: [{ id: 1, name: "Section 1", blocks: [defaultBlock()] }],
+  slots: [],
+  nextId: 2,
   editing: { kind: "section", id: 1 },
   tracks: { chords: null, bass: null, drums: null },
 };

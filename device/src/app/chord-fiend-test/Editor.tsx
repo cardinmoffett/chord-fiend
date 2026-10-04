@@ -236,7 +236,6 @@ export default function Editor() {
     update({ slots });
   }
   function removeSlot(id: number) {
-    if (song.slots.length < 2) return;
     const slot = song.slots.find((x) => x.id === id)!;
     const editing = song.editing.kind === "slot" && song.editing.id === id ? { kind: "section" as const, id: slot.sectionId } : song.editing;
     update({ slots: song.slots.filter((x) => x.id !== id), editing });
@@ -274,10 +273,8 @@ export default function Editor() {
   function deleteSection(id: number) {
     if (song.sections.length < 2) return;
     const sections = song.sections.filter((x) => x.id !== id);
-    let slots = song.slots.filter((x) => x.sectionId !== id);
-    let nextId = song.nextId;
-    if (!slots.length) slots = [{ id: nextId++, sectionId: sections[0].id, blocks: null }];
-    update({ sections, slots, nextId, editing: { kind: "section", id: sections[0].id } });
+    const slots = song.slots.filter((x) => x.sectionId !== id);
+    update({ sections, slots, editing: { kind: "section", id: sections[0].id } });
     setView("song");
   }
 
@@ -402,7 +399,7 @@ export default function Editor() {
                       <button title="Move later" disabled={p.index === placed.length - 1} onClick={() => moveSlot(p.slot.id, 1)}>
                         →
                       </button>
-                      <button title="Remove from the song" className="danger" disabled={placed.length < 2} onClick={() => removeSlot(p.slot.id)}>
+                      <button title="Remove from the song" className="danger" onClick={() => removeSlot(p.slot.id)}>
                         ✕
                       </button>
                       <button title="Insert a section after this part" className={partAdd ? "add on" : "add"} onClick={() => setPartAdd(!partAdd)}>

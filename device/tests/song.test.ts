@@ -3,6 +3,7 @@
 // Live set, and the test looks at the clips that end up on the fake tracks.
 import { describe, expect, it } from "vitest";
 import { defaultBlock } from "../../engine/src/engine.js";
+import type { Block } from "../../engine/src/engine.js";
 import {
   DEFAULT_SONG,
   blockLabel,
@@ -17,11 +18,28 @@ import {
 } from "../src/app/chord-fiend-test/song";
 import { fakeLive, loadWrapper } from "./fake-live.mjs";
 
+// The sample song the earlier feel tests started with: Verse, Chorus, Verse, Chorus.
+const blk = (o: Partial<Block>): Block => ({ ...defaultBlock(), ...o });
+const SAMPLE: Song = {
+  ...DEFAULT_SONG,
+  sections: [
+    { id: 1, name: "Verse", blocks: [blk({ degreeIndex: 0 }), blk({ degreeIndex: 5 }), blk({ degreeIndex: 3 }), blk({ degreeIndex: 4, extensionIndex: 2 })] },
+    { id: 2, name: "Chorus", blocks: [blk({ degreeIndex: 3 }), blk({ degreeIndex: 4 }), blk({ degreeIndex: 0 }), blk({ degreeIndex: 5 })] },
+  ],
+  slots: [
+    { id: 3, sectionId: 1, blocks: null },
+    { id: 4, sectionId: 2, blocks: null },
+    { id: 5, sectionId: 1, blocks: null },
+    { id: 6, sectionId: 2, blocks: null },
+  ],
+  nextId: 7,
+};
+
 function setup() {
   const live = fakeLive();
   const w = loadWrapper(live);
   const [c, b, d] = live.song.tracks;
-  const song: Song = { ...DEFAULT_SONG, tracks: { chords: { id: c.id, name: c.name }, bass: { id: b.id, name: b.name }, drums: { id: d.id, name: d.name } } };
+  const song: Song = { ...SAMPLE, tracks: { chords: { id: c.id, name: c.name }, bass: { id: b.id, name: b.name }, drums: { id: d.id, name: d.name } } };
   const lastSent = new Map<string, string>();
   const write = (s: Song, everything = false) => {
     const plan = planSongWrite(s, lastSent, everything);
@@ -34,7 +52,7 @@ function setup() {
 
 describe("song layout", () => {
   it("places the song order end to end from bar 1", () => {
-    const placed = layoutSong(DEFAULT_SONG);
+    const placed = layoutSong(SAMPLE);
     expect(placed.map((p) => [p.label, p.start, p.length])).toEqual([
       ["Verse", 0, 16],
       ["Chorus", 16, 16],
@@ -44,12 +62,12 @@ describe("song layout", () => {
   });
 
   it("always writes bass: a block's old bass-off setting from the app is ignored", () => {
-    const s = withEditingBlocks({ ...DEFAULT_SONG, editing: { kind: "section", id: 1 } }, [{ ...defaultBlock(), bassToneIndex: -1 }]);
+    const s = withEditingBlocks({ ...SAMPLE, editing: { kind: "section", id: 1 } }, [{ ...defaultBlock(), bassToneIndex: -1 }]);
     expect(layoutSong(s)[0].notes.bass.length).toBe(4);
   });
 
   it("editing a section changes every linked part, and an inline part keeps its own copy", () => {
-    let s: Song = { ...DEFAULT_SONG, editing: { kind: "section", id: 1 } };
+    let s: Song = { ...SAMPLE, editing: { kind: "section", id: 1 } };
     s = { ...s, slots: s.slots.map((x) => (x.id === 5 ? { ...x, blocks: editingBlocks(s).map((b) => ({ ...b })) } : x)) }; // detach song part 3
     s = withEditingBlocks(s, [{ ...defaultBlock(), degreeIndex: 1 }]);
     const placed = layoutSong(s);
@@ -65,6 +83,12 @@ describe("song layout", () => {
     expect(editingLocked(s)).toBe(false);
     s = withEditingBlocks(s, [{ ...defaultBlock(), degreeIndex: 6 }]);
     expect(layoutSong(s).map((p) => p.blocks[0].degreeIndex)).toEqual([1, 3, 6, 3]);
+  });
+
+  it("a new device starts with no song: one section with the I chord, nothing placed", () => {
+    expect(DEFAULT_SONG.slots).toEqual([]);
+    expect(DEFAULT_SONG.sections.map((x) => [x.name, x.blocks])).toEqual([["Section 1", [defaultBlock()]]]);
+    expect(layoutSong(DEFAULT_SONG)).toEqual([]);
   });
 
   it("opens a Set saved by the first feel test as one section placed once", () => {
@@ -167,6 +191,15 @@ describe("writing the song to a fake Live set", () => {
     s = withEditingBlocks({ ...s, editing: { kind: "section", id: 1 } }, [{ ...verse[0], degreeIndex: 6 }, ...verse.slice(1)]); // same length
     const plan = t.write(s);
     expect(plan.sent).toBe(2); // chords and bass of song part 1 only; the detached part 3 is untouched
+  });
+
+  it("removing every part leaves no Chord Fiend clips, and other clips stay", () => {
+    const t = setup();
+    const theirs = t.live.add({ kind: "Clip", name: "my riff", start_time: 100, end_time: 104, notes: [] });
+    t.c.arrangement_clips.push(theirs);
+    t.write(t.song, true);
+    t.write({ ...t.song, slots: [] });
+    expect([t.c, t.b, t.d].map((tr: any) => tr.arrangement_clips.map((x: any) => x.name))).toEqual([["my riff"], [], []]);
   });
 
   it("tidies away a clip left by the first feel test", () => {
