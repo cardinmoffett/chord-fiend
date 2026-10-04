@@ -14,6 +14,7 @@ export const OUT = {
   ui_ready: "ui_ready",
   cf_tracks: "cf_tracks",
   cf_write: "cf_write",
+  cf_prune: "cf_prune",
   cf_clear: "cf_clear",
   cf_loop: "cf_loop",
   cf_play: "cf_play",

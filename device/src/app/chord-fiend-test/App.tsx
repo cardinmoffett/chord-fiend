@@ -1,16 +1,15 @@
 import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
-import { getChordSymbol, buildChord } from "../../../../engine/src/engine.js";
 import { useDevice } from "../shared/device";
 import { Frame, Transport } from "../shared/Frame";
-import surface, { DEFAULT_SONG } from "./surface";
+import surface from "./surface";
+import { normalizeSong, slotLabel } from "./song";
 
-/** The device strip on the track: 169 px tall, so it only opens the editor and shows the song. */
+/** The device strip on the track: 169 px tall, so it only opens the editor and shows the song order. */
 export default function App() {
   const device = useDevice();
   const editor = useWindow(surface, "editor");
   const [stored] = useStateSync(surface, "song");
-  const song = stored ?? DEFAULT_SONG;
-  const symbols = song.blocks.map((b) => getChordSymbol(buildChord(b, song.rootIndex, song.modeIndex), song.rootIndex));
+  const song = normalizeSong(stored);
 
   return (
     <Frame title="CHORD FIEND (feel test)" device={device}>
@@ -24,7 +23,7 @@ export default function App() {
         </button>
       </dd>
       <dt>song</dt>
-      <dd>{symbols.join("  ")}</dd>
+      <dd>{song.slots.map((s) => slotLabel(song, s)).join("  ")}</dd>
       <Transport device={device} />
     </Frame>
   );

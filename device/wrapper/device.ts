@@ -9,9 +9,16 @@
  * payloads cross the bridge as base64 JSON, because Max splits messages on commas.
  *
  *   cf_tracks                      -> cf_tracks <b64 [{id, name, midi}]>
- *   cf_write <b64 {role, trackId, start, length, notes:[[p,s,d,v]...]}>
- *                                  -> cf_result <b64 {role, ok, action, clipId, notes, error}>
+ *   cf_prune <b64 {role, trackId, keep:[{name, start, length}]}>
+ *                                  -> cf_result <b64 {role, op:"prune", ok, deleted, error}>
+ *   cf_write <b64 {role, name, trackId, start, length, notes:[[p,s,d,v]...]}>
+ *                                  -> cf_result <b64 {role, name, ok, action, clipId, notes, error}>
  *   cf_clear <b64 {trackIds:[...]}> -> cf_result
+ *
+ * Our clips are named "Chord Fiend: <name>", where the window makes <name> unique per
+ * track ("2 Chorus - bass"). A song write is one cf_prune per track, which deletes our
+ * clips for that role that are no longer in the song, then a cf_write per clip that is new
+ * or changed.
  *   cf_loop <start> <length>       Live's loop on that range, playhead there, play
  *   cf_play <start>                playhead there, play (the user's loop restored)
  *   cf_stop                        stop, and restore the user's loop
@@ -169,11 +176,11 @@ function cf_write(b64: unknown): void {
     post("chord-fiend: cf_write could not read its request - " + (e as Error).message + "\n");
     return;
   }
-  var result: any = { role: req.role, ok: false };
+  var result: any = { role: req.role, name: req.name, ok: false };
+  var tag = CLIP_TAG + (req.name || req.role);
   try {
     var track = new LiveAPI("id " + req.trackId);
     if (!track.id || cfIdOf(track.id) === 0 || track.type !== "Track") throw new Error("track " + req.trackId + " not found");
-    var tag = CLIP_TAG + req.role;
     var start = Number(req.start);
     var length = Number(req.length);
     var mine = cfTaggedClips(track);
@@ -191,6 +198,8 @@ function cf_write(b64: unknown): void {
     }
 
     if (!target) {
+      // A clip of ours with this name over a different range is stale: cf_prune normally
+      // removes it first, but never leave two clips with one name.
       var deleted = 0;
       for (var j = 0; j < mine.length; j++) {
         if (mine[j].name !== tag) continue;
@@ -221,7 +230,41 @@ function cf_write(b64: unknown): void {
   } catch (e2) {
     result.error = (e2 as Error).message;
   }
-  post("chord-fiend: write " + req.role + " -> " + (result.ok ? result.action + " clip " + result.clipId + ", " + result.notes + " notes" : "FAILED " + result.error) + "\n");
+  post("chord-fiend: write " + tag + " -> " + (result.ok ? result.action + " clip " + result.clipId + ", " + result.notes + " notes" : "FAILED " + result.error) + "\n");
+  cfReply("cf_result", result);
+}
+
+/**
+ * Delete our clips for one role on one track that are not in `keep` (same name and range).
+ * Runs before the writes, so a new layout never creates a clip on top of a stale one.
+ */
+function cf_prune(b64: unknown): void {
+  var req = cfDecode(b64);
+  var result: any = { role: req.role, op: "prune", ok: false, deleted: 0 };
+  try {
+    var track = new LiveAPI("id " + req.trackId);
+    if (!track.id || cfIdOf(track.id) === 0 || track.type !== "Track") throw new Error("track " + req.trackId + " not found");
+    var suffix = " - " + req.role;
+    var mine = cfTaggedClips(track);
+    for (var i = 0; i < mine.length; i++) {
+      var c = mine[i];
+      // Ours for this role: "<name> - <role>", or the first feel test's plain "<role>".
+      var forRole = c.name.slice(-suffix.length) === suffix || c.name === CLIP_TAG + req.role;
+      if (!forRole) continue;
+      var kept = false;
+      for (var k = 0; k < req.keep.length; k++) {
+        var want = req.keep[k];
+        if (c.name === CLIP_TAG + want.name && Math.abs(c.start - want.start) < 0.001 && Math.abs(c.end - (want.start + want.length)) < 0.001) kept = true;
+      }
+      if (kept) continue;
+      track.call("delete_clip", "id", c.id);
+      result.deleted++;
+    }
+    result.ok = true;
+  } catch (e) {
+    result.error = (e as Error).message;
+  }
+  post("chord-fiend: prune " + req.role + " -> " + (result.ok ? "deleted " + result.deleted : "FAILED " + result.error) + "\n");
   cfReply("cf_result", result);
 }
 
@@ -297,6 +340,7 @@ function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: 
   try {
     if (selector === "cf_tracks") cf_tracks();
     else if (selector === "cf_write") cf_write(a1);
+    else if (selector === "cf_prune") cf_prune(a1);
     else if (selector === "cf_clear") cf_clear(a1);
     else if (selector === "cf_loop") cf_loop(Number(a1), Number(a2));
     else if (selector === "cf_play") cf_play(Number(a1));
