@@ -78,6 +78,23 @@ For each device, tell Claude whether it worked or not. If something did not work
 - whether **wrapper** in the header showed a dash;
 - anything Live showed in a pop-up or in the status bar at the bottom.
 
+## Results (2026-10-04)
+
+**Go.** All four devices passed on Cardin's Mac (Live 12, Max 9) with the fixed build. We continue with `m4l-jweb`.
+
+| Device | Result | What it shows |
+| --- | --- | --- |
+| hello-midi | Passed | The device talks to Live, follows the transport and sends notes to an instrument. |
+| hello-clip | Passed | It created a clip, wrote 8 notes and read them back. It writes to Session View; Chord Fiend will not use Session View at all, only the Arrangement. |
+| hello-state | Passed | A value saved in the device survived saving, closing and reopening the Set. |
+| hello-window | Passed | The floating window opened, sent typed text to the device, and kept it across a save and reopen. |
+
+Things we noticed:
+
+- **The Mac page address.** The first build failed on the Mac with "Your file couldn't be accessed". Fixed by the patch below.
+- **The first load sometimes shows the error page.** On the very first load, when the page is unpacked for the first time, a device showed the error until it reloaded (here, when the Max editor was closed). After that it opened every time. Not tested further. The real Chord Fiend device should confirm the page is on disk before pointing `[jweb]` at it, and retry once if the page does not load.
+- **Device type.** `hello-state` and `hello-window` are audio effects, so they need an audio track or a spot after an instrument. Chord Fiend will be a MIDI effect.
+
 ## Notes for Claude Code
 
 - Built on Linux from `m4l-jweb` commit `9193a1d3d212d6eec0d7745d05abf569e3c9605b` (v1.6.1, 2026-08-30) plus `patches/m4l-jweb-mac-file-url.patch`, with `pnpm install --frozen-lockfile && pnpm build`. Its own test suite passed (348 tests). The devices are `hello-midi`, `hello-state`, `hello-clip` and `hello-window` from `dist/m4l-jweb/`.
