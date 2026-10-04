@@ -19,13 +19,18 @@ The device is in `chord-fiend-feel-test.zip`. This is **round 3**.
 
 A Set saved with an earlier round opens with its song intact.
 
+## Round 3.3: the song part menu as a flyout
+
+- **Click a part** in the song row and its menu opens as a flyout attached to the card: **←** **→** move it, **✕** removes it, and **+ Add** lists your sections, inserting the one you pick right after this part. Click away or press Escape to close it.
+- The chord editor is unchanged from 3.2.
+
 ## Round 3.2: linked and inline parts, a cleaner song view
 
 From your notes on round 3.1:
 
 - **Less labelling.** Cards show only the name (and 🔗 on a linked part). No bar ranges, chord counts, hints, or "Part 1: Verse" line.
 - **The sections palette sits at the bottom** of the song view, below a divider, apart from the song builder.
-- **A selected part** shows only **←** **→** (move) and **✕** (remove). A selected section shows only **Duplicate**.
+- **A selected part** shows only **←** **→** (move) and **✕** (remove), in a flyout from 3.3. A selected section shows only **Duplicate**.
 - **Linked and inline, as in the app.** Double-click a part to open it:
   - A **linked** part opens **locked**: you can see, tap and play its chords, but not change them. Next to its name is **Make inline**.
   - **Make inline** gives that part its own copy (shown as `Verse*`), which you edit on its own; its section and the other parts do not change.
@@ -81,7 +86,7 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `78a94d5a7fa15b272be70c52513e8bc7f6e345445899993812a4819a415b1b0e`.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `5ef8f00c2629c6ab6b443fd332391ef91f704789a9e1b1024694c743a24fa913`.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
 - The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.

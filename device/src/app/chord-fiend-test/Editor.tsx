@@ -61,6 +61,23 @@ export default function Editor() {
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
   const [confirmRelink, setConfirmRelink] = useState(false);
+  const [partAdd, setPartAdd] = useState(false);
+
+  // The selected part's flyout closes on Escape or a click away from it.
+  useEffect(() => {
+    if (selectedSlotId === null) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setSelectedSlotId(null);
+    const away = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest(".card-wrap, .picker, .transport, .drawer, .drawer-shade")) return;
+      setSelectedSlotId(null);
+    };
+    document.addEventListener("keydown", esc);
+    document.addEventListener("mousedown", away);
+    return () => {
+      document.removeEventListener("keydown", esc);
+      document.removeEventListener("mousedown", away);
+    };
+  }, [selectedSlotId]);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(0);
   const [picker, setPicker] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -311,7 +328,6 @@ export default function Editor() {
   const rowCount = segments.length ? segments[segments.length - 1].row + 1 : 1;
 
   const selectedSlot = song.slots.find((x) => x.id === selectedSlotId);
-  const selectedPlaced = placed.find((p) => p.slot.id === selectedSlotId);
 
   return (
     <div className="cf" onClick={() => setPicker(false)}>
@@ -361,18 +377,55 @@ export default function Editor() {
           <div className="heading">Song</div>
           <div className="cards">
             {placed.map((p) => (
-              <div
-                key={p.slot.id}
-                className={`card${p.slot.id === selectedSlotId ? " selected" : ""}${playingSlot?.slot.id === p.slot.id ? " playing" : ""}`}
-                onClick={() => {
-                  setSelectedSlotId(p.slot.id === selectedSlotId ? null : p.slot.id);
-                  setSelectedSectionId(null);
-                }}
-                onDoubleClick={() => openEditor(p.slot)}
-              >
-                <span className="strip" style={{ background: sectionColor(p.slot.sectionId).css }} />
-                {!p.slot.blocks && <span className="badge">🔗</span>}
-                <span className="name">{p.label}</span>
+              <div key={p.slot.id} className="card-wrap">
+                <div
+                  className={`card${p.slot.id === selectedSlotId ? " selected" : ""}${playingSlot?.slot.id === p.slot.id ? " playing" : ""}`}
+                  onClick={() => {
+                    setSelectedSlotId(p.slot.id === selectedSlotId ? null : p.slot.id);
+                    setSelectedSectionId(null);
+                    setPartAdd(false);
+                  }}
+                  onDoubleClick={() => openEditor(p.slot)}
+                >
+                  <span className="strip" style={{ background: sectionColor(p.slot.sectionId).css }} />
+                  {!p.slot.blocks && <span className="badge">🔗</span>}
+                  <span className="name">{p.label}</span>
+                </div>
+                {/* The selected part's menu: a flyout attached to its card. */}
+                {p.slot.id === selectedSlotId && (
+                  <div className="part-flyout">
+                    <span className="part-flyout-arrow" />
+                    <div className="part-flyout-buttons">
+                      <button title="Move earlier" disabled={p.index === 0} onClick={() => moveSlot(p.slot.id, -1)}>
+                        ←
+                      </button>
+                      <button title="Move later" disabled={p.index === placed.length - 1} onClick={() => moveSlot(p.slot.id, 1)}>
+                        →
+                      </button>
+                      <button title="Remove from the song" className="danger" disabled={placed.length < 2} onClick={() => removeSlot(p.slot.id)}>
+                        ✕
+                      </button>
+                      <button title="Insert a section after this part" className={partAdd ? "add on" : "add"} onClick={() => setPartAdd(!partAdd)}>
+                        + Add
+                      </button>
+                    </div>
+                    {partAdd && (
+                      <div className="part-flyout-list">
+                        {song.sections.map((x) => (
+                          <button
+                            key={x.id}
+                            onClick={() => {
+                              insertSlot(x.id);
+                              setPartAdd(false);
+                            }}
+                          >
+                            <span style={{ color: sectionColor(x.id).css }}>●</span> {x.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             <div className="picker" onClick={(e) => e.stopPropagation()}>
@@ -389,21 +442,6 @@ export default function Editor() {
                 </div>
               )}
             </div>
-          </div>
-          <div className="toolbar slim">
-            {selectedSlot && selectedPlaced && (
-              <>
-                <button title="Move earlier" disabled={selectedPlaced.index === 0} onClick={() => moveSlot(selectedSlot.id, -1)}>
-                  ←
-                </button>
-                <button title="Move later" disabled={selectedPlaced.index === placed.length - 1} onClick={() => moveSlot(selectedSlot.id, 1)}>
-                  →
-                </button>
-                <button title="Remove from the song" className="danger" disabled={placed.length < 2} onClick={() => removeSlot(selectedSlot.id)}>
-                  ✕
-                </button>
-              </>
-            )}
           </div>
 
           <div className="palette">

@@ -220,3 +220,40 @@ fieldset.inspector.locked { opacity: 0.55; }
 .palette { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .toolbar.slim { min-height: 32px; }
 .section-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- the song part menu: a flyout attached to the selected card ---------- */
+.song-view { padding-bottom: 14px; }
+.song-view > .cards { padding-bottom: 64px; } /* room for the flyout under the row */
+.card-wrap { position: relative; }
+.part-flyout {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  background: var(--panel);
+  border: 1px solid #55555c;
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+.part-flyout-arrow {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: var(--panel);
+  border-left: 1px solid #55555c;
+  border-top: 1px solid #55555c;
+  transform: rotate(45deg);
+}
+.part-flyout-buttons { display: flex; gap: 6px; }
+.cf .part-flyout-buttons button { min-width: 36px; height: 32px; padding: 0 10px; }
+.cf .part-flyout-buttons button.add { font-weight: 600; }
+.cf .part-flyout-buttons button.add.on { background: var(--accent); color: #1b1b1d; border-color: var(--accent); }
+.part-flyout-list { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; }
+.cf .part-flyout-list button { border: none; background: transparent; text-align: left; padding: 6px 8px; }
+.cf .part-flyout-list button:hover { background: var(--panel-2); }
