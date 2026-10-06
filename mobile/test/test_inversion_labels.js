@@ -31,7 +31,9 @@ var writes = [];
 var ls = {getItem: function () { return null; }, setItem: function (k, v) { writes.push([k, v]); }, removeItem: function () {}};
 global.window = {innerHeight: 800, addEventListener: function () {}};
 var ToneMock = {start: function () { return {then: function (cb) { cb(); return {catch: function () {}}; }}; }, Transport: {scheduleOnce: function (fn, t) { fn(t); return 1; }, scheduleRepeat: function () { return 1; }, clear: function () {}, bpm: {value: 100}, seconds: 0, start: function () {}, stop: function () {}, cancel: function () {}}, Draw: {schedule: function (fn) { fn(); }}};
-['PolySynth', 'Synth', 'MonoSynth', 'FMSynth', 'AMSynth', 'MembraneSynth', 'MetalSynth', 'NoiseSynth', 'Reverb', 'FeedbackDelay', 'Gain', 'Filter', 'Distortion', 'Chorus', 'Limiter'].forEach(function (n) { ToneMock[n] = function () { return proxyObj(); }; });
+['PolySynth', 'Synth', 'MonoSynth', 'FMSynth', 'AMSynth', 'MembraneSynth', 'MetalSynth', 'NoiseSynth', 'Reverb', 'FeedbackDelay', 'Gain', 'Filter', 'Distortion', 'Chorus', 'Limiter', 'CrossFade', 'Convolver'].forEach(function (n) { ToneMock[n] = function () { return proxyObj(); }; });
+ToneMock.ToneAudioBuffer = {fromArray: function () { return proxyObj(); }};
+ToneMock.context = {sampleRate: 8000, state: 'running', resume: function () { return Promise.resolve(); }};
 var api = new Function('document', 'localStorage', 'Tone', code +
   '\nreturn {S:function(){return state;}, buildChord:buildChord, defaultBlock:defaultBlock, applyDrops:applyDrops, MASTER_MODE_NAMES:MASTER_MODE_NAMES,' +
   ' renderEditor:renderEditor, setEditing:function(blocks){ editingBlocks = blocks; editingRef = {kind:"section", id:1}; currentView = "section"; state.currentIndex = 0; },' +
