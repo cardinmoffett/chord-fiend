@@ -1,0 +1,107 @@
+diff --git a/src/core.ts b/src/core.ts
+index 746f00a5bce5a5e9c4b436172016d50a8be0268a..c334d4f37fe579ce37baefd5c9103ba4694b99f4 100644
+--- a/src/core.ts
++++ b/src/core.ts
+@@ -126,6 +126,7 @@ function reply(selector: string, value: unknown): void {
+  * assume it was listening when state last changed - resend all of it.
+  */
+ function ui_ready(): void {
++  pageReady[replyWindow === null ? "" : replyWindow] = true;
+   reply("mode", MODE);
+   // The UI shows this next to its own baked-in version: a mismatch means a
+   // mixed install (stale .amxd instance vs newer extracted UI, or vice versa).
+@@ -594,6 +595,7 @@ function loadWebview(): void {
+     if (!url) return;
+     outlet(0, "url", url);
+     post("m4l-jweb: sent url " + url + "\n");
++    if (!pageReady[""]) watchPageLoad("", url);
+ 
+     loadWindows();
+   } catch (e) {
+@@ -657,9 +659,10 @@ function loadWindows(): void {
+  * and a visible second load.
+  */
+ function sendWindowUrl(winId: string, target: string): void {
+-  var url = encodeURI("file:///" + target) + "?v=" + encodeURIComponent(buildStamp());
++  var url = pageUrl(target) + "?v=" + encodeURIComponent(buildStamp());
+   if (sentWindowUrls[winId] === url) return;
+   sentWindowUrls[winId] = url;
++  watchPageLoad(winId, url);
+   messnamed("window-read-" + winId, "url", url);
+   post("m4l-jweb: window " + winId + " -> " + url + "\n");
+ }
+@@ -802,7 +805,73 @@ function resolveUiUrl(): string | null {
+   }
+   // Cache-buster: the URL changes per build, so Chromium can never serve a page
+   // it cached from a previous build of the same file path.
+-  return encodeURI("file:///" + target) + "?v=" + encodeURIComponent(buildStamp());
++  return pageUrl(target) + "?v=" + encodeURIComponent(buildStamp());
++}
++
++/**
++ * The file:// URL [jweb] needs for a path from `this.patcher.filepath`.
++ *
++ * On macOS Max reports paths in its own form, with the volume name in front:
++ * `Macintosh HD:/Users/me/Music/...`. Max's File accepts that, so extraction works,
++ * but Chromium does not: `file:///Macintosh%20HD:/Users/...` names nothing, and the
++ * page shows "Your file couldn't be accessed". Seen on Live 12 / Max 9 on a Mac.
++ *
++ * The boot volume's files live at `/`; any other volume is mounted under
++ * `/Volumes/<name>`. Max's path does not say which volume booted, so a path into
++ * the standard top-level folders is taken as the boot volume.
++ *
++ * Windows (`C:/...`) and plain POSIX paths produce exactly the URL they did before.
++ */
++function pageUrl(path: string): string {
++  var m = /^([^\/:]{2,}):\/(.*)$/.exec(path);
++  if (!m) return encodeURI("file:///" + path);
++  var rest = m[2];
++  var onBootVolume = /^(Users|Applications|Library|System|private|opt|Volumes)\//.test(rest);
++  var posix = onBootVolume ? "/" + rest : "/Volumes/" + m[1] + "/" + rest;
++  return encodeURI("file://" + posix);
++}
++
++/* ------------------------------------------------------------------ *
++ * Retrying a page that did not load
++ *
++ * On the Mac, the very first load of a device - the one that unpacks its page -
++ * sometimes left [jweb] on "Your file couldn't be accessed" until the device was
++ * reloaded, though the file was on disk by then. Every page this library serves
++ * says ui_ready once its script runs, so a page that has not said it within a
++ * couple of seconds did not load: point [jweb] at it again, with a fresh query so
++ * Chromium cannot answer from its error cache. Key "" is the device's own page;
++ * any other key is a window id.
++ * ------------------------------------------------------------------ */
++var pageReady: { [key: string]: boolean } = {};
++var pageUrls: { [key: string]: string } = {};
++var pageRetries = 0;
++var PAGE_RETRY_LIMIT = 3;
++var pageRetryTask = new Task(retryPages, this);
++
++function watchPageLoad(key: string, url: string): void {
++  pageUrls[key] = url;
++  pageRetries = 0;
++  pageRetryTask.cancel();
++  pageRetryTask.interval = 2000;
++  pageRetryTask.repeat(PAGE_RETRY_LIMIT + 1);
++}
++
++function retryPages(): void {
++  var waiting = false;
++  pageRetries++;
++  for (var key in pageUrls) {
++    if (!pageUrls.hasOwnProperty(key) || pageReady[key]) continue;
++    waiting = true;
++    if (pageRetries > PAGE_RETRY_LIMIT) {
++      post("m4l-jweb: page " + (key || "device") + " never said ui_ready - giving up after " + PAGE_RETRY_LIMIT + " retries\n");
++      continue;
++    }
++    var url = pageUrls[key] + "&retry=" + pageRetries;
++    post("m4l-jweb: page " + (key || "device") + " has not loaded - retry " + pageRetries + "\n");
++    if (key === "") outlet(0, "url", url);
++    else messnamed("window-read-" + key, "url", url);
++  }
++  if (!waiting || pageRetries > PAGE_RETRY_LIMIT) pageRetryTask.cancel();
+ }
+ 
+ /** The folder the .amxd lives in, derived from the patcher's own path. */

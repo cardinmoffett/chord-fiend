@@ -1,0 +1,11 @@
+{
+  "name": "@chord-fiend/engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chord Fiend's chord engine: chords, spelling, inversions, drops, and bass/drum patterns. No DOM, audio or storage.",
+  "type": "module",
+  "exports": "./src/engine.js",
+  "scripts": {
+    "test": "sh run_tests.sh"
+  }
+}

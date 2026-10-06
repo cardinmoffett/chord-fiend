@@ -1,0 +1,259 @@
+.cf {
+  --bg: #1b1b1d;
+  --panel: #242427;
+  --panel-2: #2d2d31;
+  --line: #3a3a3f;
+  --text: #e6e6e6;
+  --dim: #9a9aa2;
+  --accent: #f5a524;
+  --danger: #e5534b;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.cf button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.cf button:hover:not(:disabled) { border-color: #5a5a62; }
+.cf button:disabled { opacity: 0.35; cursor: default; }
+.cf button.danger { color: var(--danger); }
+.cf select, .cf input {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+/* ---------- transport ---------- */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.transport .where { display: flex; align-items: center; gap: 8px; min-width: 220px; font-weight: 600; }
+.transport .controls { display: flex; align-items: center; gap: 6px; }
+.transport .tbtn { width: 40px; height: 34px; padding: 0; font-size: 16px; }
+.transport .tbtn.on { background: var(--accent); color: #1b1b1d; border-color: var(--accent); }
+.transport .loopinfo { color: var(--dim); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transport .position { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 110px; }
+.transport .spacer { flex: 1; }
+.transport .sync { color: var(--dim); font-size: 12px; }
+.transport .sync .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #5cb85c; }
+.transport .sync.off .dot { background: #777; }
+
+/* ---------- views ---------- */
+.view { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.heading { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin: 4px 0 -4px; }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar .note { color: var(--dim); }
+.banner { background: #3a3220; border: 1px solid #6b5a2a; border-radius: 8px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; }
+
+/* song and section cards, as in the app */
+.cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.card {
+  position: relative;
+  width: 150px;
+  height: 74px;
+  background: var(--panel-2);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+.card .strip { position: absolute; top: 0; left: 0; right: 0; height: 7px; }
+.card .name { font-weight: 600; font-size: 15px; }
+.card .sub { color: var(--dim); font-size: 11px; margin-top: 2px; }
+.card .badge { position: absolute; top: 10px; right: 8px; font-size: 12px; color: var(--dim); }
+.card.selected { border-color: var(--accent); }
+.card.playing { box-shadow: 0 0 0 2px #7fd19b inset; }
+.card.add { background: transparent; border: 2px dashed var(--line); color: var(--dim); font-size: 26px; }
+
+.picker { position: relative; }
+.picker-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  margin-top: 4px;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.picker-menu button { display: block; width: 100%; text-align: left; border: none; background: transparent; }
+.picker-menu button:hover { background: var(--panel-2); }
+
+/* ---------- the block timeline: rows of 4 bars, width = length ---------- */
+.timeline { display: flex; flex-direction: column; gap: 6px; }
+.trow {
+  position: relative;
+  height: 62px;
+  border-radius: 8px;
+  background-color: #202023;
+  background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), #34343a calc(25% - 1px), #34343a 25%);
+}
+.block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 7px;
+  color: #17171a;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  user-select: none;
+}
+.block .deg { font-weight: 800; font-size: 18px; line-height: 1.1; white-space: nowrap; }
+.block .nm { font-size: 11px; opacity: 0.75; white-space: nowrap; }
+.block.cont { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.block.split { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.block.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.block.playing { outline: 3px solid #ffffffcc; outline-offset: -5px; }
+.block.applied { border-left: 5px solid #17171a88; }
+
+/* ---------- inspector ---------- */
+.inspector {
+  margin: 0;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+.inspector-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field.wide { grid-column: span 2; }
+.field-label { font-size: 11px; color: var(--dim); }
+.field select { width: 100%; }
+.inspector-actions { display: flex; gap: 6px; }
+.inspector-actions button { width: 38px; height: 34px; padding: 0; font-size: 15px; }
+.empty-hint { margin-top: auto; color: var(--dim); text-align: center; padding: 18px; border: 1px dashed var(--line); border-radius: 10px; }
+
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; width: fit-content; }
+.cf .segmented button { border: none; border-radius: 0; background: transparent; padding: 5px 12px; }
+.cf .segmented button.on { background: var(--accent); color: #1b1b1d; font-weight: 600; }
+
+/* ---------- settings drawer ---------- */
+.drawer-shade { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 20; }
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  z-index: 21;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.drawer h4 { margin: 8px 0 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
+.drawer .field select { width: 100%; }
+.activity { font-family: ui-monospace, monospace; font-size: 11px; color: var(--dim); white-space: pre-wrap; background: #18181a; border-radius: 6px; padding: 8px; min-height: 80px; }
+
+/* ---------- click-to-open dropdowns (see Dropdown.tsx) ---------- */
+.dd { position: relative; display: block; }
+.cf .dd-button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; padding: 5px 8px; }
+.dd-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-caret { color: var(--dim); font-size: 11px; }
+.dd-list {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 3px;
+  z-index: 30;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+.dd-list.up { top: auto; bottom: 100%; margin: 0 0 3px; }
+.cf .dd-option { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 6px 10px; white-space: nowrap; border-radius: 5px; }
+.cf .dd-option:hover:not(:disabled) { background: var(--panel-2); }
+.cf .dd-option.current { background: var(--accent); color: #1b1b1d; font-weight: 600; }
+
+fieldset.inspector.locked { opacity: 0.55; }
+.locked-note { color: var(--dim); }
+.confirm { display: inline-flex; gap: 8px; align-items: center; background: #3a2222; border: 1px solid #7a3a3a; border-radius: 8px; padding: 4px 8px; }
+/* Song view: the song builder at the top, the sections palette held at the bottom. */
+.song-view { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.palette { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.toolbar.slim { min-height: 32px; }
+.section-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- the song part menu: a flyout attached to the selected card ---------- */
+.song-view { padding-bottom: 14px; }
+.song-view > .cards { padding-bottom: 64px; } /* room for the flyout under the row */
+.card-wrap { position: relative; }
+.part-flyout {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  background: var(--panel);
+  border: 1px solid #55555c;
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+.part-flyout-arrow {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: var(--panel);
+  border-left: 1px solid #55555c;
+  border-top: 1px solid #55555c;
+  transform: rotate(45deg);
+}
+.part-flyout-buttons { display: flex; gap: 6px; }
+.cf .part-flyout-buttons button { min-width: 36px; height: 32px; padding: 0 10px; }
+.cf .part-flyout-buttons button.add { font-weight: 600; }
+.cf .part-flyout-buttons button.add.on { background: var(--accent); color: #1b1b1d; border-color: var(--accent); }
+.part-flyout-list { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; }
+.cf .part-flyout-list button { border: none; background: transparent; text-align: left; padding: 6px 8px; }
+.cf .part-flyout-list button:hover { background: var(--panel-2); }

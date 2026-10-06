@@ -1,0 +1,45 @@
+diff --git a/packages/wrapper/src/core.ts b/packages/wrapper/src/core.ts
+index 746f00a..abf4560 100644
+--- a/packages/wrapper/src/core.ts
++++ b/packages/wrapper/src/core.ts
+@@ -657,7 +657,7 @@ function loadWindows(): void {
+  * and a visible second load.
+  */
+ function sendWindowUrl(winId: string, target: string): void {
+-  var url = encodeURI("file:///" + target) + "?v=" + encodeURIComponent(buildStamp());
++  var url = pageUrl(target) + "?v=" + encodeURIComponent(buildStamp());
+   if (sentWindowUrls[winId] === url) return;
+   sentWindowUrls[winId] = url;
+   messnamed("window-read-" + winId, "url", url);
+@@ -802,7 +802,30 @@ function resolveUiUrl(): string | null {
+   }
+   // Cache-buster: the URL changes per build, so Chromium can never serve a page
+   // it cached from a previous build of the same file path.
+-  return encodeURI("file:///" + target) + "?v=" + encodeURIComponent(buildStamp());
++  return pageUrl(target) + "?v=" + encodeURIComponent(buildStamp());
++}
++
++/**
++ * The file:// URL [jweb] needs for a path from `this.patcher.filepath`.
++ *
++ * On macOS Max reports paths in its own form, with the volume name in front:
++ * `Macintosh HD:/Users/me/Music/...`. Max's File accepts that, so extraction works,
++ * but Chromium does not: `file:///Macintosh%20HD:/Users/...` names nothing, and the
++ * page shows "Your file couldn't be accessed". Seen on Live 12 / Max 9 on a Mac.
++ *
++ * The boot volume's files live at `/`; any other volume is mounted under
++ * `/Volumes/<name>`. Max's path does not say which volume booted, so a path into
++ * the standard top-level folders is taken as the boot volume.
++ *
++ * Windows (`C:/...`) and plain POSIX paths produce exactly the URL they did before.
++ */
++function pageUrl(path: string): string {
++  var m = /^([^\/:]{2,}):\/(.*)$/.exec(path);
++  if (!m) return encodeURI("file:///" + path);
++  var rest = m[2];
++  var onBootVolume = /^(Users|Applications|Library|System|private|opt|Volumes)\//.test(rest);
++  var posix = onBootVolume ? "/" + rest : "/Volumes/" + m[1] + "/" + rest;
++  return encodeURI("file://" + posix);
+ }
+ 
+ /** The folder the .amxd lives in, derived from the patcher's own path. */
