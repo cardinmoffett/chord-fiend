@@ -1,20 +1,19 @@
-# Chord Fiend
+# chord-fiend
 
-A Max for Live device for Ableton Live: a block editor for chord progressions that writes chords, bass and drums into Arrangement clips. The full plan is in [`docs/build-plan.md`](docs/build-plan.md).
+Modal Interchange Sketchpad: a phone-first web app for sketching chord progressions. Blocks are chords you can edit visually; it knows modal interchange and applied chords, generates drums and bass, and has a built-in Learn curriculum. One HTML file, plain JavaScript, no build step. Sound comes from Tone.js loaded from a CDN.
 
-## What's here
+## Try it
 
-- `docs/build-plan.md`: the build plan (what we're building, scope, build order, open decisions, technical notes).
-- `engine/`: the chord engine as a standalone package, taking key and mode as parameters (build plan step 4). See [`engine/README.md`](engine/README.md).
-- `device/`: the Max for Live device project (`m4l-jweb`). For now it builds the feel-test device. See [`device/README.md`](device/README.md).
-- `feel-test/`: the feel-test device to load in Live, with step-by-step instructions (build plan step 3). See [`feel-test/README.md`](feel-test/README.md).
-- `spike/`: four test devices to load in Live on the Mac, with step-by-step instructions (build plan step 2). See [`spike/README.md`](spike/README.md).
-- `original/`: a snapshot of the mobile web app taken on 2026-10-04, plus the six chord-engine tests. This is the reference copy and is not edited. See [`original/README.md`](original/README.md).
+Open `app/index.html` in a browser (it needs network access for Tone.js).
 
-## Run the tests
+## Test
 
-    sh engine/run_tests.sh      # the engine package: eight ok lines
-    sh original/run_tests.sh    # the original app: six ok lines
-    cd device && pnpm install && pnpm build && pnpm test    # the device
+    npm test
 
-The first two need Node only. The device needs Node 20+ and pnpm 10+.
+Needs Node only; there is nothing to install. See `CLAUDE.md` for how the tests work and what to watch for when changing the app.
+
+## Layout
+
+- `app/index.html`: the whole app.
+- `test/`: Node tests for the chord engine and spelling, plus `run-all.js` and `helpers/load-app.js`.
+- `original/`: frozen snapshot of the app and six tests taken 2026-10-04, kept as a reference. Do not edit.
