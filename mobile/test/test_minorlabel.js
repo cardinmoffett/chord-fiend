@@ -5,7 +5,7 @@ var doc = { getElementById:function(){return fakeEl();}, createElement:function(
 var ls = {getItem:function(){return null;}, setItem:function(){}};
 global.window = {innerHeight:800, addEventListener:function(){}};
 var ToneMock = { start:function(){return {then:function(){return{catch:function(){}};}};}, Transport:{scheduleOnce:function(fn,t){fn(t);return 1;},scheduleRepeat:function(){return 1;},clear:function(){},bpm:{value:100},seconds:0,start:function(){},stop:function(){},cancel:function(){}}, Draw:{schedule:function(fn){fn();}} };
-var api = new Function('document','localStorage','Tone', code + '\nreturn {S:function(){return state;}, appliedFunctionLabel:appliedFunctionLabel, defaultBlock:defaultBlock, MASTER_MODE_NAMES:MASTER_MODE_NAMES};')(doc, ls, ToneMock);
+var api = new Function('document','localStorage','Tone', code + '\nreturn {S:function(){return state;}, appliedFunctionLabel:function(b){return appliedFunctionLabel(b, state.masterModeIndex);}, defaultBlock:defaultBlock, MASTER_MODE_NAMES:MASTER_MODE_NAMES};')(doc, ls, ToneMock);
 var ok = true;
 function check(l,c){ console.log((c?'PASS':'FAIL')+'  '+l); if(!c) ok=false; }
 

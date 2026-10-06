@@ -4,7 +4,7 @@ Plain JavaScript with no dependencies. It builds chords from blocks, names and s
 
 ## Where it came from
 
-`src/engine.js` is copied line for line from `original/modal-sketchpad.html`. The only changes are the five functions that used to read the app's global `state`. They now take those settings as parameters:
+`src/engine.js` is used by both products: the Ableton device imports it, and the phone app carries a copy of it in `mobile/index.html` (refreshed with `npm run sync-engine` in `mobile/`). It was copied line for line from `original/modal-sketchpad.html`. The only changes are the five functions that used to read the app's global `state`. They now take those settings as parameters:
 
 | Function | New parameter | Was |
 | --- | --- | --- |

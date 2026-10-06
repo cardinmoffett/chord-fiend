@@ -3,7 +3,7 @@
 var fs = require('fs');
 var path = require('path');
 
-var APP = path.join(__dirname, '..', '..', 'app', 'index.html');
+var APP = path.join(__dirname, '..', '..', 'index.html');
 
 function innerCode() {
   var html = fs.readFileSync(APP, 'utf8');

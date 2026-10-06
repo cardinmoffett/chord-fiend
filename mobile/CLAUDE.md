@@ -6,29 +6,33 @@ The owner can code but is not a professional developer. Explain technical proble
 
 ## Commands
 
+Run these from `mobile/`.
+
 - `npm test` runs every test in `test/`. Node only, nothing to install. Run it before and after any change to chord logic, spelling, voicing or lessons.
 - `node test/run-all.js drops` runs only test files whose name contains "drops". Add `-v` for full output.
-- To try the app, open `app/index.html` in a browser (needs network for Tone.js).
+- `npm run sync-engine` copies the shared engine (`../engine/src/engine.js`) into `index.html`. Run it after any change to the engine; `test_engine_in_sync` fails until you do.
+- To try the app, open `index.html` in a browser (needs network for Tone.js).
 
 ## Layout
 
-- `app/index.html` is the whole app. Roughly: CSS lines 8-756, markup 758-956, one `<script>` from 957 to the end. The script uses `var` and function declarations throughout; match that style. Line numbers drift, so search by name:
-  - `keyPrefersFlats`, `applyDrops`, `buildChord`, `noteChoiceLabel`, `getChordSymbol`: the chord engine (about 1015-1200)
+- `index.html` is the whole app: CSS, markup, then one `<script>`. The script uses `var` and function declarations throughout; match that style. Search by name, not line number:
+  - The chord engine sits at the top of the script between the `SHARED ENGINE START` and `SHARED ENGINE END` markers. It is generated from `../engine/src/engine.js`: never edit it here. Change the engine there, run `npm run sync-engine`, and run the engine's tests too (`sh ../engine/run_tests.sh`), because the Ableton device uses the same engine.
   - `STORE_KEY`, `save`, `probeStorage`: persistence (about 1365-1430)
   - `SYNTH_BUILDERS`: the instruments (about 1606)
-  - `BUILTIN_BEAT_PATTERNS`, `scheduleBassForBlock`: drums and bass (about 1989-2150)
+  - `scheduleBassForBlock`, `playDrumStepAt`: drums and bass playback
   - `renderTimeline`, `snapEditorPanel`: the block timeline and the bottom editor drawer
   - `openSettings`, `applyStateToAudio`: settings and audio setup
   - `PROGRESSION_LIBRARY`, `BORROWED_CHORD_LIBRARY`, `CURRICULUM`, `switchToLearnHome`, `openLesson`: Learn (about 4494 to the end)
 - `test/` has the Node tests, `run-all.js`, and `helpers/load-app.js`.
-- `original/` is a frozen snapshot (app plus six tests) taken 2026-10-04 as a reference for the Ableton device rebuild. Do not edit it.
+- `tools/sync-engine.js` writes the shared engine block.
+- `../original/` is a frozen snapshot (app plus six tests) taken 2026-10-04. Do not edit it.
 
 ## How the model works
 
 - `state` is the active project's data object. `projectsStore` holds all projects and is saved to localStorage under `modalSketchpadProjects`.
 - A song is sections of blocks. A block has fields such as `degreeIndex`, `chordSource` ("diatonic" or "applied"), `appliedTargetIndex`, `appliedFunction`, `extensionIndex` and `blockModeIndex`. See `defaultBlock()` for the full list.
-- `buildChord(block, masterRootIndex, masterModeIndex)` is pure. It reaches only `applyDrops`, `buildExtendedScale`, `chordToneLabel` and `chordToneRoles`, and touches no state, DOM or audio. Keep it that way: the Ableton device will reuse this engine, with key and mode passed in as parameters.
-- A few engine-adjacent functions still read `state`: `getChordSymbol` (key, for sharp or flat spelling), `appliedFunctionLabel` (mode), and the bass helpers `bassOctaveShift` and `computeBassPitchForBlock`. Prefer passing values in over reading `state` when you touch them.
+- The engine never reads `state`, the DOM or audio. Functions that need the key, mode or bass settings take them as parameters, and the app passes them in: `getChordSymbol(chord, state.masterRootIndex)`, `appliedFunctionLabel(block, state.masterModeIndex)`, `activeBeatPattern(beatKey, state.customBeatPatterns)`, `bassOctaveShift(rootPitch, state.bassWrapLow)`, `computeBassPitchForBlock(block, chord, pattern, state.bassWrapLow)`.
+- The engine also supports two block fields the phone app's editor does not offer yet: `flat5` and `chordSource: "free"`. See `../engine/README.md`.
 
 ## Things that have bitten before
 
@@ -46,15 +50,16 @@ The owner can code but is not a professional developer. Explain technical proble
 - Tests load the app's script body (`test/helpers/load-app.js`) into `new Function('document', 'localStorage', 'Tone', code + '\nreturn {...}')` with a mock DOM and a mock Tone. To test an internal function, add it to that returned object in the test.
 - A test ends by printing `ALL PASSED` or `SOME FAILED`, and prints failures as lines starting `FAIL`. `run-all.js` reads those markers; the tests do not set an exit code themselves.
 - Write expected values from music theory, independent of the code under test, never copied from its output.
-- Only six tests are in this repo: applied chords, spelling (`test_enharmonic2`), applied-chord labels, the lesson 7th-chord fix, inversion labels, and drop voicings. Earlier work also had tests for gestures, scrolling, the drawer, audio, persistence, instruments and the rest of the curriculum, but they were not recovered. Do not assume those areas are covered; add a test when you change them.
+- `test_engine_in_sync` checks that the engine block matches `../engine/src/engine.js`.
+- The other six tests: applied chords, spelling (`test_enharmonic2`), applied-chord labels, the lesson 7th-chord fix, inversion labels, and drop voicings. Earlier work also had tests for gestures, scrolling, the drawer, audio, persistence, instruments and the rest of the curriculum, but they were not recovered. Do not assume those areas are covered; add a test when you change them.
 
 ## Where it runs today
 
 The app is published as a Claude artifact and used on an iPhone in Safari. It has no web manifest and no service worker, so it is not an installable PWA. Hosting for this repo is undecided. Moving to a different URL means a different origin, so the user's saved songs (localStorage) would not follow. Add a project export and import before changing where the app is served.
 
-## What comes next
+## The other product in this repo
 
-An Ableton Live device (Max for Live) that reuses this chord engine and block editor and writes the result into Arrangement clips. The plan is the "Block Editor for Ableton: Build Plan" doc. The step that affects this repo is extracting the engine into a shared package with key and mode as parameters, with these tests moving alongside it.
+This repo also holds the Ableton Live device (`../device/`, plan in `../docs/build-plan.md`). The two products share only the chord engine in `../engine/`. A change there affects both, so run both test suites. The device's step 7 pastes projects in from this app, so treat the saved project format as shared too.
 
 ## Git
 

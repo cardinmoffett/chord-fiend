@@ -5,7 +5,7 @@ global.window = {innerHeight: 800, addEventListener:function(){}};
 var doc = { getElementById:function(){return fakeEl();}, createElement:function(t){return fakeEl(t);}, querySelectorAll:function(){return[];}, body:{appendChild:function(){}}, addEventListener:function(){} };
 var ls = {getItem:function(){return null;}, setItem:function(){}};
 var ToneMock = { start:function(){return {then:function(){return{catch:function(){}};}};}, Transport:{scheduleOnce:function(fn,t){fn(t);return 1;},scheduleRepeat:function(){return 1;},clear:function(){},bpm:{value:100},seconds:0,start:function(){},stop:function(){},cancel:function(){}}, Draw:{schedule:function(fn){fn();}} };
-var api = new Function('document','localStorage','Tone', code + '\nreturn {buildChord:buildChord, defaultBlock:defaultBlock, getChordSymbol:getChordSymbol, appliedFunctionLabel:appliedFunctionLabel, chordTonePitch:chordTonePitch, DEGREE_NAMES:DEGREE_NAMES, pitchToNoteName:pitchToNoteName};')(doc, ls, ToneMock);
+var api = new Function('document','localStorage','Tone', code + '\nreturn {buildChord:buildChord, defaultBlock:defaultBlock, getChordSymbol:function(c){return getChordSymbol(c, state.masterRootIndex);}, appliedFunctionLabel:function(b){return appliedFunctionLabel(b, state.masterModeIndex);}, chordTonePitch:chordTonePitch, DEGREE_NAMES:DEGREE_NAMES, pitchToNoteName:pitchToNoteName};')(doc, ls, ToneMock);
 var ok = true;
 function check(l,c){ console.log((c?'PASS':'FAIL')+'  '+l); if(!c) ok=false; }
 function applied(overrides) { return Object.assign(api.defaultBlock(), {chordSource:"applied"}, overrides); }

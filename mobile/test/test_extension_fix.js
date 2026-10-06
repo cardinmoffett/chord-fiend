@@ -5,7 +5,7 @@ var doc = { getElementById:function(){return fakeEl();}, createElement:function(
 var ls = {getItem:function(){return null;}, setItem:function(){}};
 global.window = {innerHeight:800, addEventListener:function(){}};
 var ToneMock = { start:function(){return {then:function(){return{catch:function(){}};}};}, Transport:{scheduleOnce:function(fn,t){fn(t);return 1;},scheduleRepeat:function(){return 1;},clear:function(){},bpm:{value:100},seconds:0,start:function(){},stop:function(){},cancel:function(){}}, Draw:{schedule:function(fn){fn();}} };
-var api = new Function('document','localStorage','Tone', code + '\nreturn {CURRICULUM:CURRICULUM, buildChord:buildChord, getChordSymbol:getChordSymbol};')(doc, ls, ToneMock);
+var api = new Function('document','localStorage','Tone', code + '\nreturn {CURRICULUM:CURRICULUM, buildChord:buildChord, getChordSymbol:function(c){return getChordSymbol(c, state.masterRootIndex);}};')(doc, ls, ToneMock);
 var ok = true;
 function check(l,c){ console.log((c?'PASS':'FAIL')+'  '+l); if(!c) ok=false; }
 function findLesson(id){ var f=null; api.CURRICULUM.forEach(function(u){(u.lessons||[]).forEach(function(l){if(l.id===id)f=l;});}); return f; }

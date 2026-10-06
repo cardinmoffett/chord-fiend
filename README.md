@@ -1,19 +1,18 @@
-# chord-fiend
+# Chord Fiend
 
-Modal Interchange Sketchpad: a phone-first web app for sketching chord progressions. Blocks are chords you can edit visually; it knows modal interchange and applied chords, generates drums and bass, and has a built-in Learn curriculum. One HTML file, plain JavaScript, no build step. Sound comes from Tone.js loaded from a CDN.
+Two products built on one chord engine.
 
-## Try it
+| Folder | What it is |
+| --- | --- |
+| `mobile/` | **The phone app** (Modal Interchange Sketchpad). One HTML file, used on iPhone. See [`mobile/CLAUDE.md`](mobile/CLAUDE.md). |
+| `device/`, `feel-test/`, `spike/`, `docs/` | **The Ableton Live device** (Max for Live). Plan: [`docs/build-plan.md`](docs/build-plan.md). See [`device/README.md`](device/README.md). |
+| `engine/` | **The shared chord engine** both products use. See [`engine/README.md`](engine/README.md). |
+| `original/` | Frozen copy of the phone app from 2026-10-04. Reference only. |
 
-Open `app/index.html` in a browser (it needs network access for Tone.js).
+## Run the tests
 
-## Test
+    cd mobile && npm test                     # the phone app
+    sh engine/run_tests.sh                    # the shared engine
+    cd device && pnpm install && pnpm build && pnpm test    # the Ableton device
 
-    npm test
-
-Needs Node only; there is nothing to install. See `CLAUDE.md` for how the tests work and what to watch for when changing the app.
-
-## Layout
-
-- `app/index.html`: the whole app.
-- `test/`: Node tests for the chord engine and spelling, plus `run-all.js` and `helpers/load-app.js`.
-- `original/`: frozen snapshot of the app and six tests taken 2026-10-04, kept as a reference. Do not edit.
+The first two need Node only. The device needs Node 20+ and pnpm 10+.
