@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#10121b"/>
+  <!-- four chord blocks, stacked like notes in a chord, inside the maskable safe zone -->
+  <rect x="112" y="300" width="64" height="96"  rx="14" fill="#ffb454"/>
+  <rect x="192" y="236" width="64" height="160" rx="14" fill="#5eb1bf"/>
+  <rect x="272" y="172" width="64" height="224" rx="14" fill="#8b6fd6"/>
+  <rect x="352" y="116" width="48" height="280" rx="14" fill="#e0567a"/>
+</svg>
