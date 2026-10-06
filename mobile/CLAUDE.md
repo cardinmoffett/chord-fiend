@@ -1,6 +1,6 @@
 # Chord Fiend: Modal Interchange Sketchpad (the phone app)
 
-A single-file, touch-first web app for sketching chord progressions. Blocks are chords you edit visually. It does modal interchange, applied chords (secondary dominants, tritone substitutions, leading-tone), auto-generated drums and bass, and has a built-in Learn curriculum (40 lessons in 9 units). Plain JavaScript, no build step. Sound is Tone.js 14.8.49 from cdnjs.
+A single-file, touch-first web app for sketching chord progressions. Blocks are chords you edit visually. It does modal interchange, applied chords (secondary dominants, tritone substitutions, leading-tone), auto-generated drums and bass, and has a built-in Learn curriculum (40 lessons in 9 units). Plain JavaScript, no build step. Sound is Tone.js 14.8.49, bundled in `vendor/Tone.js`.
 
 The owner can code but is not a professional developer. Explain technical problems in plain language, and say what you verified and what you assumed.
 
@@ -11,7 +11,7 @@ Run these from `mobile/`.
 - `npm test` runs every test in `test/`. Node only, nothing to install. Run it before and after any change to chord logic, spelling, voicing or lessons.
 - `node test/run-all.js drops` runs only test files whose name contains "drops". Add `-v` for full output.
 - `npm run sync-engine` copies the shared engine (`../engine/src/engine.js`) into `index.html`. Run it after any change to the engine; `test_engine_in_sync` fails until you do.
-- To try the app, open `index.html` in a browser (needs network for Tone.js).
+- To try the app, open `index.html` in a browser, or run `python3 -m http.server` here and open http://localhost:8000 to test the installable (PWA) version, offline cache included.
 
 ## Layout
 
@@ -25,6 +25,7 @@ Run these from `mobile/`.
   - `PROGRESSION_LIBRARY`, `BORROWED_CHORD_LIBRARY`, `CURRICULUM`, `switchToLearnHome`, `openLesson`: Learn (about 4494 to the end)
 - `test/` has the Node tests, `run-all.js`, and `helpers/load-app.js`.
 - `tools/sync-engine.js` writes the shared engine block.
+- `manifest.webmanifest`, `sw.js` (offline cache), `icons/`, `vendor/Tone.js`: what makes it an installable app. When you add a file the app loads, add it to `FILES` in `sw.js` and to the copy step in `../.github/workflows/pages.yml`, and bump `VERSION` in `sw.js`.
 - `../original/` is a frozen snapshot (app plus six tests) taken 2026-10-04. Do not edit it.
 
 ## How the model works
@@ -53,9 +54,15 @@ Run these from `mobile/`.
 - `test_engine_in_sync` checks that the engine block matches `../engine/src/engine.js`.
 - The other six tests: applied chords, spelling (`test_enharmonic2`), applied-chord labels, the lesson 7th-chord fix, inversion labels, and drop voicings. Earlier work also had tests for gestures, scrolling, the drawer, audio, persistence, instruments and the rest of the curriculum, but they were not recovered. Do not assume those areas are covered; add a test when you change them.
 
-## Where it runs today
+## Where it runs
 
-The app is published as a Claude artifact and used on an iPhone in Safari. It has no web manifest and no service worker, so it is not an installable PWA. Hosting for this repo is undecided. Moving to a different URL means a different origin, so the user's saved songs (localStorage) would not follow. Add a project export and import before changing where the app is served.
+GitHub Pages, published by `../.github/workflows/pages.yml` on every push to `main` that touches `mobile/`. The workflow runs `npm test` first and publishes nothing if a test fails. It is an installable PWA: on iPhone, open it in Safari, then Share, then Add to Home Screen. After that it works offline.
+
+Updates: the service worker serves the cached copy first and fetches the new one in the background, so a change appears the second time the app is opened after a deploy.
+
+Saved songs live in localStorage for the site's address. An app installed to the home screen on iPhone keeps its own storage, separate from Safari. Changing the address (a new repo name, a custom domain) starts with empty storage, so add project export and import before doing that.
+
+The older Claude artifact copy (https://claude.ai/artifact/F6oZBUNT4tebBavXtTXN6V) is no longer updated.
 
 ## The other product in this repo
 
@@ -63,4 +70,4 @@ This repo also holds the Ableton Live device (`../device/`, plan in `../docs/bui
 
 ## Git
 
-Work on a branch and push the branch. Ask before changing `main`.
+Work on a branch and push it. Changes reach `main` through a pull request, and merging to `main` publishes the app.
