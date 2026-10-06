@@ -14,6 +14,23 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <script src="vendor/Tone.js"></script>
 <script>
+  // Opened from the iPhone home screen, iOS can lay the page out shorter than the screen
+  // (by the status bar's height), leaving a strip at the bottom. Fill the real screen height.
+  // In Safari, or where iOS gets it right, this changes nothing.
+  (function () {
+    var standalone = window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (!standalone) return;
+    function fit() {
+      var portrait = window.innerHeight >= window.innerWidth;
+      var full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      document.documentElement.style.height = (window.innerHeight < full ? full : window.innerHeight) + "px";
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    window.addEventListener("orientationchange", function () { setTimeout(fit, 300); });
+  })();
+
   // Offline support when served over https (GitHub Pages); skipped when the file is opened directly.
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
@@ -391,6 +408,10 @@
   }
   .seg.sounding { filter: brightness(1.25); }
   .seg:active { filter: brightness(0.9); }
+
+  /* The chord editor pads itself for the home indicator, so the section view must not
+     add the body's bottom padding as well (that showed as an empty strip under the editor). */
+  body:has(#sectionViewContainer:not(.hidden-view)) { padding-bottom: 0; }
 
   .empty-row {
     width: 100%;
@@ -2026,7 +2047,63 @@ function delayTimeSeconds() {
   return beats * (60 / (state.tempo || 100));
 }
 
+// The reverb, built by hand instead of with Tone.Reverb. Tone.Reverb renders its impulse
+// response in an OfflineAudioContext, and on iPhone a home-screen (standalone) web app left
+// the chords silent while bass and drums, which skip the reverb, still played. This makes
+// the same impulse Tone.Reverb does (stereo white noise, a 10 ms pre-delay, then Tone's
+// exponential-approach decay) directly in JavaScript, so nothing waits on offline rendering.
+// It keeps the two things the rest of the app uses: .wet.value and .decay.
+var REVERB_PRE_DELAY = 0.01;
+function reverbImpulse(decay) {
+  var rate = Tone.context.sampleRate;
+  var length = Math.max(1, Math.round((decay + REVERB_PRE_DELAY) * rate));
+  var timeConstant = Math.log(decay + 1) / Math.log(200);
+  var holdUntil = REVERB_PRE_DELAY + 0.9 * decay;
+  var holdLevel = Math.exp(-(0.9 * decay) / timeConstant);
+  var channels = [new Float32Array(length), new Float32Array(length)];
+  for (var i = 0; i < length; i++) {
+    var t = i / rate, env;
+    if (t < REVERB_PRE_DELAY) env = 0;
+    else if (t < holdUntil) env = Math.exp(-(t - REVERB_PRE_DELAY) / timeConstant);
+    else env = holdLevel * Math.max(0, 1 - (t - holdUntil) / (0.1 * decay));
+    channels[0][i] = (Math.random() * 2 - 1) * env;
+    channels[1][i] = (Math.random() * 2 - 1) * env;
+  }
+  return Tone.ToneAudioBuffer.fromArray(channels);
+}
+function makeReverb(decay, wet) {
+  var input = new Tone.Gain();
+  var mix = new Tone.CrossFade(wet);
+  var convolver = new Tone.Convolver();
+  convolver.buffer = reverbImpulse(decay);
+  input.connect(mix.a);
+  input.connect(convolver);
+  convolver.connect(mix.b);
+  var currentDecay = decay;
+  return {
+    input: input,
+    wet: mix.fade,
+    connect: function (dest) { mix.connect(dest); return this; },
+    get decay() { return currentDecay; },
+    set decay(d) { currentDecay = d; convolver.buffer = reverbImpulse(d); }
+  };
+}
+
+// If any effect fails to build, chords still need a way out: straight to the speakers.
 function ensureEffectsChain() {
+  try {
+    buildEffectsChain();
+  } catch (e) {
+    logAudio("effects chain failed, chords will play dry:", String(e && e.message || e));
+    masterLimiter = new Tone.Gain();
+    masterLimiter.toDestination();
+    masterSaturation = new Tone.Gain();
+    masterSaturation.connect(masterLimiter);
+    masterHighpass = masterSaturation;
+  }
+}
+
+function buildEffectsChain() {
   if (!masterHighpass) {
     // Subtle saturation for analog-style warmth -- a LOW amount, meant to be
     // felt more than heard, not obvious distortion.
@@ -2038,7 +2115,7 @@ function ensureEffectsChain() {
     // one-dimensional tone into something that feels bigger.
     masterChorus = new Tone.Chorus({frequency: 1.1, delayTime: 3.5, depth: 0.45, wet: 0.35}).start();
     masterDelay = new Tone.FeedbackDelay({delayTime: delayTimeSeconds(), feedback: state.delayFeedback, wet: state.delayWet});
-    masterReverb = new Tone.Reverb({decay: state.reverbDecay, wet: state.reverbWet});
+    masterReverb = makeReverb(state.reverbDecay, state.reverbWet);
     // Brickwall safety net -- protects against clipping regardless of how
     // many voices/oscillators stack up (chords, fat oscillators, etc.).
     masterLimiter = new Tone.Limiter(-1);
@@ -2046,7 +2123,7 @@ function ensureEffectsChain() {
     masterSaturation.connect(masterHighpass);
     masterHighpass.connect(masterChorus);
     masterChorus.connect(masterDelay);
-    masterDelay.connect(masterReverb);
+    masterDelay.connect(masterReverb.input);
     masterReverb.connect(masterLimiter);
     masterLimiter.toDestination();
   }
@@ -2103,7 +2180,12 @@ function ensureBassSynth() {
 // underlying reason raw AudioContext needed resume() -- and same risk of
 // silent failure if something plays before that start() has really finished.
 function ensureAudioReady(callback) {
-  if (toneReady) { callback(); return; }
+  if (toneReady) {
+    // iPhone can suspend or interrupt the audio context (backgrounding, a call); wake it first.
+    if (Tone.context.state !== "running") Tone.context.resume().then(callback, callback);
+    else callback();
+    return;
+  }
   Tone.start().then(function () {
     toneReady = true;
     ensureEffectsChain();
