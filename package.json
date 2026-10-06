@@ -1,0 +1,9 @@
+{
+  "name": "chord-fiend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modal Interchange Sketchpad: a phone-first chord sketchpad with applied chords, auto drums and bass, and a Learn curriculum",
+  "scripts": {
+    "test": "node test/run-all.js"
+  }
+}
