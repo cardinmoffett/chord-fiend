@@ -1023,6 +1023,10 @@
       <label>Melody sound</label>
       <select id="melodyInstrumentSelect"></select>
     </div>
+    <div class="settings-row">
+      <label id="melodyVolumeLabel">Melody volume</label>
+      <input type="range" id="melodyVolumeSlider" min="-18" max="12" step="1">
+    </div>
     <div class="settings-hint">The voice that plays the melody in Reharmonization lessons.</div>
 
     <div class="settings-section">Bass</div>
@@ -1678,6 +1682,7 @@ function freshState() {
   tempo: 100,
   instrument: "soft",
   melodyInstrument: "epiano", // the melody lane's voice (Reharmonization lessons); any SYNTH_BUILDERS key
+  melodyVolume: 0, // dB, on top of the melody voice's own level (-18 to +12)
   palette: "sunset",
   drumBeat: "rock", // one of BUILTIN_BEAT_PATTERNS' keys, or "off"
   customBeatPatterns: {}, // per-project overrides written by the rhythm editor
@@ -2898,13 +2903,19 @@ function followPlayhead(scroller, x) {
 // built from the same instrument list as the chords, a little louder so the line
 // stands out over them.
 var melodySynth = null;
+var melodyBaseVolume = 0;  // the instrument builder's own level, before lift and the slider
 var MELODY_LIFT_DB = 3;
 function ensureMelodySynth() {
   if (melodySynth) return;
   var build = SYNTH_BUILDERS[state.melodyInstrument] || SYNTH_BUILDERS.epiano;
   melodySynth = build();
-  melodySynth.volume.value += MELODY_LIFT_DB;
+  melodyBaseVolume = melodySynth.volume.value;
+  applyMelodyVolume();
   melodySynth.connect(masterHighpass);
+}
+// Live, so the Melody volume slider is audible mid-playback.
+function applyMelodyVolume() {
+  if (melodySynth) melodySynth.volume.value = melodyBaseVolume + MELODY_LIFT_DB + (state.melodyVolume || 0);
 }
 function rebuildMelodySynth() {
   if (melodySynth) { try { melodySynth.dispose(); } catch (e) {} }
@@ -3975,6 +3986,8 @@ function openSettings() {
   showTempo(state.tempo);
   instrumentSelect.value = state.instrument;
   melodyInstrumentSelect.value = SYNTH_BUILDERS[state.melodyInstrument] ? state.melodyInstrument : "epiano";
+  melodyVolumeSlider.value = state.melodyVolume || 0;
+  melodyVolumeLabel.textContent = "Melody volume (" + dbText(state.melodyVolume || 0) + ")";
   syncInstrumentVolumeControl();
   paletteSelect.value = state.palette;
   drumBeatSelect.value = state.drumBeat;
@@ -4074,6 +4087,17 @@ instrumentSelect.addEventListener("change", function () {
   if (toneReady) rebuildSynth(); // otherwise the current synth instance would keep the OLD instrument until next reload
   syncInstrumentVolumeControl(); // show THIS instrument's remembered volume, not the previous one's
   previewCurrentBlock();
+});
+var melodyVolumeSlider = document.getElementById("melodyVolumeSlider");
+var melodyVolumeLabel = document.getElementById("melodyVolumeLabel");
+melodyVolumeSlider.addEventListener("input", function () {
+  state.melodyVolume = parseInt(melodyVolumeSlider.value, 10) || 0;
+  melodyVolumeLabel.textContent = "Melody volume (" + dbText(state.melodyVolume) + ")";
+  applyMelodyVolume();
+  save();
+});
+melodyVolumeSlider.addEventListener("change", function () {
+  if (!playback.active) playMelodyNote(4, 0.5); // hear the new level once the finger lifts
 });
 melodyInstrumentSelect.addEventListener("change", function () {
   state.melodyInstrument = melodyInstrumentSelect.value;
