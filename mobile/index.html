@@ -2719,9 +2719,9 @@ function rollRange(notes) {
   return {lo: lo, hi: hi};
 }
 
-function renderLane() {
-  var oldLane = document.getElementById("laneScroll");
-  var keepScrollLeft = oldLane ? oldLane.scrollLeft : 0;
+// keepScrollLeft: where the lane was scrolled before this redraw (read by renderTimeline
+// before it clears the timeline), so an edit doesn't snap the view back to the start.
+function renderLane(keepScrollLeft) {
 
   var totalBeats = 0;
   var segs = editingBlocks.map(function (block, blockIndex) {
@@ -2925,6 +2925,9 @@ function renderTimeline() {
   masterModeSelect.value = state.masterModeIndex;
 
   var rows = computeRows();
+  // The melody lane is rebuilt below; remember where it was scrolled first.
+  var oldLane = document.getElementById("laneScroll");
+  var laneScrollLeft = oldLane ? oldLane.scrollLeft : 0;
   timeline.innerHTML = "";
 
   // A lesson's intro and reveal flow as the FIRST content inside the same
@@ -2954,7 +2957,7 @@ function renderTimeline() {
     return;
   }
 
-  if (isMelodyLesson()) { renderLane(); return; }
+  if (isMelodyLesson()) { renderLane(laneScrollLeft); return; }
 
   rows.forEach(function (rowSegs, rowIdx) {
     var row = document.createElement("div");
