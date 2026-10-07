@@ -1,14 +1,7 @@
 import {
-  BLOCK_MODE_NAMES,
-  EXTENSION_NAMES,
-  MASTER_MODE_NAMES,
-  buildChord,
+  blockLabel as engineBlockLabel,
   defaultBlock,
-  degreeLabels,
-  getChordSymbol,
   getDurationBeats,
-  keyPrefersFlats,
-  pitchToNoteName,
   type Block,
 } from "../../../../engine/src/engine.js";
 import { sectionToNotes, type Note } from "../../../../engine/src/notes.js";
@@ -272,33 +265,10 @@ export function blockColor(b: Block): string {
 
 /* ---------------- block labels ---------------- */
 
-const FUNCTION_SHORT: Record<string, string> = { dominant: "V", tritoneSub: "subV", leadingTone: "vii\u00B0" };
-const QUALITY_SHORT: Record<string, string> = { major: "", minor: "m", dominant: "7", diminished: "\u00B0" };
-
 /**
  * What a block shows: `degree` large (the chord's job in the key: V7, \u266DVI, V/ii) and
- * `name` small (the chord itself: G7, A\u266D, A7).
+ * `name` small (the chord itself: G7, A\u266D, A7). Shared with the phone app via the engine.
  */
 export function blockLabel(b: Block, song: Song): { degree: string; name: string } {
-  const chord = buildChord(b, song.rootIndex, song.modeIndex);
-  const name = getChordSymbol(chord, song.rootIndex).replace(/ \(.*\)$/, "");
-  const ext = EXTENSION_NAMES[b.extensionIndex];
-  const extMark = ext === "triad" ? "" : ext;
-  const susMark = b.susIndex === 1 ? "sus2" : b.susIndex === 2 ? "sus4" : "";
-  const fifthMark = chord.aug ? "+" : chord.flat5 ? "\u266D5" : "";
-  let degree: string;
-  if (b.chordSource === "applied") {
-    const target = degreeLabels(MASTER_MODE_NAMES[song.modeIndex])[b.appliedTargetIndex] ?? "?";
-    const fn = FUNCTION_SHORT[b.appliedFunction] ?? "V";
-    degree = `${fn}${b.appliedFunction === "leadingTone" ? "7" : extMark}${susMark}${fifthMark}/${target}`;
-  } else if (b.chordSource === "free") {
-    const root = pitchToNoteName(b.freeRoot ?? 0, keyPrefersFlats(song.rootIndex, song.modeIndex)).replace("#", "\u266F");
-    const q = b.freeQuality ?? "major";
-    const qMark = q === "dominant" ? (extMark || "7") : QUALITY_SHORT[q] + (q === "major" && extMark && extMark !== "6" ? "maj" + extMark : extMark);
-    degree = `${root}${qMark}${susMark}${fifthMark}`;
-  } else {
-    const mode = b.blockModeIndex ? BLOCK_MODE_NAMES[b.blockModeIndex] : MASTER_MODE_NAMES[song.modeIndex];
-    degree = `${degreeLabels(mode)[b.degreeIndex]}${extMark}${susMark}${fifthMark}`;
-  }
-  return { degree, name };
+  return engineBlockLabel(b, song.rootIndex, song.modeIndex);
 }

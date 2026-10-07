@@ -45,10 +45,11 @@ function appShape(ch) {
 }
 
 console.log('=== constants ===');
-// Names the app never had (free mode) are the engine's own additions, checked in test_free_flat5.
+// Names the app never had are the engine's own additions: free mode (checked in test_free_flat5)
+// and blockLabel (checked in test_block_label).
 var additions = names.filter(function (n) { return orig[n] === undefined; });
 names.forEach(function (n) { if (typeof engine[n] !== 'function' && additions.indexOf(n) < 0) same(n, orig[n], engine[n]); });
-same('the only additions are the free-mode constants', additions, ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS']);
+same('the only additions are free mode and blockLabel', additions, ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'blockLabel']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 

@@ -234,7 +234,9 @@ describe("block labels: the degree large, the chord name small", () => {
     expect(label({ chordSource: "free", freeRoot: 4, freeQuality: "major" })).toEqual({ degree: "E", name: "E" });
     expect(label({ chordSource: "free", freeRoot: 5, freeQuality: "minor", extensionIndex: 2 }).degree).toBe("Fm7");
     expect(label({ chordSource: "free", freeRoot: 0, freeQuality: "major", extensionIndex: 2 }).degree).toBe("Cmaj7");
-    expect(label({ chordSource: "free", freeRoot: 10, freeQuality: "dominant" }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("B\u266D7");
+    // A dominant triad is B\u266D-D-F with no 7th, so it reads as B\u266D until a 7th is added.
+    expect(label({ chordSource: "free", freeRoot: 10, freeQuality: "dominant" }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("B\u266D");
+    expect(label({ chordSource: "free", freeRoot: 10, freeQuality: "dominant", extensionIndex: 2 }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("B\u266D7");
     expect(label({ chordSource: "free", freeRoot: 11, freeQuality: "diminished", extensionIndex: 2 })).toEqual({ degree: "B\u00B07", name: "Bdim7" });
   });
 });
