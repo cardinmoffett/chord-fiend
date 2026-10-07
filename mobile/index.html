@@ -358,6 +358,48 @@
       compressing to fit anyway. */
   }
 
+  /* The section is one wide lane: time runs left to right at a fixed width per beat
+     (BEAT_PX), and the lane scrolls sideways. A beat ruler with bar numbers sits on
+     top, the chord blocks in one strip below, and a playhead runs through both. */
+  .lane-scroll {
+    width: 100%;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .lane-scroll::-webkit-scrollbar { display: none; }
+  .lane { position: relative; }
+  .beat-ruler { position: relative; height: 18px; touch-action: pan-x; }
+  .beat-ruler .bar {
+    position: absolute; top: 0; bottom: 0;
+    border-left: 1px solid var(--line);
+    padding-left: 4px;
+    font-size: 10px; line-height: 18px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .beat-ruler .beat { position: absolute; bottom: 0; height: 5px; border-left: 1px solid var(--line-soft); }
+  .block-strip {
+    display: flex;
+    height: 56px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .block-strip .seg { margin-right: 2px; touch-action: pan-x pan-y; }
+  .playhead {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    width: 2px; margin-left: -1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(255,180,84,0.8);
+    pointer-events: none;
+    display: none;
+    will-change: transform;
+  }
+
   .row .segments {
     flex: 1;
     display: flex;
@@ -2415,37 +2457,12 @@ function cumulativeBeatsBeforeIndex(idx) {
    ============================================================ */
 
 var BEATS_PER_MEASURE = 4;
-var MEASURES_PER_ROW = 2;
-var BEATS_PER_ROW = BEATS_PER_MEASURE * MEASURES_PER_ROW;
+// Width of one beat in the section lane. About what the old two-bars-per-row layout
+// gave a beat on a phone, so blocks keep roughly their old size.
+var BEAT_PX = 44;
+// Empty room after the last block, so it can be scrolled away from the screen edge.
+var LANE_TAIL_PX = 120;
 
-function computeRows() {
-  var rows = [];
-  var cursor = 0;
-  editingBlocks.forEach(function (block, blockIndex) {
-    var dur = getDurationBeats(block);
-    var remaining = dur;
-    var segStart = cursor;
-    var totalDur = dur;
-    while (remaining > 0.0001) {
-      var rowIndex = Math.floor(segStart / BEATS_PER_ROW);
-      var posInRow = segStart - rowIndex * BEATS_PER_ROW;
-      var spaceInRow = BEATS_PER_ROW - posInRow;
-      var segLen = Math.min(remaining, spaceInRow);
-      if (!rows[rowIndex]) rows[rowIndex] = [];
-      rows[rowIndex].push({
-        blockIndex: blockIndex,
-        posInRow: posInRow,
-        segLen: segLen,
-        isFirst: Math.abs(segStart - cursor) < 0.0001,
-        isLast: remaining - segLen <= 0.0001
-      });
-      segStart += segLen;
-      remaining -= segLen;
-    }
-    cursor += totalDur;
-  });
-  return rows;
-}
 
 /* ============================================================
    RENDERING
@@ -2498,7 +2515,9 @@ function renderTimeline() {
   rootSelect.value = state.masterRootIndex;
   masterModeSelect.value = state.masterModeIndex;
 
-  var rows = computeRows();
+  // The lane is rebuilt on every render; keep where it was scrolled to.
+  var oldLane = document.getElementById("laneScroll");
+  var keepScrollLeft = oldLane ? oldLane.scrollLeft : 0;
   timeline.innerHTML = "";
 
   // A lesson's intro and reveal flow as the FIRST content inside the same
@@ -2520,7 +2539,7 @@ function renderTimeline() {
     }
   }
 
-  if (!rows.length) {
+  if (!editingBlocks.length) {
     var empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "No blocks yet -- tap + Add to start.";
@@ -2528,21 +2547,63 @@ function renderTimeline() {
     return;
   }
 
-  rows.forEach(function (rowSegs, rowIdx) {
-    var row = document.createElement("div");
-    row.className = "row";
+  var totalBeats = 0;
+  var rowSegs = editingBlocks.map(function (block, blockIndex) {
+    var len = getDurationBeats(block);
+    totalBeats += len;
+    return {blockIndex: blockIndex, segLen: len, isFirst: true, isLast: true};
+  });
 
-    var segWrap = document.createElement("div");
-    segWrap.className = "segments";
+  var scroller = document.createElement("div");
+  scroller.className = "lane-scroll";
+  scroller.id = "laneScroll";
+  var lane = document.createElement("div");
+  lane.className = "lane";
+  lane.style.width = (totalBeats * BEAT_PX + LANE_TAIL_PX) + "px";
 
+  var ruler = document.createElement("div");
+  ruler.className = "beat-ruler";
+  for (var beat = 0; beat < Math.ceil(totalBeats); beat++) {
+    var tick = document.createElement("div");
+    if (beat % BEATS_PER_MEASURE === 0) {
+      tick.className = "bar";
+      tick.textContent = beat / BEATS_PER_MEASURE + 1;
+    } else {
+      tick.className = "beat";
+    }
+    tick.style.left = (beat * BEAT_PX) + "px";
+    ruler.appendChild(tick);
+  }
+  lane.appendChild(ruler);
+
+  var segWrap = document.createElement("div");
+  segWrap.className = "block-strip";
+  segWrap.style.width = (totalBeats * BEAT_PX) + "px";
+  lane.appendChild(segWrap);
+
+  var playheadEl = document.createElement("div");
+  playheadEl.className = "playhead";
+  playheadEl.id = "playhead";
+  lane.appendChild(playheadEl);
+
+  scroller.appendChild(lane);
+  timeline.appendChild(scroller);
+  scroller.scrollLeft = keepScrollLeft;
+  // A finger on the lane means the person is looking somewhere on purpose: the
+  // playhead stops pulling the view along for a moment (see followPlayhead).
+  ["pointerdown", "touchstart", "wheel"].forEach(function (ev) {
+    scroller.addEventListener(ev, function () { laneTouchedAt = Date.now(); }, {passive: true});
+  });
+
+  {
     rowSegs.forEach(function (seg, segIdx) {
       var block = editingBlocks[seg.blockIndex];
       var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
       var el = document.createElement("div");
       el.className = "seg";
       el.dataset.blockIndex = seg.blockIndex;
-      var widthPct = (seg.segLen / BEATS_PER_ROW * 100) + "%";
-      el.style.flex = "0 0 " + widthPct; // explicit no-grow/no-shrink, exact duration-proportional width
+      // Width is time: BEAT_PX per beat, less the 2px gap that separates blocks.
+      el.style.flex = "0 0 " + Math.max(2, seg.segLen * BEAT_PX - 2) + "px";
       el.style.background = backgroundForBlock(block);
       if (seg.blockIndex === state.currentIndex) el.classList.add("selected");
       if (playback.active && seg.blockIndex === playback.currentlySounding) el.classList.add("sounding");
@@ -2642,10 +2703,7 @@ function renderTimeline() {
 
       segWrap.appendChild(el);
     });
-
-    row.appendChild(segWrap);
-    timeline.appendChild(row);
-  });
+  }
 }
 
 function fieldSelect(labelText, options, value, onChange) {
@@ -2793,7 +2851,7 @@ function scrollSelectedBlockIntoView() {
   // needs to outlast that animation, not just this one synchronous call.
   logAudio("[SCROLL] scrollSelectedBlockIntoView: scrollTop before=" + document.getElementById("timeline").scrollTop);
   programmaticScrollGuard = true;
-  selected.scrollIntoView({block: "nearest", behavior: "smooth"});
+  selected.scrollIntoView({block: "nearest", inline: "nearest", behavior: "smooth"});
   setTimeout(function () { programmaticScrollGuard = false; }, 500);
 }
 // While playing, a tap on empty timeline space (not on a block) lets go of a pinned
@@ -3780,11 +3838,12 @@ function updatePlaybackUI(blockIndex) {
     if (playback.pinned) {
       // Keep the pinned selection and leave the editor alone (re-rendering it would
       // close a menu mid-edit); only the playing highlight moves.
-      renderTimeline();
+      updateTimelineHighlights();
       return;
     }
     state.currentIndex = blockIndex;
-    renderTimeline(); renderEditor();
+    // Only the highlights change; rebuilding the lane would interrupt a sideways swipe.
+    updateTimelineHighlights(); renderEditor();
   }
 }
 
@@ -3829,8 +3888,50 @@ function scheduleBlockNotes(blockIndex, atOffset, durSeconds, durBeats, baseTime
   }
 }
 
+// Re-marks which block is selected and which is playing, without rebuilding the lane.
+function updateTimelineHighlights() {
+  document.querySelectorAll(".block-strip .seg").forEach(function (el) {
+    var i = parseInt(el.dataset.blockIndex, 10);
+    el.classList.toggle("selected", i === state.currentIndex);
+    el.classList.toggle("sounding", playback.active && i === playback.currentlySounding);
+  });
+}
+
+// The playhead: a line through the lane at the beat now sounding. Each pass records
+// (at the moment it is heard) where it started in transport time and in beats; the
+// line's position follows from the audio clock, drawn every frame while playing.
+var laneTouchedAt = 0;
+var LANE_FOLLOW_PAUSE_MS = 2500;
+function playheadFrame() {
+  if (!playback.active) return;
+  var el = document.getElementById("playhead");
+  var scroller = document.getElementById("laneScroll");
+  if (el && scroller && playbackMode === "section" && playback.passBase != null) {
+    var secondsPerBeat = 60 / (state.tempo || 100);
+    var t = Tone.Transport.getSecondsAtTime(Tone.context.currentTime);
+    var beat = playback.passStartBeat + Math.max(0, t - playback.passBase) / secondsPerBeat;
+    var x = beat * BEAT_PX;
+    el.style.display = "block";
+    el.style.transform = "translateX(" + x + "px)";
+    followPlayhead(scroller, x);
+  }
+  requestAnimationFrame(playheadFrame);
+}
+// Keeps the playhead on screen, unless the person scrolled the lane in the last moment.
+function followPlayhead(scroller, x) {
+  if (Date.now() - laneTouchedAt < LANE_FOLLOW_PAUSE_MS) return;
+  var w = scroller.clientWidth;
+  if (x < scroller.scrollLeft + 8 || x > scroller.scrollLeft + w * 0.85) {
+    scroller.scrollLeft = Math.max(0, x - w * 0.15);
+  }
+}
+
 function scheduleOnePass(startIndex, baseTime) {
   if (!playback.active) return;
+  var passStartBeat = cumulativeBeatsBeforeIndex(startIndex);
+  Tone.Transport.scheduleOnce(function (time) {
+    Tone.Draw.schedule(function () { playback.passBase = baseTime; playback.passStartBeat = passStartBeat; }, time);
+  }, baseTime);
   var tempo = state.tempo || 100;
   var secondsPerBeat = 60 / tempo;
   var cursorSeconds = 0;
@@ -3895,8 +3996,10 @@ function beginTransportPlayback(startIdx) {
   btn.textContent = "■ Stop";
   btn.classList.add("playing");
 
+  playback.passBase = null;
   scheduleOnePass(startIdx, 0);
   Tone.Transport.start();
+  requestAnimationFrame(playheadFrame);
 }
 
 function startPlayback() {
