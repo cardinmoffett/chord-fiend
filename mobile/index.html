@@ -1637,7 +1637,9 @@ var preLearnMasterModeIndex = null;
 var armedSectionId = null;
 var songStartSlotIndex = null; // which arrangement slot whole-song Play begins from (null = the very first)
 
-var playback = { active:false, startIndex:0, timer:null };
+// pinned: during section playback, a block the person tapped stays selected instead of
+// the selection following the playhead. Tapping empty timeline space unpins it.
+var playback = { active:false, startIndex:0, timer:null, pinned:false };
 
 // ---------- Projects ----------
 // A project is a whole song (sections, arrangement, and all its musical /
@@ -2585,6 +2587,7 @@ function renderTimeline() {
         // While playing, a tap only selects the block for editing: no sound, and the
         // song keeps going.
         if (playback.active) {
+          playback.pinned = true;
           state.currentIndex = seg.blockIndex;
           save();
           renderEditor();
@@ -2784,6 +2787,15 @@ function scrollSelectedBlockIntoView() {
   selected.scrollIntoView({block: "nearest", behavior: "smooth"});
   setTimeout(function () { programmaticScrollGuard = false; }, 500);
 }
+// While playing, a tap on empty timeline space (not on a block) lets go of a pinned
+// block: the selection follows the playhead again from the block now playing.
+document.getElementById("timeline").addEventListener("click", function (e) {
+  if (!playback.active || !playback.pinned || playbackMode !== "section") return;
+  if (e.target.closest && e.target.closest(".seg")) return;
+  playback.pinned = false;
+  if (playback.currentlySounding !== null && playback.currentlySounding !== undefined) state.currentIndex = playback.currentlySounding;
+  renderTimeline(); renderEditor();
+});
 document.getElementById("timeline").addEventListener("scroll", function () {
   logAudio("[SCROLL] scroll event fired, scrollTop=" + document.getElementById("timeline").scrollTop + " guard=" + programmaticScrollGuard + " expanded=" + editorExpanded);
   if (programmaticScrollGuard) return; // our own scrollSelectedBlockIntoView nudge, not a real user scroll
@@ -3716,7 +3728,10 @@ function stopPlayback() {
     songCurrentSlotIndex = null;
     renderSongView();
   } else {
-    state.currentIndex = playback.startIndex;
+    // A block pinned during playback stays selected after Stop; otherwise go back to
+    // where playback started.
+    if (!playback.pinned) state.currentIndex = playback.startIndex;
+    playback.pinned = false;
     playback.currentlySounding = null;
     renderTimeline(); renderEditor();
   }
@@ -3737,6 +3752,12 @@ function updatePlaybackUI(blockIndex) {
     renderSongView();
   } else {
     playback.currentlySounding = blockIndex;
+    if (playback.pinned) {
+      // Keep the pinned selection and leave the editor alone (re-rendering it would
+      // close a menu mid-edit); only the playing highlight moves.
+      renderTimeline();
+      return;
+    }
     state.currentIndex = blockIndex;
     renderTimeline(); renderEditor();
   }
@@ -3843,6 +3864,7 @@ function beginTransportPlayback(startIdx) {
 function startPlayback() {
   ensureAudioReady(function () {
     playbackMode = "section";
+    playback.pinned = false;
     playbackBlocks = editingBlocks;
     beginTransportPlayback(state.currentIndex);
   });

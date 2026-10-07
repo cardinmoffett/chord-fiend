@@ -35,7 +35,7 @@ Run these from `mobile/`.
 - The engine never reads `state`, the DOM or audio. Functions that need the key, mode or bass settings take them as parameters, and the app passes them in: `getChordSymbol(chord, state.masterRootIndex)`, `appliedFunctionLabel(block, state.masterModeIndex)`, `activeBeatPattern(beatKey, state.customBeatPatterns)`, `bassOctaveShift(rootPitch, state.bassWrapLow)`, `computeBassPitchForBlock(block, chord, pattern, state.bassWrapLow)`.
 - Block labels come from the engine's `blockLabel(block, root, mode)`: the numeral and formula large (V7, ♭VI, V7/ii), the chord name small. The Ableton device uses the same function, so change labels there, not in the app.
 - The Learn checks (`blockSignature`, `plainDegreeSeq`, `findBorrowedChord`) treat a free chord as neither a degree nor a borrowed chord.
-- While the song plays, tapping a block only selects it (no sound, playback continues) and editor changes don't play a preview (`previewCurrentBlock` returns early). Edits are heard when the playhead reaches the block, because playback reads the live blocks.
+- While a section plays, the selection follows the playhead until the person taps a block: that pins it (`playback.pinned`), with no sound, and the editor is no longer re-rendered as the playhead moves, so an open menu isn't closed mid-edit. Tapping empty timeline space unpins it. A pinned block stays selected after Stop. Editor changes during playback play no preview (`previewCurrentBlock` returns early); they're heard when the playhead reaches the block, because playback reads the live blocks.
 
 ## Things that have bitten before
 
