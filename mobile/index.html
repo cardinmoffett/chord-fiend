@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Chord Fiend</title>
 <meta name="theme-color" content="#10121b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,6 +14,9 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <script src="vendor/Tone.js"></script>
 <script>
+  // iPhone ignores user-scalable=no for pinches, so cancel the pinch gesture itself.
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, {passive: false});
+
   // Opened from the iPhone home screen, iOS can lay the page out shorter than the screen
   // (by the status bar's height), leaving a strip at the bottom. Fill the real screen height.
   // In Safari, or where iOS gets it right, this changes nothing.
@@ -68,6 +71,11 @@
   }
 
   * { box-sizing: border-box; }
+  /* No zooming anywhere: taps are taps. "manipulation" turns off double-tap zoom (which
+     fired when double-tapping a section to edit it); elements that set their own
+     touch-action (blocks, the drawer) keep theirs. The viewport tag stops the zoom on
+     focusing a field (the tempo box), and a gesturestart handler stops pinch. */
+  html, body, * { touch-action: manipulation; }
 
   html, body {
     height: 100%;
