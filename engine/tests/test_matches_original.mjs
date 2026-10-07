@@ -33,6 +33,16 @@ function same(label, a, b) {
   failures++; ok = false;
   if (failures <= 12) console.log('FAIL  ' + label + '\n      app:    ' + JSON.stringify(a) + '\n      engine: ' + JSON.stringify(b));
 }
+// The one intended difference in chord names: an augmented chord with a flat 7th had no
+// name in the app (it showed "G?7"); the engine names it G7#5 / Dm7#5. Where the app's
+// name holds a "?", the engine's must be the same name with the "?" filled in that way.
+function sameName(label, a, b) {
+  if (typeof a === 'string' && a.indexOf('?') >= 0 && typeof b === 'string') {
+    var m = /^([A-G][#\u266D]?)\?(\d+)(.*)$/.exec(a);
+    if (m && (b === m[1] + m[2] + '#5' + m[3] || b === m[1] + 'm' + m[2] + '#5' + m[3])) { passes++; return; }
+  }
+  same(label, a, b);
+}
 function report(t) { console.log((failures === 0 ? 'PASS' : 'FAIL') + '  ' + t + '  (' + passes + ' checks' + (failures ? ', ' + failures + ' FAILED' : '') + ')'); passes = 0; failures = 0; }
 function blk(o) { return Object.assign(orig.defaultBlock(), o); }
 // The engine's chord carries two fields the app's does not (isFree, flat5). For the app's
@@ -70,7 +80,7 @@ for (var root = 0; root < 12; root++) {
                 inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
               var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
               same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, appShape(e1));
-              same('getChordSymbol ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
+              sameName('getChordSymbol ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
             }
   }
 }
@@ -92,7 +102,7 @@ for (root = 0; root < 12; root++) {
                 inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
               var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
               same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, appShape(e1));
-              same('getChordSymbol ' + JSON.stringify(b), orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
+              sameName('getChordSymbol ' + JSON.stringify(b), orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
               same('appliedFunctionLabel ' + JSON.stringify(b) + ' mode ' + mm, orig.appliedFunctionLabel(b), engine.appliedFunctionLabel(b, mm));
             }
       });

@@ -53,4 +53,9 @@ check('the leading-tone chord ignores it (it already has one)', chord({chordSour
 check('flat5 is reported on the chord', [chord({flat5: 1}).flat5, chord({}).flat5], [true, false]);
 check('sus chords with b5 say so', sym({degreeIndex: 4, extensionIndex: 2, susIndex: 2, flat5: 1}), 'G7sus4b5');
 
+console.log('=== augmented 7th chords get a name (the app showed "G?7") ===');
+check('V7 with a raised 5th in C: G B D# F, named G7#5', [notes({degreeIndex: 4, extensionIndex: 2, aug: 1}), sym({degreeIndex: 4, extensionIndex: 2, aug: 1})], [[67, 71, 75, 77], 'G7#5']);
+check('ii7 with a raised 5th in C: D F A# C, named Dm7#5', [notes({degreeIndex: 1, extensionIndex: 2, aug: 1}), sym({degreeIndex: 1, extensionIndex: 2, aug: 1})], [[62, 65, 70, 72], 'Dm7#5']);
+check('I maj7 with a raised 5th keeps its name, Cmaj7#5', sym({extensionIndex: 2, aug: 1}), 'Cmaj7#5');
+
 console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');
