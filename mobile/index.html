@@ -1018,6 +1018,13 @@
     </div>
     <div class="settings-hint">Remembered for each instrument, in every project.</div>
 
+    <div class="settings-section">Melody</div>
+    <div class="settings-row">
+      <label>Melody sound</label>
+      <select id="melodyInstrumentSelect"></select>
+    </div>
+    <div class="settings-hint">The voice that plays the melody in Reharmonization lessons.</div>
+
     <div class="settings-section">Bass</div>
     <div class="settings-row">
       <label>Bass</label>
@@ -1670,6 +1677,7 @@ function freshState() {
   masterModeIndex: 0,
   tempo: 100,
   instrument: "soft",
+  melodyInstrument: "epiano", // the melody lane's voice (Reharmonization lessons); any SYNTH_BUILDERS key
   palette: "sunset",
   drumBeat: "rock", // one of BUILTIN_BEAT_PATTERNS' keys, or "off"
   customBeatPatterns: {}, // per-project overrides written by the rhythm editor
@@ -2886,16 +2894,21 @@ function followPlayhead(scroller, x) {
   }
 }
 
-// The melody's own voice: a single clean line, so it reads apart from the chords.
+// The melody's own voice, chosen in Settings (Melody sound; Electric Piano by default),
+// built from the same instrument list as the chords, a little louder so the line
+// stands out over them.
 var melodySynth = null;
+var MELODY_LIFT_DB = 3;
 function ensureMelodySynth() {
   if (melodySynth) return;
-  melodySynth = new Tone.Synth({
-    oscillator: {type: "triangle"},
-    envelope: {attack: 0.01, decay: 0.15, sustain: 0.55, release: 0.35}
-  });
-  melodySynth.volume.value = -4;
+  var build = SYNTH_BUILDERS[state.melodyInstrument] || SYNTH_BUILDERS.epiano;
+  melodySynth = build();
+  melodySynth.volume.value += MELODY_LIFT_DB;
   melodySynth.connect(masterHighpass);
+}
+function rebuildMelodySynth() {
+  if (melodySynth) { try { melodySynth.dispose(); } catch (e) {} }
+  melodySynth = null;
 }
 function playMelodyNote(semis, seconds, time) {
   ensureAudioReady(function () {
@@ -3505,6 +3518,13 @@ var settingsCloseBtn = document.getElementById("settingsCloseBtn");
 var tempoSelect = document.getElementById("tempoSelect");
 
 var instrumentSelect = document.getElementById("instrumentSelect");
+// The melody's dropdown offers the same instruments as the chords' (copied from it).
+var melodyInstrumentSelect = document.getElementById("melodyInstrumentSelect");
+Array.prototype.forEach.call(instrumentSelect.options || [], function (o) {
+  var c = document.createElement("option");
+  c.value = o.value; c.textContent = o.textContent;
+  melodyInstrumentSelect.appendChild(c);
+});
 var paletteSelect = document.getElementById("paletteSelect");
 Object.keys(PALETTES).forEach(function (key) {
   var o = document.createElement("option");
@@ -3954,6 +3974,7 @@ function openSettings() {
   masterModeSelect.value = state.masterModeIndex;
   showTempo(state.tempo);
   instrumentSelect.value = state.instrument;
+  melodyInstrumentSelect.value = SYNTH_BUILDERS[state.melodyInstrument] ? state.melodyInstrument : "epiano";
   syncInstrumentVolumeControl();
   paletteSelect.value = state.palette;
   drumBeatSelect.value = state.drumBeat;
@@ -4053,6 +4074,12 @@ instrumentSelect.addEventListener("change", function () {
   if (toneReady) rebuildSynth(); // otherwise the current synth instance would keep the OLD instrument until next reload
   syncInstrumentVolumeControl(); // show THIS instrument's remembered volume, not the previous one's
   previewCurrentBlock();
+});
+melodyInstrumentSelect.addEventListener("change", function () {
+  state.melodyInstrument = melodyInstrumentSelect.value;
+  save();
+  rebuildMelodySynth(); // the next note is built with the new sound
+  if (!playback.active) playMelodyNote(4, 0.6); // a short sample of it (the 3rd of the key)
 });
 paletteSelect.addEventListener("change", function () {
   state.palette = paletteSelect.value;
