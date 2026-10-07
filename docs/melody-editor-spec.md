@@ -1,6 +1,10 @@
 # Melody Editor: Spec (draft for review)
 
-Phone app (`mobile/`). Written 2026-10-07. Nothing here is built yet.
+Phone app (`mobile/`). Written 2026-10-07.
+
+**Scope change (2026-10-07):** the melody lane lives only in Learn, in the Reharmonization unit (Unit 10). Normal sections and other lessons keep their wrapped layout. If it lands, the rest of this spec (melodies in your own sections, note entry, song parts) is the next conversation.
+
+**Built so far:** the wide lane with the piano roll, colored key rows, playhead and melody playback, for lessons that carry a `melody`; four Unit 10 lessons (Ode to Joy, Twinkle Twinkle); feedback naming which melody notes sit in the selected chord. Melodies are fixed in lessons (no note entry yet).
 
 ## What it is
 
