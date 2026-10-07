@@ -358,6 +358,80 @@
       compressing to fit anyway. */
   }
 
+  /* Reharmonization lessons: one wide lane that scrolls sideways. Time runs left to
+     right at BEAT_PX per beat. A beat ruler on top, the melody's piano roll, then the
+     chord blocks in one strip, with a playhead through all of it. */
+  .lane-scroll {
+    width: 100%;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .lane-scroll::-webkit-scrollbar { display: none; }
+  .lane-wrap { display: flex; width: 100%; flex: 0 0 auto; }
+  .lane-wrap .lane-scroll { flex: 1 1 auto; width: auto; min-width: 0; }
+  .lane { position: relative; }
+  .beat-ruler { position: relative; height: 18px; }
+  .beat-ruler .bar {
+    position: absolute; top: 0; bottom: 0;
+    border-left: 1px solid var(--line);
+    padding-left: 4px;
+    font-size: 10px; line-height: 18px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .beat-ruler .beat { position: absolute; bottom: 0; height: 5px; border-left: 1px solid var(--line-soft); }
+  .roll {
+    position: relative;
+    margin-bottom: 6px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background-color: var(--bg-elevated);
+  }
+  .roll-row { position: absolute; left: 0; right: 0; }
+  .roll-row.root { border-top: 1px solid var(--line); }
+  .roll-grid { position: absolute; inset: 0; pointer-events: none; }
+  .roll-blockline { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--line); pointer-events: none; }
+  .roll-note {
+    position: absolute;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+    pointer-events: none;
+  }
+  /* Row labels (1, \266D2, 2 ...) sit in their own column left of the scrolling lane,
+     lined up with the roll's rows, so they stay put while the lane scrolls. */
+  .roll-labels { position: relative; flex: 0 0 30px; }
+  .roll-label {
+    position: absolute; left: 0; width: 28px;
+    font-size: 9px; text-align: right; padding-right: 4px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .roll-label.scale { color: var(--text); font-weight: 600; }
+  .block-strip {
+    display: flex;
+    height: 56px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .block-strip .seg { margin-right: 2px; touch-action: pan-x pan-y; }
+  .playhead {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    width: 2px; margin-left: -1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(255,180,84,0.8);
+    pointer-events: none;
+    display: none;
+    will-change: transform;
+    z-index: 3;
+  }
+
   .row .segments {
     flex: 1;
     display: flex;
@@ -2494,6 +2568,358 @@ function backgroundForBlock(block) {
   return "linear-gradient(180deg, " + top + ", " + bottom + ")";
 }
 
+// One chord block on the timeline (or one piece of it, where a block wraps across
+// rows): its look, its label, and tap-to-hear / tap-to-select. widthCss sets its width;
+// boundary draws the divider where a different block follows.
+function buildSegElement(seg, widthCss, boundary) {
+  var block = editingBlocks[seg.blockIndex];
+  var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
+  var el = document.createElement("div");
+  el.className = "seg";
+  el.dataset.blockIndex = seg.blockIndex;
+  el.style.flex = "0 0 " + widthCss; // explicit no-grow/no-shrink, exact duration-proportional width
+  el.style.background = backgroundForBlock(block);
+  if (seg.blockIndex === state.currentIndex) el.classList.add("selected");
+  if (playback.active && seg.blockIndex === playback.currentlySounding) el.classList.add("sounding");
+  // Only show a dividing line where this segment ends AND a different
+  // block actually follows it (not just because a measure ends here).
+  if (boundary) el.classList.add("block-boundary");
+
+  var radiusLeft = seg.isFirst ? "8px" : "0px";
+  var radiusRight = seg.isLast ? "8px" : "0px";
+  el.style.borderRadius = radiusLeft + " " + radiusRight + " " + radiusRight + " " + radiusLeft;
+
+  // Subtle glowing underline whose intensity scales with inversion depth --
+  // a quiet visual cue that this voicing isn't in root position. Uses
+  // border-bottom rather than box-shadow so it never fights with the
+  // separate selection-ring box-shadow from the .selected class.
+  if (block.inversion > 0) {
+    var invOpacity = Math.min(0.18 + block.inversion * 0.11, 0.8);
+    el.style.borderBottom = "3px solid rgba(255,255,255," + invOpacity + ")";
+  }
+  // Hue is now driven by degree, not mode -- so borrowed-mode blocks get
+  // a distinct marker on a different channel instead, keeping that
+  // information visible without competing for color.
+  if (block.blockModeIndex !== 0 && seg.isFirst) {
+    el.style.borderTop = "3px solid var(--accent)";
+  }
+  // An applied chord's color already points at its TARGET (see
+  // blockHSL) -- this ring is what actually flags "this is a functional
+  // chord, not a plain diatonic one". A CSS class rather than an inline
+  // style, so it layers correctly with .selected's own box-shadow
+  // instead of silently overriding it.
+  if (block.chordSource === "applied") el.classList.add("applied-chord");
+
+  if (seg.isFirst) {
+    // The chord's job in the key (numeral and formula) leads; its name sits under it.
+    var label = blockLabel(block, state.masterRootIndex, state.masterModeIndex);
+    var deg = document.createElement("div");
+    deg.className = "deg";
+    deg.textContent = label.degree;
+    el.appendChild(deg);
+    if (label.name !== label.degree) {
+      var sym = document.createElement("div");
+      sym.className = "sym";
+      sym.textContent = label.name;
+      el.appendChild(sym);
+    }
+  }
+
+  var held = false;
+  el.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    // While playing, a tap only selects the block for editing: no sound, and the
+    // song keeps going.
+    if (playback.active) {
+      playback.pinned = true;
+      state.currentIndex = seg.blockIndex;
+      save();
+      renderEditor();
+      if (editingRef && editingRef.kind === "scratch") updateLessonReveal();
+      document.querySelectorAll(".seg.selected").forEach(function (s) { s.classList.remove("selected"); });
+      document.querySelectorAll('.seg[data-block-index="' + seg.blockIndex + '"]').forEach(function (s) { s.classList.add("selected"); });
+      scrollSelectedBlockIntoView();
+      return;
+    }
+    stopPlayback();
+    el.setPointerCapture(e.pointerId); // keeps pointerup/cancel targeted at THIS segment even if
+      // the finger drifts elsewhere during the hold (segments allow pan-y for scrolling, so a
+      // touch that turns into a scroll can otherwise hand its remaining events to a different
+      // element, or none at all -- leaving this element's own "held" flag stuck true forever,
+      // and its note sounding with no release ever reaching it).
+    // Select + update the editor WITHOUT rebuilding the timeline DOM --
+    // rebuilding here would destroy the very element still being pressed,
+    // which is what caused the sound to never receive a release event.
+    state.currentIndex = seg.blockIndex;
+    save();
+    renderEditor();
+    if (editingRef && editingRef.kind === "scratch") updateLessonReveal();
+    document.querySelectorAll(".seg.selected").forEach(function (s) { s.classList.remove("selected"); });
+    document.querySelectorAll('.seg[data-block-index="' + seg.blockIndex + '"]').forEach(function (s) { s.classList.add("selected"); });
+    scrollSelectedBlockIntoView(); // keeps it visible above the drawer, whatever height the drawer is currently at
+    el.classList.add("sounding");
+    held = true;
+    holdPitches(chord.pitches);
+    var bassPitch = computeBassPitchForBlock(block, chord, activeBeatPattern(state.drumBeat, state.customBeatPatterns), state.bassWrapLow);
+    if (bassPitch !== null) {
+      ensureAudioReady(function () { bassSynth.triggerAttack(midiToFreq(bassPitch)); });
+    }
+  });
+  var release = function () {
+    if (held) {
+      releaseHeld();
+      try { bassSynth.triggerRelease(); } catch (e) {}
+      held = false;
+      document.querySelectorAll(".seg.sounding").forEach(function (s) { s.classList.remove("sounding"); });
+    }
+  };
+  el.addEventListener("pointerup", release);
+  el.addEventListener("pointerleave", release);
+  el.addEventListener("pointercancel", release);
+
+  return el;
+}
+
+/* ============================================================
+   MELODY LANE (reharmonization lessons only)
+   A lesson with a `melody` shows its section as one wide lane: a piano roll of the
+   melody above the chord blocks, scrolling sideways, with a playhead. The melody is
+   fixed; the exercise is changing the chords under it. Notes are [start, length,
+   semis]: start and length in 16th notes from the section's start, semis = half
+   steps above the key's root (0 = the root at middle C's octave).
+   ============================================================ */
+var BEAT_PX = 44;          // width of one beat in the lane
+var LANE_TAIL_PX = 120;    // room after the last block, so it can leave the screen edge
+var ROLL_ROW_PX = 16;      // height of one piano-roll row
+var ROLL_LABELS = ["1", "♭2", "2", "♭3", "3", "4", "♯4", "5", "♭6", "6", "♭7", "7"];
+
+function isMelodyLesson() {
+  return !!(editingRef && editingRef.kind === "scratch" && sandbox && sandbox.melody && sandbox.melody.length);
+}
+function melodyMidi(semis) { return 60 + state.masterRootIndex + semis; }
+
+// Which degree (0-6) of the home key a pitch is, or -1 if it's outside the key.
+function homeDegreeOf(semis) {
+  var intervals = MODES[MASTER_MODE_NAMES[state.masterModeIndex]];
+  return intervals.indexOf(((semis % 12) + 12) % 12);
+}
+// The color of the chord built on that degree (the blocks' own palette hue).
+function degreeHue(degree) {
+  var palette = PALETTES[state.palette] || PALETTES.sunset;
+  return palette.hues[degree];
+}
+
+// The roll's pitch range: the melody's lowest to highest note, widened to whole
+// octaves from the root so the 1 rows frame it, and at least one octave.
+function rollRange(notes) {
+  var lo = Infinity, hi = -Infinity;
+  notes.forEach(function (n) { lo = Math.min(lo, n[2]); hi = Math.max(hi, n[2]); });
+  lo = Math.floor(lo / 12) * 12;
+  hi = Math.max(lo + 12, Math.ceil((hi + 1) / 12) * 12);
+  return {lo: lo, hi: hi};
+}
+
+function renderLane() {
+  var oldLane = document.getElementById("laneScroll");
+  var keepScrollLeft = oldLane ? oldLane.scrollLeft : 0;
+
+  var totalBeats = 0;
+  var segs = editingBlocks.map(function (block, blockIndex) {
+    var len = getDurationBeats(block);
+    var seg = {blockIndex: blockIndex, segLen: len, isFirst: true, isLast: true, startBeat: totalBeats};
+    totalBeats += len;
+    return seg;
+  });
+  var laneWidth = totalBeats * BEAT_PX;
+  var notes = sandbox.melody;
+  var range = rollRange(notes);
+  var rows = range.hi - range.lo + 1;          // top row is range.hi
+  var rollHeight = rows * ROLL_ROW_PX;
+  function rowTop(semis) { return (range.hi - semis) * ROLL_ROW_PX; }
+
+  var wrap = document.createElement("div");
+  wrap.className = "lane-wrap";
+
+  // Fixed label column: one label per row, lined up with the roll (below the ruler).
+  var labels = document.createElement("div");
+  labels.className = "roll-labels";
+  labels.style.height = (18 + rollHeight) + "px";
+  for (var sm = range.lo; sm <= range.hi; sm++) {
+    var lab = document.createElement("div");
+    var deg = homeDegreeOf(sm);
+    lab.className = "roll-label" + (deg >= 0 ? " scale" : "");
+    lab.textContent = ROLL_LABELS[((sm % 12) + 12) % 12];
+    lab.style.top = (18 + 1 + rowTop(sm)) + "px";
+    lab.style.height = ROLL_ROW_PX + "px";
+    lab.style.lineHeight = ROLL_ROW_PX + "px";
+    (function (semis) {
+      // Tap a label to hear that pitch (not while the song plays).
+      lab.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        if (playback.active) return;
+        playMelodyNote(semis, 0.6);
+      });
+    })(sm);
+    labels.appendChild(lab);
+  }
+  wrap.appendChild(labels);
+
+  var scroller = document.createElement("div");
+  scroller.className = "lane-scroll";
+  scroller.id = "laneScroll";
+  var lane = document.createElement("div");
+  lane.className = "lane";
+  lane.style.width = (laneWidth + LANE_TAIL_PX) + "px";
+
+  var ruler = document.createElement("div");
+  ruler.className = "beat-ruler";
+  for (var beat = 0; beat < Math.ceil(totalBeats); beat++) {
+    var tick = document.createElement("div");
+    if (beat % BEATS_PER_MEASURE === 0) { tick.className = "bar"; tick.textContent = beat / BEATS_PER_MEASURE + 1; }
+    else tick.className = "beat";
+    tick.style.left = (beat * BEAT_PX) + "px";
+    ruler.appendChild(tick);
+  }
+  lane.appendChild(ruler);
+
+  // The roll: one tinted row per pitch. Scale tones take the color of the chord built
+  // on that degree, lightened; the other five steps stay plain. Root rows get a line.
+  var roll = document.createElement("div");
+  roll.className = "roll";
+  roll.style.width = laneWidth + "px";
+  roll.style.height = (rollHeight + 2) + "px";
+  for (var r = range.lo; r <= range.hi; r++) {
+    var row = document.createElement("div");
+    var d = homeDegreeOf(r);
+    row.className = "roll-row" + (((r % 12) + 12) % 12 === 0 ? " root" : "");
+    row.style.top = rowTop(r) + "px";
+    row.style.height = ROLL_ROW_PX + "px";
+    if (d >= 0) row.style.background = "hsla(" + degreeHue(d) + ", 70%, 55%, 0.16)";
+    roll.appendChild(row);
+  }
+  var grid = document.createElement("div");
+  grid.className = "roll-grid";
+  grid.style.backgroundImage =
+    "repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px " + (BEAT_PX * BEATS_PER_MEASURE) + "px)," +
+    "repeating-linear-gradient(90deg, var(--line-soft) 0 1px, transparent 1px " + BEAT_PX + "px)";
+  roll.appendChild(grid);
+  // Faint lines where each chord starts, so you can see which chord is under a note.
+  segs.forEach(function (seg) {
+    if (seg.startBeat === 0) return;
+    var bl = document.createElement("div");
+    bl.className = "roll-blockline";
+    bl.style.left = (seg.startBeat * BEAT_PX) + "px";
+    roll.appendChild(bl);
+  });
+  notes.forEach(function (n) {
+    var note = document.createElement("div");
+    var d = homeDegreeOf(n[2]);
+    note.className = "roll-note";
+    note.style.left = (n[0] / 4 * BEAT_PX + 1) + "px";
+    note.style.width = Math.max(4, n[1] / 4 * BEAT_PX - 2) + "px";
+    note.style.top = (rowTop(n[2]) + 1) + "px";
+    note.style.height = (ROLL_ROW_PX - 2) + "px";
+    note.style.background = d >= 0 ? "hsl(" + degreeHue(d) + ", 65%, 52%)" : "var(--text-dim)";
+    roll.appendChild(note);
+  });
+  lane.appendChild(roll);
+
+  var strip = document.createElement("div");
+  strip.className = "block-strip";
+  strip.style.width = laneWidth + "px";
+  segs.forEach(function (seg) {
+    var el = buildSegElement(seg, Math.max(2, seg.segLen * BEAT_PX - 2) + "px", false);
+    strip.appendChild(el);
+  });
+  lane.appendChild(strip);
+
+  var playheadEl = document.createElement("div");
+  playheadEl.className = "playhead";
+  playheadEl.id = "playhead";
+  lane.appendChild(playheadEl);
+
+  scroller.appendChild(lane);
+  wrap.appendChild(scroller);
+  timeline.appendChild(wrap);
+  scroller.scrollLeft = keepScrollLeft;
+  // A finger on the lane means the person is looking somewhere on purpose: the
+  // playhead stops pulling the view along for a moment (see followPlayhead).
+  ["pointerdown", "touchstart", "wheel"].forEach(function (ev) {
+    scroller.addEventListener(ev, function () { laneTouchedAt = Date.now(); }, {passive: true});
+  });
+}
+
+// Re-marks which block is selected and which is playing, without rebuilding the
+// lane (a rebuild during playback would interrupt a sideways swipe).
+function updateTimelineHighlights() {
+  document.querySelectorAll(".block-strip .seg").forEach(function (el) {
+    var i = parseInt(el.dataset.blockIndex, 10);
+    el.classList.toggle("selected", i === state.currentIndex);
+    el.classList.toggle("sounding", playback.active && i === playback.currentlySounding);
+  });
+}
+
+// The playhead follows the audio clock: each pass records, at the moment it's heard,
+// where it started in transport time and in beats, and the line is drawn every frame.
+var laneTouchedAt = 0;
+var LANE_FOLLOW_PAUSE_MS = 2500;
+function playheadFrame() {
+  if (!playback.active) return;
+  var el = document.getElementById("playhead");
+  var scroller = document.getElementById("laneScroll");
+  if (el && scroller && playbackMode === "section" && playback.passBase != null) {
+    var secondsPerBeat = 60 / (state.tempo || 100);
+    var t = Tone.Transport.getSecondsAtTime(Tone.context.currentTime);
+    var x = (playback.passStartBeat + Math.max(0, t - playback.passBase) / secondsPerBeat) * BEAT_PX;
+    el.style.display = "block";
+    el.style.transform = "translateX(" + x + "px)";
+    followPlayhead(scroller, x);
+  }
+  requestAnimationFrame(playheadFrame);
+}
+// Keeps the playhead on screen, unless the person scrolled the lane a moment ago.
+function followPlayhead(scroller, x) {
+  if (Date.now() - laneTouchedAt < LANE_FOLLOW_PAUSE_MS) return;
+  var w = scroller.clientWidth;
+  if (x < scroller.scrollLeft + 8 || x > scroller.scrollLeft + w * 0.85) {
+    scroller.scrollLeft = Math.max(0, x - w * 0.15);
+  }
+}
+
+// The melody's own voice: a single clean line, so it reads apart from the chords.
+var melodySynth = null;
+function ensureMelodySynth() {
+  if (melodySynth) return;
+  melodySynth = new Tone.Synth({
+    oscillator: {type: "triangle"},
+    envelope: {attack: 0.01, decay: 0.15, sustain: 0.55, release: 0.35}
+  });
+  melodySynth.volume.value = -4;
+  melodySynth.connect(masterHighpass);
+}
+function playMelodyNote(semis, seconds, time) {
+  ensureAudioReady(function () {
+    ensureMelodySynth();
+    melodySynth.triggerAttackRelease(midiToFreq(melodyMidi(semis)), seconds, time);
+  });
+}
+// Schedules this pass's melody notes, from the pass's first beat to the section's end.
+function scheduleMelodyPass(startIndex, baseTime, secondsPerBeat) {
+  if (!isMelodyLesson()) return;
+  ensureMelodySynth();
+  var fromBeat = cumulativeBeatsBeforeIndex(startIndex);
+  var endBeat = cumulativeBeatsBeforeIndex(playbackBlocks.length);
+  sandbox.melody.forEach(function (n) {
+    var beat = n[0] / 4;
+    if (beat < fromBeat || beat >= endBeat) return;
+    var len = Math.min(n[1] / 4, endBeat - beat) * secondsPerBeat * 0.95;
+    var freq = midiToFreq(melodyMidi(n[2]));
+    Tone.Transport.scheduleOnce(function (time) {
+      melodySynth.triggerAttackRelease(freq, len, time);
+    }, baseTime + (beat - fromBeat) * secondsPerBeat);
+  });
+}
+
 function renderTimeline() {
   rootSelect.value = state.masterRootIndex;
   masterModeSelect.value = state.masterModeIndex;
@@ -2528,6 +2954,8 @@ function renderTimeline() {
     return;
   }
 
+  if (isMelodyLesson()) { renderLane(); return; }
+
   rows.forEach(function (rowSegs, rowIdx) {
     var row = document.createElement("div");
     row.className = "row";
@@ -2536,110 +2964,8 @@ function renderTimeline() {
     segWrap.className = "segments";
 
     rowSegs.forEach(function (seg, segIdx) {
-      var block = editingBlocks[seg.blockIndex];
-      var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
-      var el = document.createElement("div");
-      el.className = "seg";
-      el.dataset.blockIndex = seg.blockIndex;
       var widthPct = (seg.segLen / BEATS_PER_ROW * 100) + "%";
-      el.style.flex = "0 0 " + widthPct; // explicit no-grow/no-shrink, exact duration-proportional width
-      el.style.background = backgroundForBlock(block);
-      if (seg.blockIndex === state.currentIndex) el.classList.add("selected");
-      if (playback.active && seg.blockIndex === playback.currentlySounding) el.classList.add("sounding");
-      // Only show a dividing line where this segment ends AND a different
-      // block actually follows it (not just because a measure ends here).
-      if (seg.isLast && segIdx !== rowSegs.length - 1) el.classList.add("block-boundary");
-
-      var radiusLeft = seg.isFirst ? "8px" : "0px";
-      var radiusRight = seg.isLast ? "8px" : "0px";
-      el.style.borderRadius = radiusLeft + " " + radiusRight + " " + radiusRight + " " + radiusLeft;
-
-      // Subtle glowing underline whose intensity scales with inversion depth --
-      // a quiet visual cue that this voicing isn't in root position. Uses
-      // border-bottom rather than box-shadow so it never fights with the
-      // separate selection-ring box-shadow from the .selected class.
-      if (block.inversion > 0) {
-        var invOpacity = Math.min(0.18 + block.inversion * 0.11, 0.8);
-        el.style.borderBottom = "3px solid rgba(255,255,255," + invOpacity + ")";
-      }
-      // Hue is now driven by degree, not mode -- so borrowed-mode blocks get
-      // a distinct marker on a different channel instead, keeping that
-      // information visible without competing for color.
-      if (block.blockModeIndex !== 0 && seg.isFirst) {
-        el.style.borderTop = "3px solid var(--accent)";
-      }
-      // An applied chord's color already points at its TARGET (see
-      // blockHSL) -- this ring is what actually flags "this is a functional
-      // chord, not a plain diatonic one". A CSS class rather than an inline
-      // style, so it layers correctly with .selected's own box-shadow
-      // instead of silently overriding it.
-      if (block.chordSource === "applied") el.classList.add("applied-chord");
-
-      if (seg.isFirst) {
-        // The chord's job in the key (numeral and formula) leads; its name sits under it.
-        var label = blockLabel(block, state.masterRootIndex, state.masterModeIndex);
-        var deg = document.createElement("div");
-        deg.className = "deg";
-        deg.textContent = label.degree;
-        el.appendChild(deg);
-        if (label.name !== label.degree) {
-          var sym = document.createElement("div");
-          sym.className = "sym";
-          sym.textContent = label.name;
-          el.appendChild(sym);
-        }
-      }
-
-      var held = false;
-      el.addEventListener("pointerdown", function (e) {
-        e.preventDefault();
-        // While playing, a tap only selects the block for editing: no sound, and the
-        // song keeps going.
-        if (playback.active) {
-          playback.pinned = true;
-          state.currentIndex = seg.blockIndex;
-          save();
-          renderEditor();
-          document.querySelectorAll(".seg.selected").forEach(function (s) { s.classList.remove("selected"); });
-          document.querySelectorAll('.seg[data-block-index="' + seg.blockIndex + '"]').forEach(function (s) { s.classList.add("selected"); });
-          scrollSelectedBlockIntoView();
-          return;
-        }
-        stopPlayback();
-        el.setPointerCapture(e.pointerId); // keeps pointerup/cancel targeted at THIS segment even if
-          // the finger drifts elsewhere during the hold (segments allow pan-y for scrolling, so a
-          // touch that turns into a scroll can otherwise hand its remaining events to a different
-          // element, or none at all -- leaving this element's own "held" flag stuck true forever,
-          // and its note sounding with no release ever reaching it).
-        // Select + update the editor WITHOUT rebuilding the timeline DOM --
-        // rebuilding here would destroy the very element still being pressed,
-        // which is what caused the sound to never receive a release event.
-        state.currentIndex = seg.blockIndex;
-        save();
-        renderEditor();
-        document.querySelectorAll(".seg.selected").forEach(function (s) { s.classList.remove("selected"); });
-        document.querySelectorAll('.seg[data-block-index="' + seg.blockIndex + '"]').forEach(function (s) { s.classList.add("selected"); });
-        scrollSelectedBlockIntoView(); // keeps it visible above the drawer, whatever height the drawer is currently at
-        el.classList.add("sounding");
-        held = true;
-        holdPitches(chord.pitches);
-        var bassPitch = computeBassPitchForBlock(block, chord, activeBeatPattern(state.drumBeat, state.customBeatPatterns), state.bassWrapLow);
-        if (bassPitch !== null) {
-          ensureAudioReady(function () { bassSynth.triggerAttack(midiToFreq(bassPitch)); });
-        }
-      });
-      var release = function () {
-        if (held) {
-          releaseHeld();
-          try { bassSynth.triggerRelease(); } catch (e) {}
-          held = false;
-          document.querySelectorAll(".seg.sounding").forEach(function (s) { s.classList.remove("sounding"); });
-        }
-      };
-      el.addEventListener("pointerup", release);
-      el.addEventListener("pointerleave", release);
-      el.addEventListener("pointercancel", release);
-
+      var el = buildSegElement(seg, widthPct, seg.isLast && segIdx !== rowSegs.length - 1);
       segWrap.appendChild(el);
     });
 
@@ -2793,7 +3119,7 @@ function scrollSelectedBlockIntoView() {
   // needs to outlast that animation, not just this one synchronous call.
   logAudio("[SCROLL] scrollSelectedBlockIntoView: scrollTop before=" + document.getElementById("timeline").scrollTop);
   programmaticScrollGuard = true;
-  selected.scrollIntoView({block: "nearest", behavior: "smooth"});
+  selected.scrollIntoView({block: "nearest", inline: "nearest", behavior: "smooth"});
   setTimeout(function () { programmaticScrollGuard = false; }, 500);
 }
 // While playing, a tap on empty timeline space (not on a block) lets go of a pinned
@@ -3777,14 +4103,16 @@ function updatePlaybackUI(blockIndex) {
     renderSongView();
   } else {
     playback.currentlySounding = blockIndex;
+    // The melody lane only updates its highlights; rebuilding it would interrupt a swipe.
+    var redraw = isMelodyLesson() ? updateTimelineHighlights : renderTimeline;
     if (playback.pinned) {
       // Keep the pinned selection and leave the editor alone (re-rendering it would
       // close a menu mid-edit); only the playing highlight moves.
-      renderTimeline();
+      redraw();
       return;
     }
     state.currentIndex = blockIndex;
-    renderTimeline(); renderEditor();
+    redraw(); renderEditor();
   }
 }
 
@@ -3833,6 +4161,12 @@ function scheduleOnePass(startIndex, baseTime) {
   if (!playback.active) return;
   var tempo = state.tempo || 100;
   var secondsPerBeat = 60 / tempo;
+  // For the playhead: when this pass is heard, note where it started.
+  var passStartBeat = cumulativeBeatsBeforeIndex(startIndex);
+  Tone.Transport.scheduleOnce(function (time) {
+    Tone.Draw.schedule(function () { playback.passBase = baseTime; playback.passStartBeat = passStartBeat; }, time);
+  }, baseTime);
+  scheduleMelodyPass(startIndex, baseTime, secondsPerBeat);
   var cursorSeconds = 0;
 
   for (var i = startIndex; i < playbackBlocks.length; i++) {
@@ -3895,8 +4229,10 @@ function beginTransportPlayback(startIdx) {
   btn.textContent = "■ Stop";
   btn.classList.add("playing");
 
+  playback.passBase = null;
   scheduleOnePass(startIdx, 0);
   Tone.Transport.start();
+  requestAnimationFrame(playheadFrame);
 }
 
 function startPlayback() {
@@ -5202,6 +5538,35 @@ var CURRICULUM = [
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:1}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:1})]; }
       }
     ]
+  },
+  {
+    id: "unit10", title: "Unit 10 \u2014 Reharmonization",
+    lessons: [
+      {
+        id: "u10-one-note-many-chords", title: "One Note, Many Chords",
+        intro: "Reharmonizing means keeping the melody and changing the chords under it. It works because a single note belongs to several chords: C is in C major (C\u2013E\u2013G), A minor (A\u2013C\u2013E) and F major (F\u2013A\u2013C). This is the opening of Beethoven's Ode to Joy, with its plain harmony, I\u2013V\u2013I\u2013V. The melody sits on the piano roll above the chords; its rows are tinted with the color of the chord built on each scale step. Bar 3 sings C\u2013C\u2013D\u2013E over I. Try changing block 3 to vi: the C and the E are both in A minor, so the tune still fits, but the bar turns wistful. Then try block 1 as iii (E\u2013G\u2013B) under E\u2013E\u2013F\u2013G.",
+        melody: [[0,4,4],[4,4,4],[8,4,5],[12,4,7],[16,4,7],[20,4,5],[24,4,4],[28,4,2],[32,4,0],[36,4,0],[40,4,2],[44,4,4],[48,6,4],[54,2,2],[56,8,2]],
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4})]; }
+      },
+      {
+        id: "u10-borrow-under-melody", title: "Borrowing Under a Melody",
+        intro: "Twinkle, Twinkle, Little Star, harmonized the usual way: I and IV, then V to I. A borrowed chord can slip under a melody as long as the borrowed note isn't the one being sung. Block 5 is IV (F\u2013A\u2013C) under F\u2013F. Change its Mode to Aeolian to borrow iv (F\u2013A\u266D\u2013C): the melody's F is still in the chord, and the darker A\u266D colors the line without fighting it. Now try the same on block 3, where the melody sings A\u2013A: iv's A\u266D sits a half step from the melody's A, and you'll hear the two rub.",
+        melody: [[0,4,0],[4,4,0],[8,4,7],[12,4,7],[16,4,9],[20,4,9],[24,8,7],[32,4,5],[36,4,5],[40,4,4],[44,4,4],[48,4,2],[52,4,2],[56,8,0]],
+        blocks: function () { return [learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:4, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3})]; }
+      },
+      {
+        id: "u10-v7-of-iv", title: "Pointing at the Next Chord (V7/IV)",
+        intro: "A secondary dominant can replace a chord when the melody note fits it, and it pulls toward whatever comes next. In Twinkle, block 4 holds the melody's long G before block 5's IV. Change block 4 to Applied \u2014 Target: IV, Function: Dominant of. That builds C7 (C\u2013E\u2013G\u2013B\u266D): the G is still in the chord, and the B\u266D now leans down into the A of the F chord that follows. Same tune, but the line suddenly has somewhere to go.",
+        melody: [[0,4,0],[4,4,0],[8,4,7],[12,4,7],[16,4,9],[20,4,9],[24,8,7],[32,4,5],[36,4,5],[40,4,4],[44,4,4],[48,4,2],[52,4,2],[56,8,0]],
+        blocks: function () { return [learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3, extensionIndex:2}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:4, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3})]; }
+      },
+      {
+        id: "u10-deceptive-ending", title: "A Deceptive Ending",
+        intro: "The last note of a tune is usually harmonized with I, the most final sound there is. But the melody's last note, C, is also in A minor (A\u2013C\u2013E) and in A\u266D major (A\u266D\u2013C\u2013E\u266D). Change the last block to vi and the tune ends on its home note while the harmony refuses to settle. Then try \u266DVI instead (Degree vi, Mode Aeolian): a borrowed, cinematic ending under the very same C.",
+        melody: [[0,4,0],[4,4,0],[8,4,7],[12,4,7],[16,4,9],[20,4,9],[24,8,7],[32,4,5],[36,4,5],[40,4,4],[44,4,4],[48,4,2],[52,4,2],[56,8,0]],
+        blocks: function () { return [learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:4, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3})]; }
+      }
+    ]
   }
 ];
 
@@ -5277,7 +5642,7 @@ function openLesson(lessonId) {
   // already; switchToSongView hands it back on the way out).
   state.masterRootIndex = 0;
   state.masterModeIndex = lesson.masterMode !== undefined ? lesson.masterMode : 0;
-  sandbox = {title: lesson.title, blocks: lesson.blocks(), lessonId: lessonId};
+  sandbox = {title: lesson.title, blocks: lesson.blocks(), lessonId: lessonId, melody: lesson.melody || null};
   editingRef = {kind: "scratch"};
   editingBlocks = sandbox.blocks;
   state.currentIndex = 0;
@@ -5295,9 +5660,62 @@ function openLesson(lessonId) {
 // the whole point is noticing something as you change it. Only names the
 // theory once something recognizable is actually there; otherwise invites
 // continued exploration rather than showing an error.
+// For a melody lesson: the melody notes heard over a block, and which of them are in
+// that block's chord. A note that's in the chord sounds settled; one that isn't is a
+// passing or color note. That's the whole test of a reharmonization.
+function melodyOverBlock(blockIndex) {
+  var startBeat = 0;
+  for (var i = 0; i < blockIndex; i++) startBeat += getDurationBeats(sandbox.blocks[i]);
+  var endBeat = startBeat + getDurationBeats(sandbox.blocks[blockIndex]);
+  var chord = buildChord(sandbox.blocks[blockIndex], state.masterRootIndex, state.masterModeIndex);
+  var pcs = chord.pitches.map(function (p) { return ((p % 12) + 12) % 12; });
+  return sandbox.melody.filter(function (n) { return n[0] / 4 >= startBeat && n[0] / 4 < endBeat; }).map(function (n) {
+    var pc = ((melodyMidi(n[2]) % 12) + 12) % 12;
+    return {semis: n[2], pc: pc, inChord: pcs.indexOf(pc) >= 0, startsChord: n[0] / 4 === startBeat};
+  });
+}
+function describeMelodyFit(blockIndex) {
+  var block = sandbox.blocks[blockIndex];
+  var label = blockLabel(block, state.masterRootIndex, state.masterModeIndex);
+  var notes = melodyOverBlock(blockIndex);
+  var flats = keyPrefersFlats(state.masterRootIndex, state.masterModeIndex);
+  var name = function (pc) { return pitchToNoteName(pc, flats).replace("#", "♯"); };
+  var uniq = function (arr) { return arr.filter(function (x, i) { return arr.indexOf(x) === i; }); };
+  var inside = uniq(notes.filter(function (n) { return n.inChord; }).map(function (n) { return name(n.pc); }));
+  var outside = uniq(notes.filter(function (n) { return !n.inChord; }).map(function (n) { return name(n.pc); }));
+  var head = "Block " + (blockIndex + 1) + ", " + label.degree + (label.name !== label.degree ? " (" + label.name + ")" : "") + ": ";
+  if (!notes.length) return head + "the melody rests here.";
+  var parts = [];
+  if (inside.length) parts.push(inside.join(", ") + (inside.length > 1 ? " are" : " is") + " in the chord");
+  if (outside.length) parts.push(outside.join(", ") + (outside.length > 1 ? " pass" : " passes") + " outside it");
+  return head + parts.join("; ") + ".";
+}
+// Done once some chord differs from the lesson's start and the melody note that starts
+// it (the one heard as the chord lands) is one of its chord tones.
+function melodyLessonFound() {
+  var lesson = findLesson(sandbox.lessonId);
+  if (!lesson) return false;
+  var start = lesson.blocks();
+  return sandbox.blocks.some(function (b, i) {
+    if (!start[i]) return false;
+    var a = buildChord(b, state.masterRootIndex, state.masterModeIndex).pitches.join(",");
+    var o = buildChord(start[i], state.masterRootIndex, state.masterModeIndex).pitches.join(",");
+    if (a === o) return false;
+    var landing = melodyOverBlock(i).filter(function (n) { return n.startsChord; });
+    return landing.length > 0 && landing.every(function (n) { return n.inChord; });
+  });
+}
+
 function updateLessonReveal() {
   var el = document.getElementById("lessonReveal");
   if (!el) return;
+  if (sandbox && sandbox.melody) {
+    var ok = melodyLessonFound();
+    el.classList.toggle("found", ok);
+    el.textContent = describeMelodyFit(state.currentIndex);
+    if (ok && sandbox.lessonId) markLessonComplete(sandbox.lessonId);
+    return;
+  }
   var found = describeProgression(sandbox.blocks);
   el.classList.toggle("found", !!found);
   if (found) {

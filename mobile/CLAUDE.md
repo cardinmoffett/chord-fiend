@@ -1,6 +1,6 @@
 # Chord Fiend: Modal Interchange Sketchpad (the phone app)
 
-A single-file, touch-first web app for sketching chord progressions. Blocks are chords you edit visually. It does modal interchange, applied chords (secondary dominants, tritone substitutions, leading-tone), auto-generated drums and bass, and has a built-in Learn curriculum (40 lessons in 9 units). Plain JavaScript, no build step. Sound is Tone.js 14.8.49, bundled in `vendor/Tone.js`.
+A single-file, touch-first web app for sketching chord progressions. Blocks are chords you edit visually. It does modal interchange, applied chords (secondary dominants, tritone substitutions, leading-tone), auto-generated drums and bass, and has a built-in Learn curriculum (44 lessons in 10 units). Plain JavaScript, no build step. Sound is Tone.js 14.8.49, bundled in `vendor/Tone.js`.
 
 The owner can code but is not a professional developer. Explain technical problems in plain language, and say what you verified and what you assumed.
 
@@ -35,6 +35,7 @@ Run these from `mobile/`.
 - The engine never reads `state`, the DOM or audio. Functions that need the key, mode or bass settings take them as parameters, and the app passes them in: `getChordSymbol(chord, state.masterRootIndex)`, `appliedFunctionLabel(block, state.masterModeIndex)`, `activeBeatPattern(beatKey, state.customBeatPatterns)`, `bassOctaveShift(rootPitch, state.bassWrapLow)`, `computeBassPitchForBlock(block, chord, pattern, state.bassWrapLow)`.
 - Block labels come from the engine's `blockLabel(block, root, mode)`: the numeral and formula large (V7, ♭VI, V7/ii), the chord name small. The Ableton device uses the same function, so change labels there, not in the app.
 - The Learn checks (`blockSignature`, `plainDegreeSeq`, `findBorrowedChord`) treat a free chord as neither a degree nor a borrowed chord.
+- **Melody lessons (Unit 10, Reharmonization).** A lesson with a `melody` field (notes as `[start, length, semis]`: 16ths from the section start, half steps above the key root, 0 = middle C's octave) shows its section as one wide sideways-scrolling lane (`renderLane`): a piano roll whose scale-tone rows take the lightened color of the chord on that degree, the chord blocks in one strip below, and a playhead that follows the audio clock (`playheadFrame`). The melody is fixed and plays on its own voice (`melodySynth`, `scheduleMelodyPass`); the exercise is changing chords under it. The lesson text reports which melody notes sit in the selected chord (`describeMelodyFit`); a lesson completes when a changed chord holds the note that lands with it (`melodyLessonFound`). Only melody lessons use the lane; normal sections and other lessons keep the wrapped rows. `test_reharm_lessons` checks every claim in the Unit 10 text. Spec and next steps: `../docs/melody-editor-spec.md`.
 - While a section plays, the selection follows the playhead until the person taps a block: that pins it (`playback.pinned`), with no sound, and the editor is no longer re-rendered as the playhead moves, so an open menu isn't closed mid-edit. Tapping empty timeline space unpins it. A pinned block stays selected after Stop. Editor changes during playback play no preview (`previewCurrentBlock` returns early); they're heard the first time the playhead reaches the block, because `scheduleBlockNotes` builds each block's notes just before it plays (`BLOCK_PREPARE_AHEAD`), not when the pass starts. Block timing (durations) is fixed per pass, so a duration change lands on the next pass.
 
 ## Things that have bitten before
@@ -56,6 +57,7 @@ Run these from `mobile/`.
 - A test ends by printing `ALL PASSED` or `SOME FAILED`, and prints failures as lines starting `FAIL`. `run-all.js` reads those markers; the tests do not set an exit code themselves.
 - Write expected values from music theory, independent of the code under test, never copied from its output.
 - `test_engine_in_sync` checks that the engine block matches `../engine/src/engine.js`.
+- `test_reharm_lessons` checks Unit 10's melodies and every chord-fit claim in its text.
 - The other six tests: applied chords, spelling (`test_enharmonic2`), applied-chord labels, the lesson 7th-chord fix, inversion labels, and drop voicings. Earlier work also had tests for gestures, scrolling, the drawer, audio, persistence, instruments and the rest of the curriculum, but they were not recovered. Do not assume those areas are covered; add a test when you change them.
 
 ## Where it runs
