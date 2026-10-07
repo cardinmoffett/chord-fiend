@@ -783,10 +783,6 @@
   .settings-row label { font-size: 13px; color: var(--text); }
   .settings-hint { font-size: 11px; color: var(--text-faint); margin-top: -6px; }
   .settings-row select, .settings-row input { width: 140px; }
-  .tempo-control { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; justify-content: flex-end; min-width: 0; }
-  .settings-row .tempo-control input[type=range] { width: auto; flex: 1 1 auto; min-width: 60px; }
-  .tempo-control button.icon { width: 34px; height: 34px; flex: 0 0 auto; font-size: 18px; }
-  .tempo-value { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; min-width: 30px; text-align: right; }
 
   input[type=range] {
     -webkit-appearance: none;
@@ -905,13 +901,8 @@
     </div>
     <div class="settings-row">
       <label>Tempo</label>
-      <!-- No typing: drag the slider, or tap (or hold) - and + for one BPM at a time. -->
-      <div class="tempo-control">
-        <button class="icon" id="tempoDownBtn" title="Slower">−</button>
-        <input type="range" id="tempoSlider" min="30" max="300" step="1">
-        <button class="icon" id="tempoUpBtn" title="Faster">+</button>
-        <span class="tempo-value" id="tempoValue"></span>
-      </div>
+      <!-- A dropdown in steps of 5: no typing on the phone. -->
+      <select id="tempoSelect"></select>
     </div>
     <div class="settings-row">
       <label>Color palette</label>
@@ -3182,8 +3173,7 @@ addBtn.addEventListener("click", addBlock);
 var settingsBtn = document.getElementById("settingsBtn");
 var settingsBackdrop = document.getElementById("settingsBackdrop");
 var settingsCloseBtn = document.getElementById("settingsCloseBtn");
-var tempoSlider = document.getElementById("tempoSlider");
-var tempoValue = document.getElementById("tempoValue");
+var tempoSelect = document.getElementById("tempoSelect");
 
 var instrumentSelect = document.getElementById("instrumentSelect");
 var paletteSelect = document.getElementById("paletteSelect");
@@ -3686,37 +3676,29 @@ settingsCloseBtn.addEventListener("click", closeSettings);
 settingsBackdrop.addEventListener("click", function (e) {
   if (e.target === settingsBackdrop) closeSettings();
 });
+// Tempo choices go in steps of 5. A saved tempo between steps (from before this
+// dropdown, say 112) gets its own option so the menu never shows blank.
+var TEMPO_MIN = 30, TEMPO_MAX = 300, TEMPO_STEP = 5;
 function showTempo(v) {
-  tempoSlider.value = v;
-  tempoValue.textContent = v;
+  tempoSelect.innerHTML = "";
+  for (var t = TEMPO_MIN; t <= TEMPO_MAX; t += TEMPO_STEP) {
+    if (v > t - TEMPO_STEP && v < t) addTempoOption(v);
+    addTempoOption(t);
+  }
+  tempoSelect.value = String(v);
 }
-function setTempo(v) {
-  v = Math.max(30, Math.min(300, Math.round(v) || 100));
-  if (v === state.tempo) { showTempo(v); return; }
+function addTempoOption(t) {
+  var o = document.createElement("option");
+  o.value = String(t);
+  o.textContent = t + " BPM";
+  tempoSelect.appendChild(o);
+}
+tempoSelect.addEventListener("change", function () {
+  var v = parseInt(tempoSelect.value, 10) || 100;
   state.tempo = v;
-  showTempo(v);
   if (masterDelay) masterDelay.delayTime.value = delayTimeSeconds(); // keep delay in sync with the new tempo
   save();
-}
-tempoSlider.addEventListener("input", function () { setTempo(parseInt(tempoSlider.value, 10)); });
-// Tap for one BPM; hold to keep going, speeding up the longer it's held.
-function holdToStep(btn, dir) {
-  var timer = null, count = 0;
-  function step() { setTempo(state.tempo + dir); }
-  function stop() { if (timer) { clearTimeout(timer); timer = null; } }
-  btn.addEventListener("pointerdown", function (e) {
-    e.preventDefault();
-    stop();
-    count = 0;
-    step();
-    (function repeat() {
-      timer = setTimeout(function () { count++; step(); repeat(); }, count === 0 ? 400 : count < 10 ? 110 : 45);
-    })();
-  });
-  ["pointerup", "pointerleave", "pointercancel"].forEach(function (ev) { btn.addEventListener(ev, stop); });
-}
-holdToStep(document.getElementById("tempoDownBtn"), -1);
-holdToStep(document.getElementById("tempoUpBtn"), 1);
+});
 // The volume slider always shows the trim of whichever instrument is
 // currently selected -- it's a property of the instrument (stored globally,
 // keyed by name), not of the project, so switching instruments swaps which
