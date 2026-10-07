@@ -3763,6 +3763,47 @@ function updatePlaybackUI(blockIndex) {
   }
 }
 
+var BLOCK_PREPARE_AHEAD = 0.15;
+function scheduleBlockNotes(blockIndex, atOffset, durSeconds, durBeats, baseTime, secondsPerBeat) {
+  if (!playback.active) return;
+  var block = playbackBlocks[blockIndex];
+  if (!block) return; // deleted while playing
+  var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
+
+  if (state.bassEnabled && block.bassToneIndex !== -1) {
+    scheduleBassForBlock(chord, atOffset, durBeats, baseTime, secondsPerBeat);
+  }
+
+  if (state.arpEnabled) {
+    // Replace the held chord with its notes cycling one at a time,
+    // repeating the pattern to fill however long this block lasts.
+    var arpSeq = buildArpSequence(chord);
+    var arpStepSeconds = (DURATION_BEATS[DURATION_NAMES[state.arpRate]] || 0.5) * secondsPerBeat;
+    var stepsInBlock = Math.max(1, Math.round(durSeconds / arpStepSeconds));
+    for (var s = 0; s < stepsInBlock; s++) {
+      (function (stepIdx) {
+        var pitch = arpSeq[stepIdx % arpSeq.length];
+        Tone.Transport.scheduleOnce(function (time) {
+          synth.triggerAttackRelease([midiToFreq(pitch)], arpStepSeconds * 0.85, time);
+          if (stepIdx === 0) {
+            Tone.Draw.schedule(function () { updatePlaybackUI(blockIndex); }, time);
+          }
+        }, baseTime + atOffset + stepIdx * arpStepSeconds);
+      })(s);
+    }
+  } else {
+    Tone.Transport.scheduleOnce(function (time) {
+      var freqs = chord.pitches.map(midiToFreq);
+      // Releasing and re-attacking the SAME pitch at the exact same instant
+      // (common when consecutive chords share a note) can leave that voice's
+      // envelope stuck -- a 1ms gap (inaudible) gives it an unambiguous order.
+      synth.releaseAll(time);
+      synth.triggerAttack(freqs, time + 0.001);
+      Tone.Draw.schedule(function () { updatePlaybackUI(blockIndex); }, time);
+    }, baseTime + atOffset);
+  }
+}
+
 function scheduleOnePass(startIndex, baseTime) {
   if (!playback.active) return;
   var tempo = state.tempo || 100;
@@ -3773,41 +3814,13 @@ function scheduleOnePass(startIndex, baseTime) {
     var blockDurBeats = getDurationBeats(playbackBlocks[i]);
     var blockDurSeconds = blockDurBeats * secondsPerBeat;
     (function (blockIndex, atOffset, durSeconds, durBeats) {
-      var block = playbackBlocks[blockIndex];
-      var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
-
-      if (state.bassEnabled && block.bassToneIndex !== -1) {
-        scheduleBassForBlock(chord, atOffset, durBeats, baseTime, secondsPerBeat);
-      }
-
-      if (state.arpEnabled) {
-        // Replace the held chord with its notes cycling one at a time,
-        // repeating the pattern to fill however long this block lasts.
-        var arpSeq = buildArpSequence(chord);
-        var arpStepSeconds = (DURATION_BEATS[DURATION_NAMES[state.arpRate]] || 0.5) * secondsPerBeat;
-        var stepsInBlock = Math.max(1, Math.round(durSeconds / arpStepSeconds));
-        for (var s = 0; s < stepsInBlock; s++) {
-          (function (stepIdx) {
-            var pitch = arpSeq[stepIdx % arpSeq.length];
-            Tone.Transport.scheduleOnce(function (time) {
-              synth.triggerAttackRelease([midiToFreq(pitch)], arpStepSeconds * 0.85, time);
-              if (stepIdx === 0) {
-                Tone.Draw.schedule(function () { updatePlaybackUI(blockIndex); }, time);
-              }
-            }, baseTime + atOffset + stepIdx * arpStepSeconds);
-          })(s);
-        }
-      } else {
-        Tone.Transport.scheduleOnce(function (time) {
-          var freqs = chord.pitches.map(midiToFreq);
-          // Releasing and re-attacking the SAME pitch at the exact same instant
-          // (common when consecutive chords share a note) can leave that voice's
-          // envelope stuck -- a 1ms gap (inaudible) gives it an unambiguous order.
-          synth.releaseAll(time);
-          synth.triggerAttack(freqs, time + 0.001);
-          Tone.Draw.schedule(function () { updatePlaybackUI(blockIndex); }, time);
-        }, baseTime + atOffset);
-      }
+      // Each block's notes are worked out just before it plays (BLOCK_PREPARE_AHEAD
+      // seconds early), not when the pass starts, so an edit made while the song is
+      // playing (a flat 5 on the next chord, say) is heard the first time the playhead
+      // reaches it. The block's place in time is still fixed for this pass.
+      var prepare = function () { scheduleBlockNotes(blockIndex, atOffset, durSeconds, durBeats, baseTime, secondsPerBeat); };
+      if (atOffset < BLOCK_PREPARE_AHEAD) prepare();
+      else Tone.Transport.scheduleOnce(prepare, baseTime + atOffset - BLOCK_PREPARE_AHEAD);
     })(i, cursorSeconds, blockDurSeconds, blockDurBeats);
     cursorSeconds += blockDurSeconds;
   }
