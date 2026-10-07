@@ -33,10 +33,11 @@ Two optional block fields. A block without them builds exactly as the app's did,
 
     sh run_tests.sh
 
-Expect eight `ok` lines.
+Expect nine `ok` lines.
 
 - `test_matches_original.mjs` loads the original app and checks that the engine gives identical answers across about 1.4 million checks: every key, home mode, borrowed mode, degree, extension, sus and aug setting, all applied chords, and every beat and bass setting.
 - The other five are the original tests, pointed at the engine. Their checks are unchanged; only the setup at the top differs. `test_inversion_labels` leaves out its final section, which tests the app's editor dropdown rather than the engine and belongs with the editor (build plan step 5).
 - `test_free_flat5.mjs` checks free mode and flat five against hand-written expectations.
 - `test_notes.mjs` checks `src/notes.js` against hand-written expectations.
+- `test_block_label.mjs` checks `blockLabel` (the large degree-and-formula label and small chord name a block shows) against hand-written roman numerals.
 - `test_extension_fix` is not ported. It tests the Learn lessons, which the device does not carry over. It still runs against the original app with `sh original/run_tests.sh`.

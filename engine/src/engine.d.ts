@@ -99,3 +99,6 @@ export function patternHasHitAtStep(lane: BeatLane | null, step: number, stepsPe
 export function chordTonePitch(chord: Chord, slot: number): number;
 export function bassOctaveShift(rootPitch: number, bassWrapLow: number): number;
 export function computeBassPitchForBlock(block: Block, chord: Chord, pattern: BeatPattern, bassWrapLow: number): number | null;
+
+/** What a block shows: `degree` large (V7, ♭VI, V7/ii; a free chord's root and quality) and `name` small (G7, A♭). */
+export function blockLabel(block: Block, masterRootIndex: number, masterModeIndex: number): { degree: string; name: string };

@@ -501,6 +501,40 @@ function computeBassPitchForBlock(block, chord, pattern, bassWrapLow) {
   return chordTonePitch(chord, slot) + shift;
 }
 
+// What a block shows on screen: `degree` large, the chord's job in the key written as a
+// numeral plus its formula (V7, \u266DVI, ii7, V7/ii, vii\u00B07/V), and `name` small, the
+// chord itself (G7, A\u266D, Dm7). A free chord has no degree in the key, so its large
+// label is its root and quality (E, F\u266Fm7). Shared by the phone app and the device.
+var FUNCTION_SHORT = {dominant: "V", tritoneSub: "subV", leadingTone: "vii\u00B0"};
+var QUALITY_SHORT = {major: "", minor: "m", dominant: "", diminished: "\u00B0"};
+function blockLabel(block, masterRootIndex, masterModeIndex) {
+  var chord = buildChord(block, masterRootIndex, masterModeIndex);
+  var name = getChordSymbol(chord, masterRootIndex).replace(/ \(.*\)$/, "");
+  var ext = EXTENSION_NAMES[block.extensionIndex];
+  var extMark = ext === "triad" ? "" : ext;
+  var susMark = block.susIndex === 1 ? "sus2" : block.susIndex === 2 ? "sus4" : "";
+  var fifthMark = chord.aug ? "+" : chord.flat5 ? "\u266D5" : "";
+  var degree;
+  if (block.chordSource === "applied") {
+    var target = degreeLabels(MASTER_MODE_NAMES[masterModeIndex])[block.appliedTargetIndex] || "?";
+    var fn = FUNCTION_SHORT[block.appliedFunction] || "V";
+    degree = fn + (block.appliedFunction === "leadingTone" ? "7" : extMark) + susMark + fifthMark + "/" + target;
+  } else if (block.chordSource === "free") {
+    var root = pitchToNoteName(block.freeRoot || 0, keyPrefersFlats(masterRootIndex, masterModeIndex)).replace("#", "\u266F");
+    var q = FREE_QUALITY_INTERVALS[block.freeQuality] ? block.freeQuality : "major";
+    // A dominant triad sounds as a plain major triad, so it only reads "7" once a 7th is there.
+    var qMark = q === "dominant" ? extMark : QUALITY_SHORT[q] + (q === "major" && extMark && extMark !== "6" ? "maj" + extMark : extMark);
+    degree = root + qMark + susMark + fifthMark;
+  } else {
+    var mode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[masterModeIndex];
+    var numeral = degreeLabels(mode)[block.degreeIndex];
+    // A diminished degree (vii\u00B0) already has its flat five; don't say it twice.
+    if (chord.flat5 && /\u00B0$/.test(numeral)) fifthMark = "";
+    degree = numeral + extMark + susMark + fifthMark;
+  }
+  return {degree: degree, name: name};
+}
+
 export {
   // constants
   MODES, DEGREE_NAMES, DEGREE_INDEX, BLOCK_MODE_NAMES, MASTER_MODE_NAMES,
@@ -515,7 +549,7 @@ export {
   // chords
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
-  getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel,
+  getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel, blockLabel,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock

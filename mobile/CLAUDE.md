@@ -31,9 +31,11 @@ Run these from `mobile/`.
 ## How the model works
 
 - `state` is the active project's data object. `projectsStore` holds all projects and is saved to localStorage under `modalSketchpadProjects`.
-- A song is sections of blocks. A block has fields such as `degreeIndex`, `chordSource` ("diatonic" or "applied"), `appliedTargetIndex`, `appliedFunction`, `extensionIndex` and `blockModeIndex`. See `defaultBlock()` for the full list.
+- A song is sections of blocks. A block has fields such as `degreeIndex`, `chordSource` ("diatonic", "applied" or "free"), `appliedTargetIndex`, `appliedFunction`, `freeRoot` and `freeQuality` (free chords), `extensionIndex`, `blockModeIndex`, and `aug` / `flat5` (the editor's Fifth control: 5, ♭5, ♯5). See `defaultBlock()`; `freeRoot`, `freeQuality` and `flat5` are optional and absent on older saved blocks.
 - The engine never reads `state`, the DOM or audio. Functions that need the key, mode or bass settings take them as parameters, and the app passes them in: `getChordSymbol(chord, state.masterRootIndex)`, `appliedFunctionLabel(block, state.masterModeIndex)`, `activeBeatPattern(beatKey, state.customBeatPatterns)`, `bassOctaveShift(rootPitch, state.bassWrapLow)`, `computeBassPitchForBlock(block, chord, pattern, state.bassWrapLow)`.
-- The engine also supports two block fields the phone app's editor does not offer yet: `flat5` and `chordSource: "free"`. See `../engine/README.md`.
+- Block labels come from the engine's `blockLabel(block, root, mode)`: the numeral and formula large (V7, ♭VI, V7/ii), the chord name small. The Ableton device uses the same function, so change labels there, not in the app.
+- The Learn checks (`blockSignature`, `plainDegreeSeq`, `findBorrowedChord`) treat a free chord as neither a degree nor a borrowed chord.
+- While the song plays, tapping a block only selects it (no sound, playback continues) and editor changes don't play a preview (`previewCurrentBlock` returns early). Edits are heard when the playhead reaches the block, because playback reads the live blocks.
 
 ## Things that have bitten before
 
