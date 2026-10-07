@@ -284,6 +284,7 @@ function getChordSymbol(chord, masterRootIndex) {
       else if (q==="dim" && seventh===9) base = rootName+"dim"+d2;
       else if (q==="dim" && seventh===10) base = rootName+"m"+d2+"b5";
       else if (q==="aug" && seventh===11) base = rootName+"maj"+d2+"#5";
+      else if (q==="aug" && seventh===10) base = rootName+(third===3?"m":"")+d2+"#5"; // G7#5, Dm7#5 (the original app had no name for these and showed "G?7")
       else if (q==="b5" && seventh===10) base = rootName+d2+"b5";
       else if (q==="b5" && seventh===11) base = rootName+"maj"+d2+"b5";
       else base = rootName+"?"+d2;

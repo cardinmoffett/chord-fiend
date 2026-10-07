@@ -1389,6 +1389,7 @@ function getChordSymbol(chord, masterRootIndex) {
       else if (q==="dim" && seventh===9) base = rootName+"dim"+d2;
       else if (q==="dim" && seventh===10) base = rootName+"m"+d2+"b5";
       else if (q==="aug" && seventh===11) base = rootName+"maj"+d2+"#5";
+      else if (q==="aug" && seventh===10) base = rootName+(third===3?"m":"")+d2+"#5"; // G7#5, Dm7#5 (the original app had no name for these and showed "G?7")
       else if (q==="b5" && seventh===10) base = rootName+d2+"b5";
       else if (q==="b5" && seventh===11) base = rootName+"maj"+d2+"b5";
       else base = rootName+"?"+d2;
@@ -5621,6 +5622,131 @@ var CURRICULUM = [
         blocks: function () { return [learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:4, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3})]; }
       }
     ]
+  },
+  {
+    id: "unit11", title: "Unit 11 — Chromatic Color",
+    lessons: [
+      {
+        id: "u11-line-cliche", title: "The Line Cliché",
+        intro: "A line cliché holds one chord still while a single voice inside it creeps by half steps. Here C major is held for four bars before IV. Make its 5th climb: set block 2's Fifth to ♯5 (C–E–G♯), block 3's Extension to 6 (C–E–G–A), and change block 4 to Applied — Target: IV, Function: Dominant of (C–E–G–B♭; it already has its 7th). The top voice now walks G, G♯, A, B♭ and settles on A in the F chord, while C and E never move.",
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0, extensionIndex:2, octave:-1}), learnBlock({degreeIndex:3})]; },
+        goal: function (b) {
+          if (lessonHas(b[1], [0, 4, 8]) && lessonHas(b[2], [0, 4, 7, 9]) && lessonHas(b[3], [0, 4, 7, 10]))
+            return {name: "Line cliché", reveal: "one voice climbs G → G♯ → A → B♭ while C and E stay put, then the B♭ settles onto A in the F chord."};
+          return null;
+        }
+      },
+      {
+        id: "u11-aug-passing", title: "Augmented as a Passing Chord",
+        intro: "Raising a chord's 5th by a half step gives the augmented chord, which sounds like it's already leaning toward the next one. In I–IV–V–I, set block 3's Fifth to ♯5: V becomes G–B–D♯, and that D♯ leans into E, the 3rd of the C chord that follows. Then try the same on block 1: C–E–G♯, whose G♯ leans into the A of IV.",
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; },
+        goal: function (b) {
+          if (lessonHas(b[2], [7, 11, 3])) return {name: "Augmented dominant (V+)", reveal: "G–B–D♯: the raised 5th, D♯, is a half step below E, so the chord pulls harder into C than plain V does."};
+          if (lessonHas(b[0], [0, 4, 8])) return {name: "Augmented tonic (I+)", reveal: "C–E–G♯: the G♯ is a half step below A, so home now leans forward into IV."};
+          return null;
+        }
+      },
+      {
+        id: "u11-chromatic-mediants", title: "Chromatic Mediants",
+        intro: "A chromatic mediant is a major chord a third away from home that borrows nothing from the key: it just keeps one note and slides the others by half steps. Change block 2 to Free — Root: E, Quality: Major. E major (E–G♯–B) shares only E with C major, and the G♯ is a note the key doesn't have: an instant jolt of scale and wonder, the stuff of film scores. Then try Free A major (A–C♯–E), and compare ♭VI (Degree vi, Mode Aeolian: A♭–C–E♭), a mediant borrowed from C minor that keeps C instead.",
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:2}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; },
+        goal: function (b) {
+          var majorThirdAway = {4: "E major (III)", 9: "A major (VI)", 8: "A♭ major (♭VI)", 3: "E♭ major (♭III)"};
+          var c = lessonChord(b[1]);
+          var root = ((c.chordRootPitch % 12) + 12) % 12;
+          var isMajor = c.offsets[1] === 4 && c.offsets[2] === 7;
+          var outside = lessonPcs(b[1]).some(function (pc) { return [0, 2, 4, 5, 7, 9, 11].indexOf(pc) < 0; });
+          if (isMajor && majorThirdAway[root] && outside) return {name: "Chromatic mediant: " + majorThirdAway[root], reveal: "a major chord a third from C. It keeps one note in common with C major while the others shift by half steps, which is why it sounds bright and strange rather than borrowed."};
+          return null;
+        }
+      },
+      {
+        id: "u11-half-diminished", title: "Half-Diminished (♭5 on a Minor 7th)",
+        intro: "ii7 in C is Dm7 (D–F–A–C). Set block 2's Fifth to ♭5 and it becomes Dm7♭5 (D–F–A♭–C), the half-diminished chord: minor's own ii chord, borrowed into a major key. Its A♭ falls a half step to G in V7, so the ii–V into Cmaj7 suddenly sounds darker and more urgent before landing in major.",
+        blocks: function () { return [learnBlock({degreeIndex:0, extensionIndex:2}), learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4, extensionIndex:2}), learnBlock({degreeIndex:0, extensionIndex:2})]; },
+        goal: function (b) {
+          if (lessonHas(b[1], [2, 5, 8, 0])) return {name: "Half-diminished ii (iiø7)", reveal: "D–F–A♭–C, borrowed from C minor. The A♭ slips down to G in the next chord."};
+          return null;
+        }
+      }
+    ]
+  },
+  {
+    id: "unit12", title: "Unit 12 — Color Beyond Triads",
+    lessons: [
+      {
+        id: "u12-sevenths", title: "Adding the 7th",
+        intro: "Stacking one more third on each chord turns I–vi–IV–V into seventh chords. Set Extension to 7 on each block: Cmaj7, Am7, Fmaj7 and G7. Listen to the difference in kind: the maj7 chords sound dreamy, Am7 soft, and G7 is the only one holding a tritone (B and F), which is why it's the one that wants to move.",
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:4})]; },
+        goal: function (b) {
+          var sevenths = b.filter(function (x) { var c = lessonChord(x); return c.offsets.length >= 4 && !c.is6; }).length;
+          if (sevenths >= 3) return {name: "Seventh chords", reveal: "major 7ths on I and IV, a minor 7th on vi, and the dominant 7th on V, the only one with a tritone (B–F)."};
+          return null;
+        }
+      },
+      {
+        id: "u12-extensions", title: "9ths, 11ths and 13ths",
+        intro: "Keep stacking thirds and you reach the extensions. In this ii–V–I, set block 1 to 9 (Dm9 adds E), block 2 to 13 (G13: G–B–D–F–A–C–E, every note of the C major scale at once), and block 3 to 9 (Cmaj9 adds D). Then try 11 on the last chord: its F sits a half step above the E in the chord and rubs, which is why players usually leave the 11th off major chords.",
+        blocks: function () { return [learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4, extensionIndex:2}), learnBlock({degreeIndex:0, extensionIndex:2}), learnBlock({degreeIndex:0, extensionIndex:2})]; },
+        goal: function (b) {
+          if (b.some(function (x) { return lessonChord(x).offsets.length >= 5; })) return {name: "Extended chords", reveal: "9ths, 11ths and 13ths are thirds stacked past the 7th. They add color on top without changing what the chord does."};
+          return null;
+        }
+      },
+      {
+        id: "u12-sus", title: "Suspensions",
+        intro: "A sus chord swaps its 3rd for the note next to it. Set block 2's Sus to sus4: V becomes G–C–D, the C held over from the I chord before it, and block 3's plain V lets that C fall to B. That's a suspension and its resolution. Then try sus2 on the last block (C–D–G): no 3rd, neither major nor minor, an open ending that never quite settles.",
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; },
+        goal: function (b) {
+          if (b.some(function (x) { return lessonChord(x).sus !== "none"; })) return {name: "Suspended chord", reveal: "the 3rd is replaced by the 2nd or 4th, so the chord is neither major nor minor until (or unless) it resolves."};
+          return null;
+        }
+      },
+      {
+        id: "u12-six-chords", title: "6 Chords",
+        intro: "Adding the 6th instead of the 7th gives a warmer, vintage color. Set block 1's Extension to 6: C6 is C–E–G–A. Now look at block 2 and set it to 7: Am7 is A–C–E–G, the very same four notes. What tells your ear which one it is: the lowest note, and the chord around it.",
+        blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:4})]; },
+        goal: function (b) {
+          if (lessonChord(b[0]).is6) return {name: "Major 6 chord", reveal: "C6 (C–E–G–A) has the same notes as Am7. Root and context decide which one you hear."};
+          return null;
+        }
+      }
+    ]
+  },
+  {
+    id: "unit13", title: "Unit 13 — Voice Leading",
+    lessons: [
+      {
+        id: "u13-inversions", title: "Smooth Moves with Inversions",
+        intro: "In root position, every chord jumps to its own root. Inversions let chords move by the smallest steps instead. The bass part is off here so you hear the chords' own lowest notes. Set block 2's Inversion to 5 (C–F–A) and block 3's to 3 (B–D–G). Now the lowest notes go C–C–B–C, and the voices move by steps or small skips instead of jumping: the same chords, sounding like one connected line.",
+        blocks: function () { return [learnBlock({degreeIndex:0, bassToneIndex:-1}), learnBlock({degreeIndex:3, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:4, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:0, bassToneIndex:-1})]; },
+        goal: function (b) {
+          if (lessonLowest(b[1]) % 12 === 0 && lessonLowest(b[2]) % 12 === 11) return {name: "Smooth voice leading", reveal: "IV over C and V over B: the lowest notes go C–C–B–C, and no voice moves more than a third."};
+          return null;
+        }
+      },
+      {
+        id: "u13-walking-bass", title: "A Bass Line That Walks Down",
+        intro: "Inversions can turn the chords' lowest notes into a melody of their own. The bass part is off here. Set block 2's Inversion to 3 (G major over B) and block 4's to 5 (C major over G). The lowest notes now walk straight down the scale: C–B–A–G–F, one of the most used bass lines in pop and ballads.",
+        blocks: function () { return [learnBlock({degreeIndex:0, bassToneIndex:-1}), learnBlock({degreeIndex:4, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:5, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:0, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:3, octave:-1, bassToneIndex:-1})]; },
+        goal: function (b) {
+          var low = b.slice(0, 5).map(lessonLowest);
+          var walks = [0, 11, 9, 7, 5].every(function (pc, i) { return low[i] % 12 === pc; }) &&
+            low.every(function (p, i) { return i === 0 || (p < low[i - 1] && low[i - 1] - p <= 2); });
+          if (walks) return {name: "Descending bass line", reveal: "C–B–A–G–F, a step at a time, under I – V/B – vi – I/G – IV."};
+          return null;
+        }
+      },
+      {
+        id: "u13-drop2", title: "Drop 2: Opening Up a Chord",
+        intro: "A close voicing packs a chord's notes as tightly as possible. Drop 2 takes the second-highest note down an octave, spreading the chord out the way a guitarist or a horn section would play it. Set Drop to Drop 2 on all three chords of this ii–V–I and compare: same notes, more air.",
+        blocks: function () { return [learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4, extensionIndex:2}), learnBlock({degreeIndex:0, extensionIndex:2})]; },
+        goal: function (b) {
+          if (b.filter(function (x) { return x.dropIndex > 0; }).length >= 2) return {name: "Drop voicings", reveal: "the second-highest note goes down an octave, spreading the chord over more than an octave without changing its notes."};
+          return null;
+        }
+      }
+    ]
   }
 ];
 
@@ -5760,9 +5886,29 @@ function melodyLessonFound() {
   });
 }
 
+// Helpers for lesson goals: the chord a block builds in the lesson's key, its pitch
+// classes (C = 0), and its lowest note's pitch class.
+function lessonChord(b) { return buildChord(b, state.masterRootIndex, state.masterModeIndex); }
+function lessonPcs(b) {
+  return lessonChord(b).pitches.map(function (p) { return ((p % 12) + 12) % 12; })
+    .filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(function (x, y) { return x - y; });
+}
+function lessonHas(b, pcs) { var have = lessonPcs(b); return pcs.every(function (pc) { return have.indexOf(pc) >= 0; }); }
+function lessonLowest(b) { return Math.min.apply(null, lessonChord(b).pitches); }
+
 function updateLessonReveal() {
   var el = document.getElementById("lessonReveal");
   if (!el) return;
+  // A lesson with its own goal (Units 11-13) says what you've built once the goal is
+  // met, instead of looking for a named progression.
+  var goalLesson = sandbox && sandbox.lessonId ? findLesson(sandbox.lessonId) : null;
+  if (goalLesson && goalLesson.goal) {
+    var hit = goalLesson.goal(sandbox.blocks);
+    el.classList.toggle("found", !!hit);
+    el.textContent = hit ? hit.name + " \u2014 " + hit.reveal : "Follow the steps above and listen \u2014 this updates as you go.";
+    if (hit) markLessonComplete(sandbox.lessonId);
+    return;
+  }
   if (sandbox && sandbox.melody) {
     var ok = melodyLessonFound();
     el.classList.toggle("found", ok);
