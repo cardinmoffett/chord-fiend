@@ -141,6 +141,7 @@ export function Inspector({
             <Segmented
               options={row.choices.map((c) => c.label)}
               value={row.choices.findIndex((c) => c.value === row.value)}
+              home={row.choices.findIndex((c) => c.value === row.keyValue)}
               onChange={(i) => onChange(alterChange(block, row.field, row.choices[i].value, song.rootIndex, song.modeIndex))}
             />
           </Field>
@@ -212,16 +213,19 @@ export function Segmented({
   value,
   onChange,
   disabled,
+  home,
 }: {
   options: readonly string[];
   value: number;
   onChange: (i: number) => void;
   disabled?: boolean;
+  /** The unaltered choice, outlined when another one is picked. */
+  home?: number;
 }) {
   return (
     <span className="segmented">
       {options.map((o, i) => (
-        <button key={i} type="button" disabled={disabled} className={i === value ? "on" : ""} onClick={() => onChange(i)}>
+        <button key={i} type="button" disabled={disabled} className={(i === value ? "on" : "") + (i === home ? " home" : "")} onClick={() => onChange(i)}>
           {o}
         </button>
       ))}

@@ -166,6 +166,8 @@
 .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; width: fit-content; }
 .cf .segmented button { border: none; border-radius: 0; background: transparent; padding: 5px 12px; }
 .cf .segmented button.on { background: var(--accent); color: #1b1b1d; font-weight: 600; }
+/* Alter: once a row is changed, its unaltered (key) value keeps a faint outline. */
+.cf .segmented button.home:not(.on) { box-shadow: inset 0 0 0 1px var(--accent); color: var(--text); }
 
 /* ---------- settings drawer ---------- */
 .drawer-shade { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 20; }
