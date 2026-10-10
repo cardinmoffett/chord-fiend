@@ -45,21 +45,23 @@ function sameName(label, a, b) {
 }
 function report(t) { console.log((failures === 0 ? 'PASS' : 'FAIL') + '  ' + t + '  (' + passes + ' checks' + (failures ? ', ' + failures + ' FAILED' : '') + ')'); passes = 0; failures = 0; }
 function blk(o) { return Object.assign(orig.defaultBlock(), o); }
-// The engine's chord carries two fields the app's does not (isFree, flat5). For the app's
-// own blocks both must be false; everything else must match exactly.
+// The engine's chord carries fields the app's does not (isFree, flat5, chordType,
+// bassOffsets). For the app's own blocks they must be false / null; everything else must
+// match exactly.
 function appShape(ch) {
   var c = Object.assign({}, ch);
-  if (c.isFree !== false || c.flat5 !== false) return {unexpected: {isFree: c.isFree, flat5: c.flat5}};
-  delete c.isFree; delete c.flat5;
+  if (c.isFree !== false || c.flat5 !== false || c.chordType !== null || c.bassOffsets !== null)
+    return {unexpected: {isFree: c.isFree, flat5: c.flat5, chordType: c.chordType, bassOffsets: c.bassOffsets}};
+  delete c.isFree; delete c.flat5; delete c.chordType; delete c.bassOffsets;
   return c;
 }
 
 console.log('=== constants ===');
-// Names the app never had are the engine's own additions: free mode (checked in test_free_flat5)
-// and blockLabel (checked in test_block_label).
+// Names the app never had are the engine's own additions: free mode (checked in test_free_flat5),
+// blockLabel (test_block_label) and chord types (test_chord_types).
 var additions = names.filter(function (n) { return orig[n] === undefined; });
 names.forEach(function (n) { if (typeof engine[n] !== 'function' && additions.indexOf(n) < 0) same(n, orig[n], engine[n]); });
-same('the only additions are free mode and blockLabel', additions, ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'blockLabel']);
+same('the only additions are free mode, blockLabel and chord types', additions.slice().sort(), ['CHORD_TYPES', 'FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'blockLabel', 'chordTypeOf']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 

@@ -1,6 +1,8 @@
 // Types for engine.js, for TypeScript callers such as the device. engine.js stays plain JavaScript.
 
 export interface Block {
+  /** A chosen chord type (an id from CHORD_TYPES); absent = "From the key". */
+  chordType?: string;
   degreeIndex: number;
   blockModeIndex: number;
   extensionIndex: number;
@@ -102,3 +104,8 @@ export function computeBassPitchForBlock(block: Block, chord: Chord, pattern: Be
 
 /** What a block shows: `degree` large (V7, ♭VI, V7/ii; a free chord's root and quality) and `name` small (G7, A♭). */
 export function blockLabel(block: Block, masterRootIndex: number, masterModeIndex: number): { degree: string; name: string };
+
+export interface ChordType { id: string; symbol: string; group: string; tones: [number, number][] }
+/** Named chord formulas a block can choose instead of "From the key". Each tone is [semitones above the root, role]. */
+export const CHORD_TYPES: ChordType[];
+export function chordTypeOf(block: Block): ChordType | null;
