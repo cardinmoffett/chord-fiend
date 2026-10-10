@@ -49,10 +49,10 @@ b = L.blocks(); edit(b, 0, {aug: 1});
 check('I+ alone also meets the goal (C-E-G#)', !!L.goal(b) && JSON.stringify(play(b[0])) === JSON.stringify(notes('C4 E4 G#4')));
 
 L = lesson('u11-chromatic-mediants');
-b = goalAtStartAndAfter(L, [[1, {chordSource: 'free', freeRoot: 4, freeQuality: 'major'}]]);
+b = goalAtStartAndAfter(L, [[1, {chordSource: 'free', freeRoot: 4, seventh: 'maj'}]]);
 same('Free E major is E-G#-B', play(b[1]), notes('E4 G#4 B4'));
 check('E major shares only E with C major', play(b[1]).filter(function (p) { return [0, 4, 7].indexOf(p % 12) >= 0; }).map(function (p) { return p % 12; }).join() === String(PC.E));
-b = L.blocks(); edit(b, 1, {chordSource: 'free', freeRoot: 9, freeQuality: 'major'});
+b = L.blocks(); edit(b, 1, {chordSource: 'free', freeRoot: 9, seventh: 'maj'});
 check('Free A major (A-C#-E) also meets the goal', !!L.goal(b) && JSON.stringify(play(b[1]).map(function (p) { return p % 12; })) === JSON.stringify([PC.A, PC['C#'], PC.E]));
 b = L.blocks(); edit(b, 1, {degreeIndex: 5, blockModeIndex: 6});
 check('bVI from Aeolian (Ab-C-Eb) also meets the goal and keeps C', !!L.goal(b) && JSON.stringify(play(b[1]).map(function (p) { return p % 12; })) === JSON.stringify([PC.Ab, PC.C, PC.Eb]));

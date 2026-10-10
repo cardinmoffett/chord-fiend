@@ -226,8 +226,10 @@ describe("block labels: the degree large, the chord name small", () => {
   });
   it("applied and free chords take a fifth and tensions too", () => {
     expect(label({ chordSource: "applied", appliedTargetIndex: 0, appliedFunction: "dominant", extensionIndex: 2, flat5: 1 })).toEqual({ degree: "V7\u266D5/I", name: "G7b5" });
-    expect(label({ chordSource: "free", freeRoot: 0, freeQuality: "augmented" }).degree).toBe("I+");
-    expect(label({ chordSource: "applied", appliedTargetIndex: 1, appliedFunction: "dominant", extensionIndex: 3, tension: "b9" })).toEqual({ degree: "V7(\u266D9)/ii", name: "A7(b9)" });
+    expect(label({ chordSource: "free", freeRoot: 0, fifth: "#5" }).degree).toBe("I+");
+    expect(label({ chordSource: "applied", appliedTargetIndex: 1, appliedFunction: "dominant", extensionIndex: 3, ninth: "b9" })).toEqual({ degree: "V7(\u266D9)/ii", name: "A7(b9)" });
+    // Several extensions can be altered at once: G13 with a flat 9 and a sharp 11.
+    expect(label({ degreeIndex: 4, extensionIndex: 5, ninth: "b9", eleventh: "#11" })).toEqual({ degree: "V13(\u266D9,\u266F11)", name: "G13(b9,#11)" });
   });
   it("a borrowed chord shows its degree in the borrowed mode", () => {
     expect(label({ degreeIndex: 5, blockModeIndex: 6 })).toEqual({ degree: "\u266DVI", name: "A\u266D" });
@@ -238,13 +240,13 @@ describe("block labels: the degree large, the chord name small", () => {
     expect(label({ chordSource: "applied", appliedFunction: "leadingTone", appliedTargetIndex: 4 }).degree).toBe("vii\u00B07/V");
   });
   it("free: the root is a step from the key, so it reads as a number", () => {
-    expect(label({ chordSource: "free", freeRoot: 4, freeQuality: "major" })).toEqual({ degree: "III", name: "E" });
-    expect(label({ chordSource: "free", freeRoot: 5, freeQuality: "minor", extensionIndex: 2 }).degree).toBe("iv7");
-    expect(label({ chordSource: "free", freeRoot: 0, freeQuality: "major", extensionIndex: 2 }).degree).toBe("Imaj7");
+    expect(label({ chordSource: "free", freeRoot: 4, seventh: "maj" })).toEqual({ degree: "III", name: "E" });
+    expect(label({ chordSource: "free", freeRoot: 5, third: "minor", extensionIndex: 2 }).degree).toBe("iv7");
+    expect(label({ chordSource: "free", freeRoot: 0, seventh: "maj", extensionIndex: 2 }).degree).toBe("Imaj7");
     // In F, step 5 is IV: B\u266D. A dominant triad has no 7th, so it reads IV until one is added.
-    expect(label({ chordSource: "free", freeRoot: 5, freeQuality: "dominant" }, { ...DEFAULT_SONG, rootIndex: 5 })).toEqual({ degree: "IV", name: "B\u266D" });
-    expect(label({ chordSource: "free", freeRoot: 5, freeQuality: "dominant", extensionIndex: 2 }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("IV7");
-    expect(label({ chordSource: "free", freeRoot: 11, freeQuality: "diminished", extensionIndex: 2 })).toEqual({ degree: "vii\u00B07", name: "Bdim7" });
-    expect(label({ chordSource: "free", freeRoot: 3, freeQuality: "major" })).toEqual({ degree: "\u266DIII", name: "E\u266D" });
+    expect(label({ chordSource: "free", freeRoot: 5 }, { ...DEFAULT_SONG, rootIndex: 5 })).toEqual({ degree: "IV", name: "B\u266D" });
+    expect(label({ chordSource: "free", freeRoot: 5, extensionIndex: 2 }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("IV7");
+    expect(label({ chordSource: "free", freeRoot: 11, third: "minor", fifth: "b5", seventh: "dim", extensionIndex: 2 })).toEqual({ degree: "vii\u00B07", name: "Bdim7" });
+    expect(label({ chordSource: "free", freeRoot: 3, seventh: "maj" })).toEqual({ degree: "\u266DIII", name: "E\u266D" });
   });
 });

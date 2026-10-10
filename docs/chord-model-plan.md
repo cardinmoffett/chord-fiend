@@ -26,24 +26,35 @@ Revised 2026-10-10, twice:
 | **Diatonic** | A degree of the key's scale | The scale's own tones (Shape, Sus) |
 | **Borrowed** (diatonic plus a Mode) | Same degree, another mode's scale | That mode's tones. The Mode list shows results ("Dorian → F7"). |
 | **Applied** | A function: dominant of, tritone sub of, leading-tone into a target | The function's formula |
-| **Free** | A step from the key's root (`freeRoot`, 0-11), shown as a numeral: ♭II, III, ♯IV… | A Quality: Major, Minor, Dominant, Diminished, Augmented, Half-diminished |
+| **Free** | A step from the key's root (`freeRoot`, 0-11), shown as a numeral: ♭II, III, ♯IV… | A major triad, with a ♭7 when the shape has one. Alter shapes it from there (no Quality menu). |
 
-**Alter**, available on every category except the fixed leading-tone dim7:
+**Alter**, revised 2026-10-10 (third pass). Available on every category except the fixed leading-tone dim7:
 - It's a collapsed group that opens on its own when a block has an alteration.
-- **3rd** (`third`): major or minor.
-- **5th** (`fifth`): ♭5, 5 or ♯5. The older `aug` and `flat5` fields still work. "5" is what gives vii° a perfect 5th.
-- **7th** (`seventh`): maj, ♭7 or °7, when the shape has a 7th.
-- **Tension** (`tension`): ♭9, ♯9, ♯11 or ♭13, when the shape has that tone.
-- Unset means "what the source gives".
-- **Editors show the chord's real values,** so a V7 shows Major, 5, ♭7. Choosing the key's own value clears the change (`withoutAlter` gives the unaltered block).
-- The engine applies all of these in one place in `buildChord`.
+- **Shape decides which tones exist; Alter has one row per tone the chord has.** No "off" choices and no 6th row.
+
+  | Row | Shown when | Choices | Field |
+  |---|---|---|---|
+  | 3rd | always | sus2 · ♭3 · 3 · sus4 | `third` (sus is `susIndex`) |
+  | 5th | always | ♭5 · 5 · ♯5 | `fifth` (older `aug` / `flat5` still work) |
+  | 7th | shape has a 7th | ♭♭7 · ♭7 · 7 | `seventh` (dim / min / maj) |
+  | 9th | add9, 6/9, 9, 11, 13 | ♭9 · 9 · ♯9 | `ninth` |
+  | 11th | 11, 13 | 11 · ♯11 | `eleventh` |
+  | 13th | 13 | ♭13 · 13 | `thirteenth` |
+
+- Several rows can be altered at once: G13(♭9,♯11).
+- sus2 hides the 9th row and sus4 the 11th (same notes).
+- **Applied chords** keep their function's 3rd and 7th: no 7th row, and the 3rd row is sus2 · 3 · sus4.
+- Unset means "what the source gives". **Editors show the chord's real values,** so a V7 shows 3, 5, ♭7. Choosing the key's own value clears the change.
+- **Changing the root or kind** (category, degree, mode, function, target, free root) **clears Alter.** The usual flow is: try a degree, alter it, move on. Inversion, drop and octave keep it.
+- **Changing Shape** keeps only the alterations for tones the new shape still has.
+- The engine owns all of it: `buildChord` applies the fields; `alterRows`, `alterChange`, `alterFitToShape` and `withoutAlter` drive both editors.
 
 **Shape** (`extensionIndex`, editors use `SHAPE_ORDER`): Triad, add9, 6, 6/9, 7, 9, 11, 13.
 
 **Labels (`blockLabel`) are always numerals, read from the chord's real notes:**
 - The case shows the 3rd, then °, + or ø.
 - The 7th's kind: maj7, 7, (maj7), °7.
-- Then shape, tension, sus, and ♭5/♯5.
+- Then shape, altered extensions (the number steps down to the highest unaltered one: V7(♭9), V13(♭9,♯11)), sus, and ♭5/♯5.
 - Examples: ii with a major 3rd and ♭7 reads II7; IVmaj7; V+7; vi(maj7); V7(♭9)/ii.
 - **Free chords read their step:** III, ♭VI, ♭III (E♭, spelled to match the step). Diminished free chords take sharp steps, as leading-tone chords: ♯i°7 = C♯dim7 in C.
 - The chord name (small) stays in letters.
@@ -56,7 +67,7 @@ Revised 2026-10-10, twice:
 
 ## Build order
 
-1. Done: categories, Shape, Mode listed by result, Alter (3rd, 5th, 7th, Tension), free roots as steps, numeral labels for everything.
+1. Done: categories, Shape, Mode listed by result, Alter (a row per chord tone, 3rd through 13th), free roots as steps, numeral labels for everything.
 2. **Reverse lookup:** notes → candidate blocks, tested on its own in the engine.
 3. **Voicing editor** (below).
 4. **Reharmonization suggestions,** built on the reverse lookup and the melody lane in Learn.
