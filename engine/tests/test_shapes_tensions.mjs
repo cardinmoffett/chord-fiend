@@ -68,6 +68,11 @@ check('IV11 in C has the key\'s #11 (B); 11 gives the natural Bb', rootOrder(cho
 
 console.log('=== the double-flat 7th ===');
 check('vii7 with a bb7: B D F Ab, Bdim7, vii°7', [rootOrder(chord({degreeIndex: 6, extensionIndex: SHAPE['7'], seventh: 'dim'})), label({degreeIndex: 6, extensionIndex: SHAPE['7'], seventh: 'dim'})], [pcs('B D F Ab'), {degree: 'vii°7', name: 'Bdim7'}]);
+check('I with a bb7 says so: C E G Bbb, C(bb7), I(' + F + F + '7)', [rootOrder(chord({extensionIndex: SHAPE['7'], seventh: 'dim'})), label({extensionIndex: SHAPE['7'], seventh: 'dim'})], [pcs('C E G A'), {degree: 'I(' + F + F + '7)', name: 'C(bb7)'}]);
+check('ii with a bb7: Dm(bb7), ii(' + F + F + '7)', label({degreeIndex: 1, extensionIndex: SHAPE['7'], seventh: 'dim'}), {degree: 'ii(' + F + F + '7)', name: 'Dm(bb7)'});
+check('V9 with a bb7: G9(bb7), V9(' + F + F + '7)', label({degreeIndex: 4, extensionIndex: SHAPE['9'], seventh: 'dim'}), {degree: 'V9(' + F + F + '7)', name: 'G9(bb7)'});
+check('V9 with a bb7 and a b9: G(bb7,b9), V(' + F + F + '7,' + F + '9)', label({degreeIndex: 4, extensionIndex: SHAPE['9'], seventh: 'dim', ninth: 'b9'}), {degree: 'V(' + F + F + '7,' + F + '9)', name: 'G(bb7,b9)'});
+check('I13 with a bb7 and a b9: C13(bb7,b9)', label({extensionIndex: SHAPE['13'], seventh: 'dim', ninth: 'b9'}), {degree: 'I13(' + F + F + '7,' + F + '9)', name: 'C13(bb7,b9)'});
 check('its tones read 1 b3 b5 bb7', chord({degreeIndex: 6, extensionIndex: SHAPE['7'], seventh: 'dim'}).toneLabels, ['1', F + '3', F + '5', F + F + '7']);
 
 console.log('=== sus and the 9th / 11th ===');
