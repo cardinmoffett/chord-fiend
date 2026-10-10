@@ -70,6 +70,9 @@ check('V with a raised 5th reads V+ (G B D#)', lbl({degreeIndex: 4, aug: 1}), {d
 check('V7 with a flat 5th reads V7' + F + '5', lbl({degreeIndex: 4, extensionIndex: 2, flat5: 1}), {degree: 'V7' + F + '5', name: 'G7b5'});
 check('V9 with a flat 9 reads V7(' + F + '9)', lbl({degreeIndex: 4, extensionIndex: 3, tension: 'b9'}), {degree: 'V7(' + F + '9)', name: 'G7(b9)'});
 check('IV7 from the key is IVmaj7; with a flat 7th it reads IV7', lbl({degreeIndex: 3, extensionIndex: 2, seventh: 'min'}), {degree: 'IV7', name: 'F7'});
+check('vii with a perfect 5th (fifth: 5) reads vii (B D F#, Bm)', lbl({degreeIndex: 6, fifth: '5'}), {degree: 'vii', name: 'Bm'});
+check('fifth #5 on V reads V+ (Gaug)', lbl({degreeIndex: 4, fifth: '#5'}), {degree: 'V+', name: 'Gaug'});
+check('fifth b5 on V7 reads V7' + F + '5', lbl({degreeIndex: 4, extensionIndex: 2, fifth: 'b5'}), {degree: 'V7' + F + '5', name: 'G7b5'});
 check('a sus chord ignores a 3rd it does not have', lbl({degreeIndex: 4, susIndex: 2, third: 'minor'}).degree, 'Vsus4');
 
 console.log(ok ? 'ALL PASSED' : 'SOME FAILED');

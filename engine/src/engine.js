@@ -130,9 +130,11 @@ function degreeLabels(modeName) {
   return labels;
 }
 
-// ALTER choices (block.third, block.seventh, block.tension; the 5th is block.aug / flat5).
+// ALTER choices (block.third, block.fifth, block.seventh, block.tension; aug / flat5 are
+// the older way to set the 5th and still work).
 // Unset means "what the key (or the function, or the free quality) gives".
 var THIRDS = {major: 4, minor: 3};
+var FIFTHS = {"b5": 6, "5": 7, "#5": 8};
 var SEVENTHS = {maj: 11, min: 10, dim: 9};
 // TENSIONS move one tone the chord already has: the 9th (14 semitones) down or up, the
 // 11th (17) up, or the 13th (21) down. A tension whose tone isn't in the chord does nothing.
@@ -238,7 +240,12 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     if (effectiveSus === "none" && (offsets[1] === 3 || offsets[1] === 4) && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
     // (An applied 6 chord keeps its plain dominant triad, as the original app did.)
     if (!(isApplied && is6)) {
-      if (block.aug) offsets[2] = 8;
+      if (FIFTHS[block.fifth] !== undefined) {
+        // An explicit 5th (\u266D5, 5 or \u266F5) -- the only way to give vii\u00B0 a perfect 5th.
+        offsets[2] = FIFTHS[block.fifth];
+        effectiveAug = offsets[2] === 8;
+        effectiveFlat5 = offsets[2] === 6;
+      } else if (block.aug) offsets[2] = 8;
       else if (effectiveFlat5) offsets[2] = 6;
     }
     if (offsets.length >= 4 && !is6 && !addNine && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
@@ -590,6 +597,16 @@ function tensionLabel(chord, extPart) {
 }
 function prettyAccidentals(sym) { return sym.replace(/b(?=\d)/g, "\u266D").replace(/#/g, "\u266F"); }
 
+// The same block with every Alter choice cleared: "what the key gives". Editors compare
+// against it to show the chord's real 3rd, 5th and 7th and to know when a choice is a
+// change (a tap on the key's own value clears the change).
+function withoutAlter(block) {
+  var b = Object.assign({}, block);
+  delete b.third; delete b.fifth; delete b.seventh; delete b.tension;
+  b.aug = 0; b.flat5 = 0;
+  return b;
+}
+
 // The numeral for a chromatic step above the key's root (a free chord's root), spelled
 // against the major scale: I, \u266DII, II, \u266DIII, III, IV, \u266FIV, V, \u266DVI, VI, \u266DVII, VII.
 var STEP_NUMERALS = [["", 0], ["\u266D", 1], ["", 1], ["\u266D", 2], ["", 2], ["", 3], ["\u266F", 3], ["", 4], ["\u266D", 5], ["", 5], ["\u266D", 6], ["", 6]];
@@ -672,7 +689,7 @@ export {
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
   getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel, blockLabel,
-  TENSIONS, SHAPE_ORDER, stepNumeral,
+  TENSIONS, SHAPE_ORDER, stepNumeral, withoutAlter,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock

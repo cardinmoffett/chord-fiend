@@ -31,10 +31,11 @@ Revised 2026-10-10, twice:
 **Alter**, available on every category except the fixed leading-tone dim7:
 - It's a collapsed group that opens on its own when a block has an alteration.
 - **3rd** (`third`): major or minor.
-- **5th** (`aug`, `flat5`): ♭5 or ♯5.
+- **5th** (`fifth`): ♭5, 5 or ♯5. The older `aug` and `flat5` fields still work. "5" is what gives vii° a perfect 5th.
 - **7th** (`seventh`): maj, ♭7 or °7, when the shape has a 7th.
 - **Tension** (`tension`): ♭9, ♯9, ♯11 or ♭13, when the shape has that tone.
 - Unset means "what the source gives".
+- **Editors show the chord's real values,** so a V7 shows Major, 5, ♭7. Choosing the key's own value clears the change (`withoutAlter` gives the unaltered block).
 - The engine applies all of these in one place in `buildChord`.
 
 **Shape** (`extensionIndex`, editors use `SHAPE_ORDER`): Triad, add9, 6, 6/9, 7, 9, 11, 13.

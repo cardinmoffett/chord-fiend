@@ -13,6 +13,7 @@ import {
   buildChord,
   degreeLabels,
   stepNumeral,
+  withoutAlter,
 } from "../../../../engine/src/engine.js";
 import { IndexDropdown } from "./Dropdown";
 import type { Block, Song } from "./song";
@@ -66,7 +67,6 @@ export function Inspector({
   const chord = buildChord(block, song.rootIndex, song.modeIndex);
   const homeLabels = degreeLabels(MASTER_MODE_NAMES[song.modeIndex]);
   const degreeMode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[song.modeIndex];
-  const fifth = block.aug ? 2 : block.flat5 ? 1 : 0;
   const isLeadingTone = block.chordSource === "applied" && block.appliedFunction === "leadingTone";
   // Alter (every chord but the fixed leading-tone dim7): step off what the key gives --
   // 3rd, 5th, 7th, tension. Unset = the key's; the block's number shows any change.
@@ -74,8 +74,9 @@ export function Inspector({
   const tensions = tensionChoices(block.extensionIndex);
   const ext = EXTENSION_NAMES[block.extensionIndex];
   const hasSeventh = ext === "7" || ext === "9" || ext === "11" || ext === "13";
-  const THIRDS = [undefined, "major", "minor"] as const;
-  const SEVENTHS = [undefined, "maj", "min", "dim"] as const;
+  // Alter shows the chord as it is (a V7: Major, 5, \u266D7); choosing the key's own value
+  // (keyChord, the block with no Alter) clears the change.
+  const keyChord = buildChord(withoutAlter(block), song.rootIndex, song.modeIndex);
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
@@ -147,30 +148,39 @@ export function Inspector({
         <Field label="Sus">
           <Select value={block.susIndex} options={SUS_NAMES} disabled={isLeadingTone} onChange={(v) => onChange({ susIndex: v })} />
         </Field>
-        {canAlter && (
+        {canAlter && chord.sus === "none" && (
           <Field label="3rd">
             <Segmented
-              options={["Key", "Major", "Minor"]}
-              value={Math.max(0, THIRDS.indexOf(block.third as (typeof THIRDS)[number]))}
-              onChange={(i) => onChange({ third: THIRDS[i] })}
+              options={["Major", "Minor"]}
+              value={[4, 3].indexOf(chord.offsets[1])}
+              onChange={(i) => {
+                const v = [4, 3][i];
+                onChange({ third: v === keyChord.offsets[1] ? undefined : v === 4 ? "major" : "minor" });
+              }}
             />
           </Field>
         )}
         {canAlter && (
-          <Field label="Fifth">
+          <Field label="5th">
             <Segmented
-              options={["5", "♭5", "♯5"]}
-              value={fifth}
-              onChange={(i) => onChange({ aug: i === 2 ? 1 : 0, flat5: i === 1 ? 1 : 0 })}
+              options={["\u266D5", "5", "\u266F5"]}
+              value={[6, 7, 8].indexOf(chord.offsets[2])}
+              onChange={(i) => {
+                const v = [6, 7, 8][i];
+                onChange({ aug: 0, flat5: 0, fifth: v === keyChord.offsets[2] ? undefined : (["b5", "5", "#5"] as const)[i] });
+              }}
             />
           </Field>
         )}
-        {canAlter && hasSeventh && (
+        {canAlter && hasSeventh && chord.offsets.length >= 4 && (
           <Field label="7th">
             <Segmented
-              options={["Key", "maj7", "\u266D7", "\u00B07"]}
-              value={Math.max(0, SEVENTHS.indexOf(block.seventh as (typeof SEVENTHS)[number]))}
-              onChange={(i) => onChange({ seventh: SEVENTHS[i] })}
+              options={["maj7", "\u266D7", "\u00B07"]}
+              value={[11, 10, 9].indexOf(chord.offsets[3])}
+              onChange={(i) => {
+                const v = [11, 10, 9][i];
+                onChange({ seventh: v === keyChord.offsets[3] ? undefined : (["maj", "min", "dim"] as const)[i] });
+              }}
             />
           </Field>
         )}
