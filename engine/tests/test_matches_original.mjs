@@ -46,19 +46,19 @@ function sameName(label, a, b) {
 function report(t) { console.log((failures === 0 ? 'PASS' : 'FAIL') + '  ' + t + '  (' + passes + ' checks' + (failures ? ', ' + failures + ' FAILED' : '') + ')'); passes = 0; failures = 0; }
 function blk(o) { return Object.assign(orig.defaultBlock(), o); }
 // The engine's chord carries fields the app's does not (isFree, flat5, bassOffsets,
-// addNine, tension). For the app's own blocks they must be false / null; everything else must
-// match exactly.
+// addNine, tensions, alter). For the app's own blocks they must be false / null / empty;
+// everything else must match exactly. (alter only reads back the chord's own tones.)
 function appShape(ch) {
   var c = Object.assign({}, ch);
-  if (c.isFree !== false || c.flat5 !== false || c.bassOffsets !== null || c.addNine !== false || c.tension !== null)
-    return {unexpected: {isFree: c.isFree, flat5: c.flat5, bassOffsets: c.bassOffsets, addNine: c.addNine, tension: c.tension}};
-  delete c.isFree; delete c.flat5; delete c.bassOffsets; delete c.addNine; delete c.tension;
+  if (c.isFree !== false || c.flat5 !== false || c.bassOffsets !== null || c.addNine !== false || c.tensions.length !== 0)
+    return {unexpected: {isFree: c.isFree, flat5: c.flat5, bassOffsets: c.bassOffsets, addNine: c.addNine, tensions: c.tensions}};
+  delete c.isFree; delete c.flat5; delete c.bassOffsets; delete c.addNine; delete c.tensions; delete c.alter;
   return c;
 }
 
 console.log('=== constants ===');
 // Names the app never had are the engine's own additions: free mode (checked in test_free_flat5),
-// blockLabel (test_block_label), shapes and tensions (test_shapes_tensions).
+// blockLabel (test_block_label), shapes and Alter (test_shapes_tensions).
 var additions = names.filter(function (n) { return orig[n] === undefined; });
 // EXTENSION_NAMES gained "add9" and "6/9" at the end (checked in test_shapes_tensions); the
 // app's six must still come first, unchanged, so saved extensionIndex values keep their meaning.
@@ -67,7 +67,7 @@ names.forEach(function (n) {
   if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
   same(n, orig[n], engine[n]);
 });
-same('the only additions are free mode, blockLabel, shapes, tensions and step numerals', additions.slice().sort(), ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'SHAPE_ORDER', 'TENSIONS', 'blockLabel', 'stepNumeral', 'withoutAlter']);
+same('the only additions are blockLabel, shapes, Alter and step numerals', additions.slice().sort(), ['ALTER_FIELDS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'blockLabel', 'stepNumeral', 'withoutAlter']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 

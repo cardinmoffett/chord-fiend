@@ -6,14 +6,14 @@ import {
   DURATION_MODIFIER_NAMES,
   DURATION_NAMES,
   EXTENSION_NAMES,
-  FREE_QUALITIES,
   MASTER_MODE_NAMES,
   SHAPE_ORDER,
-  SUS_NAMES,
+  alterChange,
+  alterFitToShape,
+  alterRows,
   buildChord,
   degreeLabels,
   stepNumeral,
-  withoutAlter,
 } from "../../../../engine/src/engine.js";
 import { IndexDropdown } from "./Dropdown";
 import type { Block, Song } from "./song";
@@ -24,20 +24,12 @@ const SOURCES = [
   { value: "applied", label: "Applied" },
   { value: "free", label: "Free" },
 ] as const;
-const QUALITY_LABELS: Record<string, string> = {
-  major: "Major", minor: "Minor", dominant: "Dominant", diminished: "Diminished", augmented: "Augmented", halfDiminished: "Half-diminished",
-};
 const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
-/** The tensions a shape has room for: 9ths for 9/11/13, #11 for 11/13, b13 for 13. */
-function tensionChoices(extensionIndex: number): string[] {
-  const ext = EXTENSION_NAMES[extensionIndex];
-  const list: string[] = [];
-  if (ext === "9" || ext === "11" || ext === "13") list.push("b9", "#9");
-  if (ext === "11" || ext === "13") list.push("#11");
-  if (ext === "13") list.push("b13");
-  return list;
-}
-const pretty = (t: string) => t.replace(/b(?=\d)/, "\u266D").replace("#", "\u266F");
+/** A new root or kind (category, degree, mode, function, target, free root) starts with no alterations. */
+const CLEAR_ALTER: Partial<Block> = {
+  third: undefined, fifth: undefined, seventh: undefined, ninth: undefined, eleventh: undefined, thirteenth: undefined,
+  aug: 0, flat5: 0, susIndex: 0,
+};
 
 /** The editor for the selected block: every setting a block has, as in the app's editor panel. */
 export function Inspector({
@@ -68,15 +60,10 @@ export function Inspector({
   const homeLabels = degreeLabels(MASTER_MODE_NAMES[song.modeIndex]);
   const degreeMode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[song.modeIndex];
   const isLeadingTone = block.chordSource === "applied" && block.appliedFunction === "leadingTone";
-  // Alter (every chord but the fixed leading-tone dim7): step off what the key gives --
-  // 3rd, 5th, 7th, tension. Unset = the key's; the block's number shows any change.
-  const canAlter = !isLeadingTone;
-  const tensions = tensionChoices(block.extensionIndex);
-  const ext = EXTENSION_NAMES[block.extensionIndex];
-  const hasSeventh = ext === "7" || ext === "9" || ext === "11" || ext === "13";
-  // Alter shows the chord as it is (a V7: Major, 5, \u266D7); choosing the key's own value
-  // (keyChord, the block with no Alter) clears the change.
-  const keyChord = buildChord(withoutAlter(block), song.rootIndex, song.modeIndex);
+  // Alter: one row per tone the chord has (the engine's alterRows decides which), showing
+  // the chord as it is (a V7: 3, 5, \u266D7). Choosing the key's own value clears the change.
+  const rows = alterRows(block, song.rootIndex, song.modeIndex);
+  const rootChange = (change: Partial<Block>) => onChange({ ...change, ...CLEAR_ALTER });
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
@@ -86,20 +73,27 @@ export function Inspector({
           <Segmented
             options={SOURCES.map((x) => x.label)}
             value={SOURCES.findIndex((x) => x.value === block.chordSource)}
-            onChange={(i) => onChange({ chordSource: SOURCES[i].value })}
+            onChange={(i) => {
+              // Free keeps the root you have; a free chord starts as a major triad (\u266D7 with a 7th).
+              const toFree = SOURCES[i].value === "free" && block.chordSource !== "free";
+              rootChange({
+                chordSource: SOURCES[i].value,
+                ...(toFree ? { freeRoot: (((chord.chordRootPitch - song.rootIndex) % 12) + 12) % 12 } : {}),
+              });
+            }}
           />
         </Field>
 
         {block.chordSource === "diatonic" && (
           <>
             <Field label="Degree">
-              <Select value={block.degreeIndex} options={degreeLabels(degreeMode)} onChange={(v) => onChange({ degreeIndex: v })} />
+              <Select value={block.degreeIndex} options={degreeLabels(degreeMode)} onChange={(v) => rootChange({ degreeIndex: v })} />
             </Field>
             <Field label="Mode">
               <Select
                 value={block.blockModeIndex}
                 options={BLOCK_MODE_NAMES.map((m, i) => (i === 0 ? "Thru (the key's mode)" : m))}
-                onChange={(v) => onChange({ blockModeIndex: v })}
+                onChange={(v) => rootChange({ blockModeIndex: v })}
               />
             </Field>
           </>
@@ -110,11 +104,11 @@ export function Inspector({
               <Select
                 value={Math.max(0, APPLIED_FUNCTIONS.indexOf(block.appliedFunction))}
                 options={APPLIED_FUNCTIONS.map((f) => APPLIED_FUNCTION_LABELS[f])}
-                onChange={(v) => onChange({ appliedFunction: APPLIED_FUNCTIONS[v] as Block["appliedFunction"] })}
+                onChange={(v) => rootChange({ appliedFunction: APPLIED_FUNCTIONS[v] as Block["appliedFunction"] })}
               />
             </Field>
             <Field label="Target">
-              <Select value={block.appliedTargetIndex} options={homeLabels} onChange={(v) => onChange({ appliedTargetIndex: v })} />
+              <Select value={block.appliedTargetIndex} options={homeLabels} onChange={(v) => rootChange({ appliedTargetIndex: v })} />
             </Field>
           </>
         )}
@@ -123,15 +117,8 @@ export function Inspector({
             <Field label="Root">
               <Select
                 value={block.freeRoot ?? 0}
-                options={Array.from({ length: 12 }, (_, step) => stepNumeral(step, block.freeQuality === "diminished" || block.freeQuality === "halfDiminished"))}
-                onChange={(v) => onChange({ freeRoot: v })}
-              />
-            </Field>
-            <Field label="Quality">
-              <Select
-                value={Math.max(0, FREE_QUALITIES.indexOf(block.freeQuality ?? "major"))}
-                options={FREE_QUALITIES.map((q) => QUALITY_LABELS[q])}
-                onChange={(v) => onChange({ freeQuality: FREE_QUALITIES[v] })}
+                options={Array.from({ length: 12 }, (_, step) => stepNumeral(step, chord.offsets[1] === 3 && chord.offsets[2] === 6))}
+                onChange={(v) => rootChange({ freeRoot: v })}
               />
             </Field>
           </>
@@ -142,57 +129,22 @@ export function Inspector({
             value={Math.max(0, SHAPE_ORDER.indexOf(block.extensionIndex))}
             options={SHAPE_ORDER.map((i) => SHAPE_LABELS[EXTENSION_NAMES[i]])}
             disabled={isLeadingTone}
-            onChange={(v) => onChange({ extensionIndex: SHAPE_ORDER[v] })}
+            onChange={(v) => {
+              // A new shape keeps only the alterations it still has tones for.
+              const fitted = alterFitToShape({ ...block, extensionIndex: SHAPE_ORDER[v] });
+              onChange({ extensionIndex: SHAPE_ORDER[v], seventh: fitted.seventh, ninth: fitted.ninth, eleventh: fitted.eleventh, thirteenth: fitted.thirteenth });
+            }}
           />
         </Field>
-        <Field label="Sus">
-          <Select value={block.susIndex} options={SUS_NAMES} disabled={isLeadingTone} onChange={(v) => onChange({ susIndex: v })} />
-        </Field>
-        {canAlter && chord.sus === "none" && (
-          <Field label="3rd">
+        {rows.map((row) => (
+          <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
             <Segmented
-              options={["Major", "Minor"]}
-              value={[4, 3].indexOf(chord.offsets[1])}
-              onChange={(i) => {
-                const v = [4, 3][i];
-                onChange({ third: v === keyChord.offsets[1] ? undefined : v === 4 ? "major" : "minor" });
-              }}
+              options={row.choices.map((c) => c.label)}
+              value={row.choices.findIndex((c) => c.value === row.value)}
+              onChange={(i) => onChange(alterChange(block, row.field, row.choices[i].value, song.rootIndex, song.modeIndex))}
             />
           </Field>
-        )}
-        {canAlter && (
-          <Field label="5th">
-            <Segmented
-              options={["\u266D5", "5", "\u266F5"]}
-              value={[6, 7, 8].indexOf(chord.offsets[2])}
-              onChange={(i) => {
-                const v = [6, 7, 8][i];
-                onChange({ aug: 0, flat5: 0, fifth: v === keyChord.offsets[2] ? undefined : (["b5", "5", "#5"] as const)[i] });
-              }}
-            />
-          </Field>
-        )}
-        {canAlter && hasSeventh && chord.offsets.length >= 4 && (
-          <Field label="7th">
-            <Segmented
-              options={["maj7", "\u266D7", "\u00B07"]}
-              value={[11, 10, 9].indexOf(chord.offsets[3])}
-              onChange={(i) => {
-                const v = [11, 10, 9][i];
-                onChange({ seventh: v === keyChord.offsets[3] ? undefined : (["maj", "min", "dim"] as const)[i] });
-              }}
-            />
-          </Field>
-        )}
-        {canAlter && tensions.length > 0 && (
-          <Field label="Tension">
-            <Select
-              value={Math.max(0, tensions.indexOf(block.tension ?? "") + 1)}
-              options={["Natural", ...tensions.map(pretty)]}
-              onChange={(v) => onChange({ tension: v === 0 ? undefined : tensions[v - 1] })}
-            />
-          </Field>
-        )}
+        ))}
         <Field label="Inversion">
           <Select value={chord.inversion} options={chord.toneLabels} onChange={(v) => onChange({ inversion: v })} />
         </Field>
@@ -232,9 +184,9 @@ export function Inspector({
   );
 }
 
-function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
+function Field({ label, wide, altered, children }: { label: string; wide?: boolean; altered?: boolean; children: React.ReactNode }) {
   return (
-    <div className={wide ? "field wide" : "field"}>
+    <div className={"field" + (wide ? " wide" : "") + (altered ? " altered" : "")}>
       <span className="field-label">{label}</span>
       {children}
     </div>

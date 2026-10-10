@@ -14,9 +14,9 @@
 // them builds exactly as the app's did:
 //
 //   flat5        lowers the chord's 5th a semitone (a ♭5), on any chord source
-//   chordSource "free", with freeRoot (pitch class 0-11) and freeQuality
-//                ("major" | "minor" | "dominant" | "diminished"): a chord on any root, not tied
-//                to the key's scale, that takes every extension and voicing option
+//   chordSource "free", with freeRoot (a step 0-11 above the key's root): a chord on
+//                any root, not tied to the key's scale. It starts as a major triad with a
+//                flat 7th (when the shape has one), and Alter shapes it from there.
 //
 // Nothing here touches the DOM, audio, storage or timers.
 // tests/test_matches_original.mjs checks that it gives the same answers as the app.
@@ -130,32 +130,39 @@ function degreeLabels(modeName) {
   return labels;
 }
 
-// ALTER choices (block.third, block.fifth, block.seventh, block.tension; aug / flat5 are
-// the older way to set the 5th and still work).
-// Unset means "what the key (or the function, or the free quality) gives".
+// ALTER: per-tone choices that step a chord off what its source gives. Unset means
+// "what the key (or the function, or the free formula) gives".
+//   third     "major" | "minor"   (sus2 / sus4 sit in the same editor row; stored as susIndex)
+//   fifth     "b5" | "5" | "#5"   (aug / flat5 are the older way to set it and still work)
+//   seventh   "dim" | "min" | "maj"   (bb7, b7, 7), when the shape has a 7th
+//   ninth     "b9" | "9" | "#9"       when the shape has a 9th (add9, 6/9, 9, 11, 13)
+//   eleventh  "11" | "#11"            on 11 and 13
+//   thirteenth "b13" | "13"           on 13
 var THIRDS = {major: 4, minor: 3};
 var FIFTHS = {"b5": 6, "5": 7, "#5": 8};
 var SEVENTHS = {maj: 11, min: 10, dim: 9};
-// TENSIONS move one tone the chord already has: the 9th (14 semitones) down or up, the
-// 11th (17) up, or the 13th (21) down. A tension whose tone isn't in the chord does nothing.
-var TENSIONS = {"b9": [14, 13], "#9": [14, 15], "#11": [17, 18], "b13": [21, 20]};
-var TENSION_ROLES = {"b9": 9, "#9": 9, "#11": 11, "b13": 13};
-// "G9" with a flat 9 reads G7(b9): when the altered tone is the chord's top extension,
-// the name steps down to the next stacked number and shows the alteration after it.
-function alteredExtensionName(name, toneCount, tension) {
-  var top = {5: "9", 6: "11", 7: "13"}[toneCount];
-  var below = {"9": "7", "11": "9", "13": "11"}[top];
-  if (top && String(TENSION_ROLES[tension]) === top && new RegExp(top + "$").test(name)) name = name.slice(0, -top.length) + below;
-  return name + "(" + tension + ")";
+var NINTHS = {"b9": 13, "9": 14, "#9": 15};
+var ELEVENTHS = {"11": 17, "#11": 18};
+var THIRTEENTHS = {"b13": 20, "13": 21};
+var ALTER_FIELDS = ["third", "fifth", "seventh", "ninth", "eleventh", "thirteenth"];
+// The value each Alter field reads from a chord's actual offsets.
+function valueOf(table, offset) {
+  for (var k in table) if (table[k] === offset) return k;
+  return null;
 }
-// Returns the tension if it was applied (the chord has that tone), else null.
-function applyTension(offsets, tension) {
-  var t = TENSIONS[tension];
-  if (!t) return null;
-  var i = offsets.indexOf(t[0]);
-  if (i < 0) return null;
-  offsets[i] = t[1];
-  return tension;
+// "G9" with a flat 9 reads G7(b9): the chord's number is its highest stacked tone that
+// isn't altered, and each altered tone follows in brackets: G13(b9), G9(#11,b13).
+function alteredExtensionName(name, toneCount, tensions) {
+  var tops = {5: 9, 6: 11, 7: 13};
+  var top = tops[toneCount];
+  if (top) {
+    var altered = tensions.map(function (t) { return Number(t.replace(/[^0-9]/g, "")); });
+    var n = top;
+    while (n > 7 && altered.indexOf(n) >= 0) n -= 2;
+    // (a minor chord's "m(maj9)" keeps its bracket: "m(maj7)(b9)")
+    if (n !== top) name = name.replace(new RegExp(top + "(\\)?)$"), n + "$1");
+  }
+  return name + "(" + tensions.join(",") + ")";
 }
 
 function buildChord(block, masterRootIndex, masterModeIndex) {
@@ -174,15 +181,15 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
   var isFree = block.chordSource === "free";
   var fn = isApplied ? (block.appliedFunction || "dominant") : null;
   var degreeIndex, chordRootOffset, offsets;
-  var appliedTension = null; // applied and free chords only; see TENSIONS
+  var tensions = []; // extension tones the block altered off the natural 9, 11, 13
   var effectiveSus = susName, effectiveAug = !!block.aug, effectiveIs6 = is6;
   var effectiveFlat5 = !block.aug && !!block.flat5;
 
   if (isFree) {
     // FREE: a root anywhere, measured up from the key's root so the octave
-    // setting means the same as for every other block, with a fixed quality.
-    var quality = FREE_QUALITY_INTERVALS[block.freeQuality] ? block.freeQuality : "major";
-    var qualityIntervals = FREE_QUALITY_INTERVALS[quality];
+    // setting means the same as for every other block. Its formula is the plain
+    // dominant stack (major triad, flat 7th, natural 9, 11, 13); Alter shapes it.
+    var qualityIntervals = DOMINANT_INTERVALS;
     degreeIndex = -1; // not a degree of the key
     // freeRoot is a step above the key's root (0-11), so a free chord keeps its number
     // (III, \u266DVI) and moves with the key like every other block.
@@ -232,25 +239,48 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
   }
 
   // ALTER: every chord but the fixed leading-tone dim7 can step off what its source
-  // gives -- a major or minor 3rd, a flat or raised 5th, a major, flat or diminished
-  // 7th, and a tension. Each starts at "what the key gives" (unset), and the block's
-  // label shows any change, so the chord keeps its number (ii with a major 3rd and a
-  // flat 7th reads II7).
+  // gives, one tone at a time. Each starts at "what the key gives" (unset), and the
+  // block's label shows any change, so the chord keeps its number (ii with a major 3rd
+  // and a flat 7th reads II7). An applied chord keeps its function's 3rd and 7th.
+  var hasSeventh = !is6 && !addNine && offsets.length >= 4;
+  var ninthSlot = addNine ? offsets.length - 1 : (!is6 && offsets.length >= 5 ? 4 : -1);
+  var eleventhSlot = !is6 && !addNine && offsets.length >= 6 ? 5 : -1;
+  var thirteenthSlot = !is6 && !addNine && offsets.length >= 7 ? 6 : -1;
   if (!(isApplied && fn === "leadingTone")) {
-    if (effectiveSus === "none" && (offsets[1] === 3 || offsets[1] === 4) && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
-    // (An applied 6 chord keeps its plain dominant triad, as the original app did.)
-    if (!(isApplied && is6)) {
-      if (FIFTHS[block.fifth] !== undefined) {
-        // An explicit 5th (\u266D5, 5 or \u266F5) -- the only way to give vii\u00B0 a perfect 5th.
-        offsets[2] = FIFTHS[block.fifth];
-        effectiveAug = offsets[2] === 8;
-        effectiveFlat5 = offsets[2] === 6;
-      } else if (block.aug) offsets[2] = 8;
+    if (!isApplied && effectiveSus === "none" && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
+    if (FIFTHS[block.fifth] !== undefined) {
+      // An explicit 5th (\u266D5, 5 or \u266F5) -- the only way to give vii\u00B0 a perfect 5th.
+      offsets[2] = FIFTHS[block.fifth];
+      effectiveAug = offsets[2] === 8;
+      effectiveFlat5 = offsets[2] === 6;
+    } else if (!(isApplied && is6)) { // (an applied 6 chord ignores the older aug, as the original app did)
+      if (block.aug) offsets[2] = 8;
       else if (effectiveFlat5) offsets[2] = 6;
     }
-    if (offsets.length >= 4 && !is6 && !addNine && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
-    appliedTension = applyTension(offsets, block.tension);
+    if (!isApplied && hasSeventh && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
+    // sus2 is already the 9th's note and sus4 the 11th's, so those rows step aside.
+    if (ninthSlot >= 0 && effectiveSus !== "sus2" && NINTHS[block.ninth] !== undefined) {
+      offsets[ninthSlot] = NINTHS[block.ninth];
+      if (block.ninth !== "9") tensions.push(block.ninth);
+    }
+    if (eleventhSlot >= 0 && effectiveSus !== "sus4" && ELEVENTHS[block.eleventh] !== undefined) {
+      offsets[eleventhSlot] = ELEVENTHS[block.eleventh];
+      if (block.eleventh !== "11") tensions.push(block.eleventh);
+    }
+    if (thirteenthSlot >= 0 && THIRTEENTHS[block.thirteenth] !== undefined) {
+      offsets[thirteenthSlot] = THIRTEENTHS[block.thirteenth];
+      if (block.thirteenth !== "13") tensions.push(block.thirteenth);
+    }
   }
+  // What each Alter row reads on this chord (null where the chord has no such tone).
+  var alter = {
+    third: effectiveSus !== "none" ? effectiveSus : valueOf(THIRDS, offsets[1]),
+    fifth: valueOf(FIFTHS, offsets[2]),
+    seventh: hasSeventh ? valueOf(SEVENTHS, offsets[3]) : null,
+    ninth: ninthSlot >= 0 ? valueOf(NINTHS, offsets[ninthSlot]) : null,
+    eleventh: eleventhSlot >= 0 ? valueOf(ELEVENTHS, offsets[eleventhSlot]) : null,
+    thirteenth: thirteenthSlot >= 0 ? valueOf(THIRTEENTHS, offsets[thirteenthSlot]) : null
+  };
 
   var base = 60 + NOTE_NAME_TO_OFFSET[NOTE_NAMES[masterRootIndex]] + block.octave*12;
   var chordRootPitch = base + chordRootOffset;
@@ -287,7 +317,7 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
           isApplied:isApplied, appliedFunction:fn,
           isFree:isFree, flat5:effectiveFlat5 && offsets[2] === 6,
           addNine: addNine,
-          tension: appliedTension,
+          tensions: tensions, alter: alter,
           // The bass lanes ("1 3 5 7") by role: an added 9th never plays as the "7".
           bassOffsets: addNine ? [0, offsets[1], offsets[2], effectiveIs6 ? offsets[3] : 0] : null};
 }
@@ -326,15 +356,19 @@ function getChordSymbol(chord, masterRootIndex) {
     else if (stepAcc === "\u266F") preferFlats = false;
   }
   var rootName = pitchToNoteName(chord.chordRootPitch, preferFlats);
-  if (chord.addNine || chord.tension) {
-    // Name the chord without its added 9th / with its natural extension, then say what
-    // was added or altered: Cadd9, Am6/9, G7(b9), G9(#11), G13(b9).
+  var tensions = chord.tensions || [];
+  if (chord.addNine || tensions.length) {
+    // Name the chord without its added 9th and its altered extensions, then say what
+    // was added or altered: Cadd9, Am6/9, Cadd(b9), G7(b9), G9(#11), G13(b9,#11).
     var offs = chord.offsets.slice();
-    if (chord.tension) offs[offs.indexOf(TENSIONS[chord.tension][1])] = TENSIONS[chord.tension][0];
+    var natural = {5: 14, 6: 17, 7: 21};
+    if (!chord.addNine) for (var slot = 4; slot < offs.length; slot++) offs[slot] = natural[slot + 1];
     if (chord.addNine) offs.pop();
-    var n = getChordSymbol(Object.assign({}, chord, {offsets: offs, addNine: false, tension: null, dropIndex: 0}), masterRootIndex);
-    if (chord.addNine) n = chord.is6 ? n.replace(/6$/, "6/9") : n + "add9";
-    if (chord.tension) n = alteredExtensionName(n, offs.length, chord.tension);
+    var n = getChordSymbol(Object.assign({}, chord, {offsets: offs, addNine: false, tensions: [], dropIndex: 0}), masterRootIndex);
+    if (chord.addNine) {
+      var nine = tensions[0] || "9";
+      n = chord.is6 ? n.replace(/6$/, "6/" + nine) : (nine === "9" ? n + "add9" : n + "(add" + nine + ")");
+    } else if (tensions.length) n = alteredExtensionName(n, offs.length, tensions);
     return chord.dropIndex > 0 ? n + " (" + DROP_NAMES[chord.dropIndex] + ")" : n;
   }
   var o = chord.offsets, third=o[1], fifth=o[2], seventh = o.length>3 && !chord.is6 ? o[3] : undefined;
@@ -407,10 +441,6 @@ var APPLIED_FUNCTIONS = ["dominant", "tritoneSub", "leadingTone"];
 var APPLIED_FUNCTION_LABELS = {dominant: "Dominant of", tritoneSub: "Tritone sub of", leadingTone: "Leading-tone into"};
 var DOMINANT_INTERVALS = [0, 4, 7, 10, 14, 17, 21]; // root, 3rd, 5th, b7, 9th, 11th, 13th
 var DIMINISHED7_INTERVALS = [0, 3, 6, 9]; // root, m3, dim5, dim7 -- always this exact tetrad
-// FREE chords (an addition, not from the app): stacked thirds for each quality, up to the 13th.
-// Diminished stacks a fully diminished 7th (bb7 = 9), then the 9th, 11th and b13.
-var FREE_QUALITIES = ["major", "minor", "dominant", "diminished", "augmented", "halfDiminished"];
-var FREE_QUALITY_INTERVALS = {major: [0, 4, 7, 11, 14, 17, 21], minor: [0, 3, 7, 10, 14, 17, 21], dominant: DOMINANT_INTERVALS, diminished: [0, 3, 6, 9, 14, 17, 20], augmented: [0, 4, 8, 10, 14, 17, 21], halfDiminished: [0, 3, 6, 10, 14, 17, 20]};
 
 // ---- Chord-degree names (1, 3, 5, 7, 9...) --------------------------------
 // Every tone of a chord has a ROLE (which numbered degree of the chord it is)
@@ -586,24 +616,91 @@ function computeBassPitchForBlock(block, chord, pattern, bassWrapLow) {
 // numeral plus its formula (V7, \u266DVI, ii7, V7/ii, vii\u00B07/V), and `name` small, the
 // chord itself (G7, A\u266D, Dm7). A free chord has no degree in the key, so its large
 // label is its root and quality (E, F\u266Fm7). Shared by the phone app and the device.
-// The extension part of a label with a tension: "9" with a flat 9 reads "7(\u266D9)".
+// The extension part of a label with altered extensions: "9" with a flat 9 reads
+// "7(\u266D9)", "13" with a flat 9 and a sharp 11 reads "13(\u266D9,\u266F11)".
 function tensionLabel(chord, extPart) {
-  if (!chord.tension) return extPart;
-  var t = prettyAccidentals(chord.tension);
-  var top = String(TENSION_ROLES[chord.tension]);
-  var below = {"9": "7", "11": "9", "13": "11"}[top];
-  if (new RegExp(top + "$").test(extPart)) extPart = extPart.slice(0, -top.length) + below;
-  return extPart + "(" + t + ")";
+  var tensions = chord.tensions || [];
+  if (!tensions.length) return extPart;
+  var pretty = tensions.map(prettyAccidentals);
+  if (extPart === "add9") return "add" + pretty[0];
+  if (extPart === "6/9") return "6/" + pretty[0];
+  var m = extPart.match(/(9|11|13)\)?$/);
+  if (!m) return extPart + "(" + pretty.join(",") + ")";
+  return alteredExtensionName(extPart, {"9": 5, "11": 6, "13": 7}[m[1]], pretty);
 }
 function prettyAccidentals(sym) { return sym.replace(/b(?=\d)/g, "\u266D").replace(/#/g, "\u266F"); }
 
 // The same block with every Alter choice cleared: "what the key gives". Editors compare
-// against it to show the chord's real 3rd, 5th and 7th and to know when a choice is a
-// change (a tap on the key's own value clears the change).
+// against it to show the chord's real tones and to know when a choice is a change (a
+// tap on the key's own value clears the change). Sus is part of the 3rd row, so it goes too.
 function withoutAlter(block) {
   var b = Object.assign({}, block);
-  delete b.third; delete b.fifth; delete b.seventh; delete b.tension;
-  b.aug = 0; b.flat5 = 0;
+  ALTER_FIELDS.forEach(function (f) { delete b[f]; });
+  delete b.tension;
+  b.aug = 0; b.flat5 = 0; b.susIndex = 0;
+  return b;
+}
+
+// The Alter rows an editor shows for a block, each with its choices (value, label).
+// Only tones the chord has get a row; an applied chord keeps its function's 3rd (sus
+// only) and 7th; the leading-tone dim7 gets none; sus2 hides the 9th and sus4 the 11th.
+var ALTER_ROW_SPECS = {
+  third: {label: "3rd", choices: [["sus2", "sus2"], ["minor", "\u266D3"], ["major", "3"], ["sus4", "sus4"]]},
+  fifth: {label: "5th", choices: [["b5", "\u266D5"], ["5", "5"], ["#5", "\u266F5"]]},
+  seventh: {label: "7th", choices: [["dim", "\u266D\u266D7"], ["min", "\u266D7"], ["maj", "7"]]},
+  ninth: {label: "9th", choices: [["b9", "\u266D9"], ["9", "9"], ["#9", "\u266F9"]]},
+  eleventh: {label: "11th", choices: [["11", "11"], ["#11", "\u266F11"]]},
+  thirteenth: {label: "13th", choices: [["b13", "\u266D13"], ["13", "13"]]}
+};
+function alterRows(block, masterRootIndex, masterModeIndex) {
+  var isApplied = block.chordSource === "applied";
+  if (isApplied && block.appliedFunction === "leadingTone") return [];
+  var chord = buildChord(block, masterRootIndex, masterModeIndex);
+  var keyChord = buildChord(withoutAlter(block), masterRootIndex, masterModeIndex);
+  var keys = ALTER_FIELDS.filter(function (f) {
+    if (chord.alter[f] === null && f !== "third") return false;
+    if (f === "third" && isApplied && chord.is6) return false;
+    if (f === "seventh" && isApplied) return false;
+    if (f === "ninth" && chord.sus === "sus2") return false;
+    if (f === "eleventh" && chord.sus === "sus4") return false;
+    return true;
+  });
+  return keys.map(function (f) {
+    var spec = ALTER_ROW_SPECS[f];
+    var choices = spec.choices.filter(function (c) { return !(f === "third" && isApplied && c[0] === "minor"); });
+    return {field: f, label: spec.label, value: chord.alter[f], keyValue: keyChord.alter[f],
+            choices: choices.map(function (c) { return {value: c[0], label: c[1]}; })};
+  });
+}
+// The block change for picking `value` in an Alter row: the key's own value clears the
+// field. Fields that end up unset are returned as undefined (callers delete them).
+function alterChange(block, field, value, masterRootIndex, masterModeIndex) {
+  var keyChord = buildChord(withoutAlter(block), masterRootIndex, masterModeIndex);
+  var isKey = value === keyChord.alter[field];
+  var change = {};
+  if (field === "third") {
+    change.susIndex = value === "sus2" ? 1 : value === "sus4" ? 2 : 0;
+    change.third = change.susIndex || isKey ? undefined : value;
+    if (value === "sus2") change.ninth = undefined;
+    if (value === "sus4") change.eleventh = undefined;
+  } else {
+    change[field] = isKey ? undefined : value;
+    if (field === "fifth") { change.aug = 0; change.flat5 = 0; }
+  }
+  return change;
+}
+// What a block keeps when its root or kind changes (category, degree, mode, function,
+// target, free root): nothing from Alter. And after a shape change: only the
+// alterations for tones the new shape still has.
+function alterFitToShape(block) {
+  var b = Object.assign({}, block);
+  var ext = EXTENSION_NAMES[b.extensionIndex];
+  var hasSeventh = ext === "7" || ext === "9" || ext === "11" || ext === "13";
+  var hasNinth = ext === "9" || ext === "11" || ext === "13" || ext === "add9" || ext === "6/9";
+  if (!hasSeventh) delete b.seventh;
+  if (!hasNinth) delete b.ninth;
+  if (ext !== "11" && ext !== "13") delete b.eleventh;
+  if (ext !== "13") delete b.thirteenth;
   return b;
 }
 
@@ -682,14 +779,14 @@ export {
   FLAT_PREFERRING_MAJOR_ROOT, MASTER_MODE_RELATIVE_MAJOR_OFFSET,
   DURATION_NAMES, DURATION_BEATS, DURATION_MODIFIER_NAMES,
   ROMAN_BASE, APPLIED_FUNCTIONS, APPLIED_FUNCTION_LABELS,
-  DOMINANT_INTERVALS, DIMINISHED7_INTERVALS, FREE_QUALITIES, FREE_QUALITY_INTERVALS,
+  DOMINANT_INTERVALS, DIMINISHED7_INTERVALS,
   CHORD_DEGREE_REFERENCE, STACKED_THIRD_ROLES,
   BASS_VOICES, BUILTIN_BEAT_PATTERNS,
   // chords
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
   getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel, blockLabel,
-  TENSIONS, SHAPE_ORDER, stepNumeral, withoutAlter,
+  SHAPE_ORDER, ALTER_FIELDS, stepNumeral, withoutAlter, alterRows, alterChange, alterFitToShape,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock

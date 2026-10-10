@@ -71,9 +71,9 @@ known('dominant 7sus4 (V, Ionian)', blk({degreeIndex: 4, susIndex: 2, extensionI
 known('sus2 with a 9th keeps both the 2 and the 9', blk({degreeIndex: 0, susIndex: 1, extensionIndex: 3}), MODE.Ionian, ['1', '2', '5', '7', '9']);
 known('sus4 on a Lydian-colored degree (IV in Ionian has a #4 against its root)', blk({degreeIndex: 3, susIndex: 2}), MODE.Ionian, ['1', S + '4', '5']);
 
-known('augmented triad (free C)', blk({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1}), MODE.Ionian, ['1', '3', S + '5']);
-known('augmented major 7th (free C)', blk({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1, extensionIndex: 2}), MODE.Ionian, ['1', '3', S + '5', '7']);
-known('augmented on a minor chord (free D minor keeps its b3)', blk({chordSource: 'free', freeRoot: 2, freeQuality: 'minor', aug: 1}), MODE.Ionian, ['1', F + '3', S + '5']);
+known('augmented triad (free C)', blk({chordSource: 'free', freeRoot: 0, seventh: 'maj', aug: 1}), MODE.Ionian, ['1', '3', S + '5']);
+known('augmented major 7th (free C)', blk({chordSource: 'free', freeRoot: 0, seventh: 'maj', aug: 1, extensionIndex: 2}), MODE.Ionian, ['1', '3', S + '5', '7']);
+known('augmented on a minor chord (free D minor keeps its b3)', blk({chordSource: 'free', freeRoot: 2, third: 'minor', aug: 1}), MODE.Ionian, ['1', F + '3', S + '5']);
 known('naturally augmented III in harmonic minor', blk({degreeIndex: 2}), MODE.HarmonicMinor, ['1', '3', S + '5']);
 
 known('major 6th chord (I6, Ionian)', blk({degreeIndex: 0, extensionIndex: 1}), MODE.Ionian, ['1', '3', '5', '6']);
@@ -237,7 +237,7 @@ var s2 = openEditorOn(blk({degreeIndex: 4, extensionIndex: 2}));
 check('dominant 7th: 1 3 5 b7', eq(optionTexts(s2), ['1', '3', '5', F + '7']));
 var s3 = openEditorOn(blk({degreeIndex: 0, susIndex: 2}));
 check('changing to sus4 changes the options: 1 4 5', eq(optionTexts(s3), ['1', '4', '5']));
-var s4 = openEditorOn(blk({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}));
+var s4 = openEditorOn(blk({chordSource: 'free', freeRoot: 0, fifth: '#5'}));
 check('a free augmented chord offers 1 3 #5', eq(optionTexts(s4), ['1', '3', S + '5']));
 var s5 = openEditorOn(blk({degreeIndex: 0, extensionIndex: api.EXTENSION_NAMES.indexOf('add9')}));
 check('add9 offers 1 3 5 9', eq(optionTexts(s5), ['1', '3', '5', '9']));
