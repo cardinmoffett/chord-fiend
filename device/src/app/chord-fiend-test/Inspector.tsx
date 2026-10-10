@@ -8,6 +8,7 @@ import {
   EXTENSION_NAMES,
   FREE_QUALITIES,
   MASTER_MODE_NAMES,
+  SHAPE_ORDER,
   SUS_NAMES,
   buildChord,
   degreeLabels,
@@ -22,7 +23,20 @@ const SOURCES = [
   { value: "applied", label: "Applied" },
   { value: "free", label: "Free" },
 ] as const;
-const QUALITY_LABELS: Record<string, string> = { major: "Major", minor: "Minor", dominant: "Dominant", diminished: "Diminished" };
+const QUALITY_LABELS: Record<string, string> = {
+  major: "Major", minor: "Minor", dominant: "Dominant", diminished: "Diminished", augmented: "Augmented", halfDiminished: "Half-diminished",
+};
+const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
+/** The tensions a shape has room for: 9ths for 9/11/13, #11 for 11/13, b13 for 13. */
+function tensionChoices(extensionIndex: number): string[] {
+  const ext = EXTENSION_NAMES[extensionIndex];
+  const list: string[] = [];
+  if (ext === "9" || ext === "11" || ext === "13") list.push("b9", "#9");
+  if (ext === "11" || ext === "13") list.push("#11");
+  if (ext === "13") list.push("b13");
+  return list;
+}
+const pretty = (t: string) => t.replace(/b(?=\d)/, "\u266D").replace("#", "\u266F");
 
 /** The editor for the selected block: every setting a block has, as in the app's editor panel. */
 export function Inspector({
@@ -54,6 +68,10 @@ export function Inspector({
   const degreeMode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[song.modeIndex];
   const fifth = block.aug ? 2 : block.flat5 ? 1 : 0;
   const isLeadingTone = block.chordSource === "applied" && block.appliedFunction === "leadingTone";
+  // Diatonic and borrowed chords take every note from a scale (color comes from Mode);
+  // applied and free chords are built off the scale, so only they get Fifth and Tension.
+  const offScale = (block.chordSource === "applied" && !isLeadingTone) || block.chordSource === "free";
+  const tensions = tensionChoices(block.extensionIndex);
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
@@ -114,20 +132,35 @@ export function Inspector({
           </>
         )}
 
-        <Field label="Extension">
-          <Select value={block.extensionIndex} options={EXTENSION_NAMES} disabled={isLeadingTone} onChange={(v) => onChange({ extensionIndex: v })} />
+        <Field label="Shape">
+          <Select
+            value={Math.max(0, SHAPE_ORDER.indexOf(block.extensionIndex))}
+            options={SHAPE_ORDER.map((i) => SHAPE_LABELS[EXTENSION_NAMES[i]])}
+            disabled={isLeadingTone}
+            onChange={(v) => onChange({ extensionIndex: SHAPE_ORDER[v] })}
+          />
         </Field>
         <Field label="Sus">
           <Select value={block.susIndex} options={SUS_NAMES} disabled={isLeadingTone} onChange={(v) => onChange({ susIndex: v })} />
         </Field>
-        <Field label="Fifth">
-          <Segmented
-            options={["5", "♭5", "♯5"]}
-            value={fifth}
-            disabled={isLeadingTone}
-            onChange={(i) => onChange({ aug: i === 2 ? 1 : 0, flat5: i === 1 ? 1 : 0 })}
-          />
-        </Field>
+        {offScale && (
+          <Field label="Fifth">
+            <Segmented
+              options={["5", "♭5", "♯5"]}
+              value={fifth}
+              onChange={(i) => onChange({ aug: i === 2 ? 1 : 0, flat5: i === 1 ? 1 : 0 })}
+            />
+          </Field>
+        )}
+        {offScale && tensions.length > 0 && (
+          <Field label="Tension">
+            <Select
+              value={Math.max(0, tensions.indexOf(block.tension ?? "") + 1)}
+              options={["Natural", ...tensions.map(pretty)]}
+              onChange={(v) => onChange({ tension: v === 0 ? undefined : tensions[v - 1] })}
+            />
+          </Field>
+        )}
         <Field label="Inversion">
           <Select value={chord.inversion} options={chord.toneLabels} onChange={(v) => onChange({ inversion: v })} />
         </Field>

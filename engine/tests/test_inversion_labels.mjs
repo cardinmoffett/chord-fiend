@@ -50,9 +50,9 @@ known('dominant 7sus4 (V, Ionian)', blk({degreeIndex: 4, susIndex: 2, extensionI
 known('sus2 with a 9th keeps both the 2 and the 9', blk({degreeIndex: 0, susIndex: 1, extensionIndex: 3}), MODE.Ionian, ['1', '2', '5', '7', '9']);
 known('sus4 on a Lydian-colored degree (IV in Ionian has a #4 against its root)', blk({degreeIndex: 3, susIndex: 2}), MODE.Ionian, ['1', S + '4', '5']);
 
-known('augmented triad', blk({degreeIndex: 0, aug: 1}), MODE.Ionian, ['1', '3', S + '5']);
-known('augmented major 7th', blk({degreeIndex: 0, aug: 1, extensionIndex: 2}), MODE.Ionian, ['1', '3', S + '5', '7']);
-known('augmented on a minor degree (ii aug keeps its b3)', blk({degreeIndex: 1, aug: 1}), MODE.Ionian, ['1', F + '3', S + '5']);
+known('augmented triad (free C)', blk({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1}), MODE.Ionian, ['1', '3', S + '5']);
+known('augmented major 7th (free C)', blk({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1, extensionIndex: 2}), MODE.Ionian, ['1', '3', S + '5', '7']);
+known('augmented on a minor chord (free D minor, aug keeps its b3)', blk({chordSource: 'free', freeRoot: 2, freeQuality: 'minor', aug: 1}), MODE.Ionian, ['1', F + '3', S + '5']);
 known('naturally augmented III in harmonic minor', blk({degreeIndex: 2}), MODE.HarmonicMinor, ['1', '3', S + '5']);
 
 known('major 6th chord (I6, Ionian)', blk({degreeIndex: 0, extensionIndex: 1}), MODE.Ionian, ['1', '3', '5', '6']);

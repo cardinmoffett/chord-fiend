@@ -45,27 +45,35 @@ function sameName(label, a, b) {
 }
 function report(t) { console.log((failures === 0 ? 'PASS' : 'FAIL') + '  ' + t + '  (' + passes + ' checks' + (failures ? ', ' + failures + ' FAILED' : '') + ')'); passes = 0; failures = 0; }
 function blk(o) { return Object.assign(orig.defaultBlock(), o); }
-// The engine's chord carries fields the app's does not (isFree, flat5, chordType,
-// bassOffsets). For the app's own blocks they must be false / null; everything else must
+// The engine's chord carries fields the app's does not (isFree, flat5, bassOffsets,
+// addNine, tension). For the app's own blocks they must be false / null; everything else must
 // match exactly.
 function appShape(ch) {
   var c = Object.assign({}, ch);
-  if (c.isFree !== false || c.flat5 !== false || c.chordType !== null || c.bassOffsets !== null)
-    return {unexpected: {isFree: c.isFree, flat5: c.flat5, chordType: c.chordType, bassOffsets: c.bassOffsets}};
-  delete c.isFree; delete c.flat5; delete c.chordType; delete c.bassOffsets;
+  if (c.isFree !== false || c.flat5 !== false || c.bassOffsets !== null || c.addNine !== false || c.tension !== null)
+    return {unexpected: {isFree: c.isFree, flat5: c.flat5, bassOffsets: c.bassOffsets, addNine: c.addNine, tension: c.tension}};
+  delete c.isFree; delete c.flat5; delete c.bassOffsets; delete c.addNine; delete c.tension;
   return c;
 }
 
 console.log('=== constants ===');
 // Names the app never had are the engine's own additions: free mode (checked in test_free_flat5),
-// blockLabel (test_block_label) and chord types (test_chord_types).
+// blockLabel (test_block_label), shapes and tensions (test_shapes_tensions).
 var additions = names.filter(function (n) { return orig[n] === undefined; });
-names.forEach(function (n) { if (typeof engine[n] !== 'function' && additions.indexOf(n) < 0) same(n, orig[n], engine[n]); });
-same('the only additions are free mode, blockLabel and chord types', additions.slice().sort(), ['CHORD_TYPES', 'FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'blockLabel', 'chordTypeOf']);
+// EXTENSION_NAMES gained "add9" and "6/9" at the end (checked in test_shapes_tensions); the
+// app's six must still come first, unchanged, so saved extensionIndex values keep their meaning.
+names.forEach(function (n) {
+  if (typeof engine[n] === 'function' || additions.indexOf(n) >= 0) return;
+  if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
+  same(n, orig[n], engine[n]);
+});
+same('the only additions are free mode, blockLabel, shapes and tensions', additions.slice().sort(), ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'SHAPE_ORDER', 'TENSIONS', 'blockLabel']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
-console.log('\n=== diatonic and borrowed chords: every key, home mode, block mode, degree, extension, sus and aug ===');
+// Diatonic and borrowed chords now take every note from their scale, so the app's ♯5 on
+// them is no longer an engine feature: those blocks are compared with aug off only.
+console.log('\n=== diatonic and borrowed chords: every key, home mode, block mode, degree, extension and sus ===');
 var combo = 0;
 for (var root = 0; root < 12; root++) {
   state.masterRootIndex = root;
@@ -73,9 +81,9 @@ for (var root = 0; root < 12; root++) {
     state.masterModeIndex = mm;
     for (var bm = 0; bm < engine.BLOCK_MODE_NAMES.length; bm++)
       for (var deg = 0; deg < 7; deg++)
-        for (var ext = 0; ext < engine.EXTENSION_NAMES.length; ext++)
+        for (var ext = 0; ext < orig.EXTENSION_NAMES.length; ext++)
           for (var sus = 0; sus < 3; sus++)
-            for (var aug = 0; aug < 2; aug++) {
+            for (var aug = 0; aug < 1; aug++) {
               combo++;
               // inversion, drop and octave cycle through their values across the sweep
               var b = blk({degreeIndex: deg, blockModeIndex: bm, extensionIndex: ext, susIndex: sus, aug: aug,
@@ -96,7 +104,7 @@ for (root = 0; root < 12; root++) {
     state.masterModeIndex = mm;
     for (var tgt = 0; tgt < 7; tgt++)
       engine.APPLIED_FUNCTIONS.forEach(function (fn) {
-        for (var ext = 0; ext < engine.EXTENSION_NAMES.length; ext++)
+        for (var ext = 0; ext < orig.EXTENSION_NAMES.length; ext++)
           for (var sus = 0; sus < 3; sus++)
             for (var aug = 0; aug < 2; aug++) {
               combo++;

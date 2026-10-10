@@ -37,7 +37,7 @@ ToneMock.context = {sampleRate: 8000, state: 'running', resume: function () { re
 var api = new Function('document', 'localStorage', 'Tone', code +
   '\nreturn {S:function(){return state;}, buildChord:buildChord, defaultBlock:defaultBlock, applyDrops:applyDrops, MASTER_MODE_NAMES:MASTER_MODE_NAMES,' +
   ' renderEditor:renderEditor, setEditing:function(blocks){ editingBlocks = blocks; editingRef = {kind:"section", id:1}; currentView = "section"; state.currentIndex = 0; },' +
-  ' chordToneLabel:chordToneLabel, chordToneRoles:chordToneRoles};')(doc, ls, ToneMock);
+  ' chordToneLabel:chordToneLabel, chordToneRoles:chordToneRoles, EXTENSION_NAMES:EXTENSION_NAMES};')(doc, ls, ToneMock);
 
 var F = '\u266D', S = '\u266F';
 function blk(o) { return Object.assign(api.defaultBlock(), o); }
@@ -71,9 +71,9 @@ known('dominant 7sus4 (V, Ionian)', blk({degreeIndex: 4, susIndex: 2, extensionI
 known('sus2 with a 9th keeps both the 2 and the 9', blk({degreeIndex: 0, susIndex: 1, extensionIndex: 3}), MODE.Ionian, ['1', '2', '5', '7', '9']);
 known('sus4 on a Lydian-colored degree (IV in Ionian has a #4 against its root)', blk({degreeIndex: 3, susIndex: 2}), MODE.Ionian, ['1', S + '4', '5']);
 
-known('augmented triad', blk({degreeIndex: 0, aug: 1}), MODE.Ionian, ['1', '3', S + '5']);
-known('augmented major 7th', blk({degreeIndex: 0, aug: 1, extensionIndex: 2}), MODE.Ionian, ['1', '3', S + '5', '7']);
-known('augmented on a minor degree (ii aug keeps its b3)', blk({degreeIndex: 1, aug: 1}), MODE.Ionian, ['1', F + '3', S + '5']);
+known('augmented triad (free C)', blk({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1}), MODE.Ionian, ['1', '3', S + '5']);
+known('augmented major 7th (free C)', blk({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1, extensionIndex: 2}), MODE.Ionian, ['1', '3', S + '5', '7']);
+known('augmented on a minor chord (free D minor keeps its b3)', blk({chordSource: 'free', freeRoot: 2, freeQuality: 'minor', aug: 1}), MODE.Ionian, ['1', F + '3', S + '5']);
 known('naturally augmented III in harmonic minor', blk({degreeIndex: 2}), MODE.HarmonicMinor, ['1', '3', S + '5']);
 
 known('major 6th chord (I6, Ionian)', blk({degreeIndex: 0, extensionIndex: 1}), MODE.Ionian, ['1', '3', '5', '6']);
@@ -114,7 +114,7 @@ var combos = 0;
 var drops = [0, 1, 2, 3];
 for (var mi = 0; mi < api.MASTER_MODE_NAMES.length; mi++) {
   for (var deg = 0; deg < 7; deg++) {
-    for (var ext = 0; ext <= 5; ext++) {
+    for (var ext = 0; ext < api.EXTENSION_NAMES.length; ext++) { // every shape, add9 and 6/9 included
       for (var sus = 0; sus <= 2; sus++) {
         for (var aug = 0; aug <= 1; aug++) {
           combos++;
@@ -237,8 +237,10 @@ var s2 = openEditorOn(blk({degreeIndex: 4, extensionIndex: 2}));
 check('dominant 7th: 1 3 5 b7', eq(optionTexts(s2), ['1', '3', '5', F + '7']));
 var s3 = openEditorOn(blk({degreeIndex: 0, susIndex: 2}));
 check('changing to sus4 changes the options: 1 4 5', eq(optionTexts(s3), ['1', '4', '5']));
-var s4 = openEditorOn(blk({degreeIndex: 0, aug: 1}));
-check('changing to aug changes the options: 1 3 #5', eq(optionTexts(s4), ['1', '3', S + '5']));
+var s4 = openEditorOn(blk({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}));
+check('a free augmented chord offers 1 3 #5', eq(optionTexts(s4), ['1', '3', S + '5']));
+var s5 = openEditorOn(blk({degreeIndex: 0, extensionIndex: api.EXTENSION_NAMES.indexOf('add9')}));
+check('add9 offers 1 3 5 9', eq(optionTexts(s5), ['1', '3', '5', '9']));
 var s5 = openEditorOn(blk({degreeIndex: 0, extensionIndex: 5}));
 check('13th chord offers all seven tones', eq(optionTexts(s5), ['1', '3', '5', '7', '9', '11', '13']));
 check('every option\'s value is its position (what gets stored), so saved songs line up', s5.children.every(function (o, i) { return o.value === i; }));
