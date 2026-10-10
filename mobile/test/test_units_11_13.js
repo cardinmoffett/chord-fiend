@@ -31,10 +31,10 @@ function goalAtStartAndAfter(L, edits) {
 }
 
 console.log('=== Unit 11: Chromatic Color ===');
-// On the rails: a diatonic block ignores a raised or flat 5th, so the lessons build those
-// sounds in Free (augmented) or by borrowing (half-diminished), and say so.
+// The augmented chords are made with Alter (5th: ♯5) on the diatonic block, so they keep
+// their numbers (I+, V+); the half-diminished ii comes from borrowing Aeolian.
 var L = lesson('u11-line-cliche');
-var b = goalAtStartAndAfter(L, [[1, {chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}], [2, {extensionIndex: 1}], [3, {chordSource: 'applied', appliedTargetIndex: 3, appliedFunction: 'dominant'}]]);
+var b = goalAtStartAndAfter(L, [[1, {aug: 1}], [2, {extensionIndex: 1}], [3, {chordSource: 'applied', appliedTargetIndex: 3, appliedFunction: 'dominant'}]]);
 same('the four C chords: C-E-G, C-E-G#, C-E-G-A, C-E-G-Bb', [play(b[0]), play(b[1]), play(b[2]), play(b[3])], [notes('C4 E4 G4'), notes('C4 E4 G#4'), notes('C4 E4 G4 A4'), notes('C4 E4 G4 Bb4')]);
 same('the top voice walks G, G#, A, Bb', [b[0], b[1], b[2], b[3]].map(function (x) { return Math.max.apply(null, play(x)); }), notes('G4 G#4 A4 Bb4'));
 check('C and E never move', [b[0], b[1], b[2], b[3]].every(function (x) { var p = play(x); return p[0] === n('C4') && p[1] === n('E4'); }));
@@ -42,11 +42,11 @@ check('Bb settles a half step down onto A in the F chord', play(b[4]).indexOf(n(
 check('block 4 starts with a 7th, so Applied gives a dominant 7th', L.blocks()[3].extensionIndex === 2);
 
 L = lesson('u11-aug-passing');
-b = goalAtStartAndAfter(L, [[2, {chordSource: 'free', freeRoot: 7, freeQuality: 'augmented'}]]);
-same('free G augmented is G-B-D#', play(b[2]).map(function (p) { return p % 12; }), [PC.G, PC.B, PC['D#']]);
+b = goalAtStartAndAfter(L, [[2, {aug: 1}]]);
+same('V with a raised 5th (Alter) is G-B-D#', play(b[2]).map(function (p) { return p % 12; }), [PC.G, PC.B, PC['D#']]);
 check('D# is a half step below E, the 3rd of C', (PC.E - PC['D#'] + 12) % 12 === 1);
-b = L.blocks(); edit(b, 0, {chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'});
-check('free C augmented alone also meets the goal (C-E-G#)', !!L.goal(b) && JSON.stringify(play(b[0])) === JSON.stringify(notes('C4 E4 G#4')));
+b = L.blocks(); edit(b, 0, {aug: 1});
+check('I+ alone also meets the goal (C-E-G#)', !!L.goal(b) && JSON.stringify(play(b[0])) === JSON.stringify(notes('C4 E4 G#4')));
 
 L = lesson('u11-chromatic-mediants');
 b = goalAtStartAndAfter(L, [[1, {chordSource: 'free', freeRoot: 4, freeQuality: 'major'}]]);
