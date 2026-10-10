@@ -1,8 +1,8 @@
 // Types for engine.js, for TypeScript callers such as the device. engine.js stays plain JavaScript.
 
 export interface Block {
-  /** A chosen chord type (an id from CHORD_TYPES); absent = "From the key". */
-  chordType?: string;
+  /** Applied and free chords only: an altered extension, "b9" | "#9" | "#11" | "b13". */
+  tension?: string;
   degreeIndex: number;
   blockModeIndex: number;
   extensionIndex: number;
@@ -23,7 +23,7 @@ export interface Block {
   /** Free mode's root, as a pitch class 0-11. An engine addition. */
   freeRoot?: number;
   /** Free mode's quality. An engine addition; missing means major. */
-  freeQuality?: "major" | "minor" | "dominant" | "diminished";
+  freeQuality?: "major" | "minor" | "dominant" | "diminished" | "augmented" | "halfDiminished";
 }
 
 export interface Chord {
@@ -72,7 +72,7 @@ export const APPLIED_FUNCTIONS: string[];
 export const APPLIED_FUNCTION_LABELS: Record<string, string>;
 export const DOMINANT_INTERVALS: number[];
 export const DIMINISHED7_INTERVALS: number[];
-export const FREE_QUALITIES: ("major" | "minor" | "dominant" | "diminished")[];
+export const FREE_QUALITIES: ("major" | "minor" | "dominant" | "diminished" | "augmented" | "halfDiminished")[];
 export const FREE_QUALITY_INTERVALS: Record<string, number[]>;
 export const CHORD_DEGREE_REFERENCE: Record<number, number>;
 export const STACKED_THIRD_ROLES: number[];
@@ -105,7 +105,7 @@ export function computeBassPitchForBlock(block: Block, chord: Chord, pattern: Be
 /** What a block shows: `degree` large (V7, ♭VI, V7/ii; a free chord's root and quality) and `name` small (G7, A♭). */
 export function blockLabel(block: Block, masterRootIndex: number, masterModeIndex: number): { degree: string; name: string };
 
-export interface ChordType { id: string; symbol: string; group: string; tones: [number, number][] }
-/** Named chord formulas a block can choose instead of "From the key". Each tone is [semitones above the root, role]. */
-export const CHORD_TYPES: ChordType[];
-export function chordTypeOf(block: Block): ChordType | null;
+/** The tensions an applied or free chord can take: [natural semitones, altered semitones]. */
+export const TENSIONS: Record<string, [number, number]>;
+/** The order editors list the Shape choices in, as extensionIndex values. */
+export const SHAPE_ORDER: number[];

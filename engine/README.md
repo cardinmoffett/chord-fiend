@@ -39,6 +39,6 @@ Expect ten `ok` lines.
 - The other five are the original tests, pointed at the engine. Their checks are unchanged; only the setup at the top differs. `test_inversion_labels` leaves out its final section, which tests the app's editor dropdown rather than the engine and belongs with the editor (build plan step 5).
 - `test_free_flat5.mjs` checks free mode and flat five against hand-written expectations.
 - `test_notes.mjs` checks `src/notes.js` against hand-written expectations.
-- `test_chord_types.mjs` checks every chord type (the Type control: add9, m(maj7), 7b9 ...) note by note against hand-written spellings, plus their names, labels, voicings and bass lanes.
+- `test_shapes_tensions.mjs` checks the add9 and 6/9 shapes, the tensions (b9, #9, #11, b13) on applied and free chords, the free augmented and half-diminished qualities, and that diatonic chords ignore off-key settings.
 - `test_block_label.mjs` checks `blockLabel` (the large degree-and-formula label and small chord name a block shows) against hand-written roman numerals.
 - `test_extension_fix` is not ported. It tests the Learn lessons, which the device does not carry over. It still runs against the original app with `sh original/run_tests.sh`.

@@ -39,23 +39,28 @@ check('diminished tone labels', chord({chordSource: 'free', freeRoot: 11, freeQu
 check('a missing quality means major', notes({chordSource: 'free', freeRoot: 0}), [60, 64, 67]);
 
 console.log('\n=== flat five ===');
-check('C major with b5: C E Gb', notes({degreeIndex: 0, flat5: 1}), [60, 64, 66]);
-check('...named C(b5)', sym({degreeIndex: 0, flat5: 1}), 'C(b5)');
-check('G7 with b5: G B Db F', notes({degreeIndex: 4, extensionIndex: 2, flat5: 1}), [67, 71, 73, 77]);
-check('...named G7b5', sym({degreeIndex: 4, extensionIndex: 2, flat5: 1}), 'G7b5');
-check('Cmaj7 with b5', sym({degreeIndex: 0, extensionIndex: 2, flat5: 1}), 'Cmaj7b5');
-check('D minor 7 with b5 is half-diminished: Dm7b5', sym({degreeIndex: 1, extensionIndex: 2, flat5: 1}), 'Dm7b5');
-check('label shows the flat 5th', chord({degreeIndex: 4, extensionIndex: 2, flat5: 1}).toneLabels, ['1', '3', F + '5', F + '7']);
+check('free C major with b5: C E Gb', notes({chordSource: 'free', freeRoot: 0, freeQuality: 'major', flat5: 1}), [60, 64, 66]);
+check('...named C(b5)', sym({chordSource: 'free', freeRoot: 0, freeQuality: 'major', flat5: 1}), 'C(b5)');
+check('free G7 with b5: G B Db F', notes({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, flat5: 1}), [67, 71, 73, 77]);
+check('...named G7b5', sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, flat5: 1}), 'G7b5');
+check('free Cmaj7 with b5', sym({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: 2, flat5: 1}), 'Cmaj7b5');
+check('free D minor 7 with b5 is half-diminished: Dm7b5', sym({chordSource: 'free', freeRoot: 2, freeQuality: 'minor', extensionIndex: 2, flat5: 1}), 'Dm7b5');
+check('label shows the flat 5th', chord({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, flat5: 1}).toneLabels, ['1', '3', F + '5', F + '7']);
 check('on an applied dominant: V7/V b5 = D F# Ab C', notes({chordSource: 'applied', appliedTargetIndex: 4, appliedFunction: 'dominant', extensionIndex: 2, flat5: 1}), [74, 78, 80, 84]);
 check('on a free chord', sym({chordSource: 'free', freeRoot: 2, freeQuality: 'dominant', extensionIndex: 2, flat5: 1}), 'D7b5');
-check('aug wins over b5 when both are set', notes({degreeIndex: 0, aug: 1, flat5: 1}), [60, 64, 68]);
+check('aug wins over b5 when both are set', notes({chordSource: 'free', freeRoot: 0, freeQuality: 'major', aug: 1, flat5: 1}), [60, 64, 68]);
 check('the leading-tone chord ignores it (it already has one)', chord({chordSource: 'applied', appliedFunction: 'leadingTone', flat5: 1}).offsets, [0, 3, 6, 9]);
-check('flat5 is reported on the chord', [chord({flat5: 1}).flat5, chord({}).flat5], [true, false]);
-check('sus chords with b5 say so', sym({degreeIndex: 4, extensionIndex: 2, susIndex: 2, flat5: 1}), 'G7sus4b5');
+check('flat5 is reported on the chord', [chord({chordSource: 'free', freeRoot: 0, freeQuality: 'major', flat5: 1}).flat5, chord({chordSource: 'free', freeRoot: 0, freeQuality: 'major'}).flat5], [true, false]);
+check('sus chords with b5 say so', sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, susIndex: 2, flat5: 1}), 'G7sus4b5');
+
+console.log('=== on the rails: a diatonic or borrowed chord ignores a raised or flat 5th (its scale decides) ===');
+check('V with aug in C is still G B D', notes({degreeIndex: 4, aug: 1}), [67, 71, 74]);
+check('V7 with flat5 in C is still G7', sym({degreeIndex: 4, extensionIndex: 2, flat5: 1}), 'G7');
+check('ii7 in C borrowed from Aeolian is the half-diminished Dm7b5 (that is how a diatonic chord gets it)', sym({degreeIndex: 1, extensionIndex: 2, blockModeIndex: 6}), 'Dm7b5');
 
 console.log('=== augmented 7th chords get a name (the app showed "G?7") ===');
-check('V7 with a raised 5th in C: G B D# F, named G7#5', [notes({degreeIndex: 4, extensionIndex: 2, aug: 1}), sym({degreeIndex: 4, extensionIndex: 2, aug: 1})], [[67, 71, 75, 77], 'G7#5']);
-check('ii7 with a raised 5th in C: D F A# C, named Dm7#5', [notes({degreeIndex: 1, extensionIndex: 2, aug: 1}), sym({degreeIndex: 1, extensionIndex: 2, aug: 1})], [[62, 65, 70, 72], 'Dm7#5']);
-check('I maj7 with a raised 5th keeps its name, Cmaj7#5', sym({extensionIndex: 2, aug: 1}), 'Cmaj7#5');
+check('free G7 with a raised 5th: G B D# F, named G7#5', [notes({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, aug: 1}), sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, aug: 1})], [[67, 71, 75, 77], 'G7#5']);
+check('free Dm7 with a raised 5th: D F A# C, named Dm7#5', [notes({chordSource: 'free', freeRoot: 2, freeQuality: 'minor', extensionIndex: 2, aug: 1}), sym({chordSource: 'free', freeRoot: 2, freeQuality: 'minor', extensionIndex: 2, aug: 1})], [[62, 65, 70, 72], 'Dm7#5']);
+check('free Cmaj7 with a raised 5th keeps its name, Cmaj7#5', sym({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: 2, aug: 1}), 'Cmaj7#5');
 
 console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');

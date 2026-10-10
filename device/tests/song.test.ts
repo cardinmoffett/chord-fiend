@@ -218,9 +218,15 @@ describe("block labels: the degree large, the chord name small", () => {
   it("diatonic", () => {
     expect(label({ degreeIndex: 4, extensionIndex: 2 })).toEqual({ degree: "V7", name: "G7" });
     expect(label({ degreeIndex: 1 })).toEqual({ degree: "ii", name: "Dm" });
-    expect(label({ degreeIndex: 4, extensionIndex: 2, flat5: 1 })).toEqual({ degree: "V7\u266D5", name: "G7b5" });
     expect(label({ degreeIndex: 0, susIndex: 2 }).degree).toBe("Isus4");
-    expect(label({ degreeIndex: 0, aug: 1 }).degree).toBe("I+");
+    // On the rails: a diatonic chord takes its notes from the scale, so b5 / #5 don't apply.
+    expect(label({ degreeIndex: 4, extensionIndex: 2, flat5: 1 })).toEqual({ degree: "V7", name: "G7" });
+    expect(label({ degreeIndex: 0, aug: 1 }).degree).toBe("I");
+  });
+  it("applied and free chords take a fifth and tensions", () => {
+    expect(label({ chordSource: "applied", appliedTargetIndex: 0, appliedFunction: "dominant", extensionIndex: 2, flat5: 1 })).toEqual({ degree: "V7\u266D5/I", name: "G7b5" });
+    expect(label({ chordSource: "free", freeRoot: 0, freeQuality: "augmented" }).degree).toBe("C+");
+    expect(label({ chordSource: "applied", appliedTargetIndex: 1, appliedFunction: "dominant", extensionIndex: 3, tension: "b9" })).toEqual({ degree: "V7(\u266D9)/ii", name: "A7(b9)" });
   });
   it("a borrowed chord shows its degree in the borrowed mode", () => {
     expect(label({ degreeIndex: 5, blockModeIndex: 6 })).toEqual({ degree: "\u266DVI", name: "A\u266D" });
