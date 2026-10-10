@@ -5,6 +5,8 @@ export interface Block {
   tension?: string;
   /** Alter: force a major or minor 3rd. Unset = what the key gives. */
   third?: "major" | "minor";
+  /** Alter: set the 5th to b5, 5 or #5 (takes precedence over aug / flat5). */
+  fifth?: "b5" | "5" | "#5";
   /** Alter: force a major, flat or diminished 7th (when the shape has one). */
   seventh?: "maj" | "min" | "dim";
   degreeIndex: number;
@@ -115,3 +117,5 @@ export const TENSIONS: Record<string, [number, number]>;
 export const SHAPE_ORDER: number[];
 /** The numeral for a chromatic step above the key's root (a free chord's root); sharpen spells diminished chords with sharps. */
 export function stepNumeral(step: number, sharpen?: boolean): string;
+/** The block with every Alter choice cleared: what the key gives. */
+export function withoutAlter(block: Block): Block;
