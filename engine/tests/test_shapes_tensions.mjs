@@ -37,7 +37,7 @@ check('bass lanes on Cadd9: the 7 lane plays the root, never the 9th', lanes({ex
 check('bass lanes on C6/9: the 7 lane plays the 6th, as on C6', lanes({extensionIndex: SHAPE['6/9']}), pcs('C E G A'));
 check('Cadd9 in first inversion puts E lowest', chord({extensionIndex: SHAPE.add9, inversion: 1}).pitches[0] % 12, PC.E);
 
-console.log('=== tensions: applied and free chords only ===');
+console.log('=== tensions ===');
 var V9ofii = {chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'dominant', extensionIndex: SHAPE['9']};
 check('applied V9 of ii: A C# E G B', rootOrder(chord(V9ofii)), pcs('A C# E G B'));
 check('...with b9: A C# E G Bb, named A7(b9), label V7(' + F + '9)/ii', [rootOrder(chord(Object.assign({tension: 'b9'}, V9ofii))), sym(Object.assign({tension: 'b9'}, V9ofii)), label(Object.assign({tension: 'b9'}, V9ofii)).degree], [pcs('A C# E G Bb'), 'A7(b9)', 'V7(' + F + '9)/ii']);
@@ -48,15 +48,15 @@ check('free G13 with b13: the top note Eb, named G11(b13)', [rootOrder(chord(Obj
 check('free G11 with #11: named G9(#11)', sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: SHAPE['11'], tension: '#11'}), 'G9(#11)');
 check('the altered tone is labeled b9', chord(Object.assign({tension: 'b9'}, V9ofii)).toneLabels.indexOf(F + '9') >= 0, true);
 check('a tension needs its tone: free G7 with b9 is plain G7', [sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: SHAPE['7'], tension: 'b9'}), chord({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: SHAPE['7'], tension: 'b9'}).tension], ['G7', null]);
-check('on the rails: a diatonic V9 ignores b9 (G B D F A, G9)', [rootOrder(chord({degreeIndex: 4, extensionIndex: SHAPE['9'], tension: 'b9'})), sym({degreeIndex: 4, extensionIndex: SHAPE['9'], tension: 'b9'})], [pcs('G B D F A'), 'G9']);
-check('...a diatonic chord gets b9 by borrowing: V9 from harmonic minor is G B D F Ab', rootOrder(chord({degreeIndex: 4, blockModeIndex: 8, extensionIndex: SHAPE['9']})), pcs('G B D F Ab'));
+check('a diatonic V9 takes b9 too (G B D F Ab, G7(b9))', [rootOrder(chord({degreeIndex: 4, extensionIndex: SHAPE['9'], tension: 'b9'})), sym({degreeIndex: 4, extensionIndex: SHAPE['9'], tension: 'b9'})], [pcs('G B D F Ab'), 'G7(b9)']);
+check('...the same notes come from borrowing: V9 from harmonic minor is G B D F Ab', rootOrder(chord({degreeIndex: 4, blockModeIndex: 8, extensionIndex: SHAPE['9']})), pcs('G B D F Ab'));
 
 console.log('=== free qualities: augmented and half-diminished ===');
-check('free C augmented: C E G#, Caug, label C+', [rootOrder(chord({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'})), sym({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}), label({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}).degree], [pcs('C E G#'), 'Caug', 'C+']);
+check('free I augmented: C E G#, Caug, label I+', [rootOrder(chord({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'})), sym({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}), label({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented'}).degree], [pcs('C E G#'), 'Caug', 'I+']);
 check('free C augmented 7: C E G# Bb, C7#5', [rootOrder(chord({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented', extensionIndex: SHAPE['7']})), sym({chordSource: 'free', freeRoot: 0, freeQuality: 'augmented', extensionIndex: SHAPE['7']})], [pcs('C E G# Bb'), 'C7#5']);
-check('free B half-diminished 7: B D F A, Bm7b5, label Bø7', [rootOrder(chord({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished', extensionIndex: SHAPE['7']})), sym({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished', extensionIndex: SHAPE['7']}), label({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished', extensionIndex: SHAPE['7']}).degree], [pcs('B D F A'), 'Bm7b5', 'Bø7']);
-check('free B half-diminished triad reads B°', label({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished'}).degree, 'B°');
-check('free C major add9 label: Cadd9 (not Cmajadd9)', label({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: SHAPE.add9}).degree, 'Cadd9');
+check('free VII half-diminished 7: B D F A, Bm7b5, label viiø7', [rootOrder(chord({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished', extensionIndex: SHAPE['7']})), sym({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished', extensionIndex: SHAPE['7']}), label({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished', extensionIndex: SHAPE['7']}).degree], [pcs('B D F A'), 'Bm7b5', 'viiø7']);
+check('free VII half-diminished triad reads vii°', label({chordSource: 'free', freeRoot: 11, freeQuality: 'halfDiminished'}).degree, 'vii°');
+check('free I major add9 label: Iadd9 (not Imajadd9)', label({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: SHAPE.add9}).degree, 'Iadd9');
 
 console.log(ok ? 'ALL PASSED' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);

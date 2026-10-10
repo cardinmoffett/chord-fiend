@@ -12,7 +12,7 @@ import {
   SUS_NAMES,
   buildChord,
   degreeLabels,
-  noteChoiceLabel,
+  stepNumeral,
 } from "../../../../engine/src/engine.js";
 import { IndexDropdown } from "./Dropdown";
 import type { Block, Song } from "./song";
@@ -68,10 +68,14 @@ export function Inspector({
   const degreeMode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[song.modeIndex];
   const fifth = block.aug ? 2 : block.flat5 ? 1 : 0;
   const isLeadingTone = block.chordSource === "applied" && block.appliedFunction === "leadingTone";
-  // Diatonic and borrowed chords take every note from a scale (color comes from Mode);
-  // applied and free chords are built off the scale, so only they get Fifth and Tension.
-  const offScale = (block.chordSource === "applied" && !isLeadingTone) || block.chordSource === "free";
+  // Alter (every chord but the fixed leading-tone dim7): step off what the key gives --
+  // 3rd, 5th, 7th, tension. Unset = the key's; the block's number shows any change.
+  const canAlter = !isLeadingTone;
   const tensions = tensionChoices(block.extensionIndex);
+  const ext = EXTENSION_NAMES[block.extensionIndex];
+  const hasSeventh = ext === "7" || ext === "9" || ext === "11" || ext === "13";
+  const THIRDS = [undefined, "major", "minor"] as const;
+  const SEVENTHS = [undefined, "maj", "min", "dim"] as const;
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
@@ -118,7 +122,7 @@ export function Inspector({
             <Field label="Root">
               <Select
                 value={block.freeRoot ?? 0}
-                options={Array.from({ length: 12 }, (_, i) => noteChoiceLabel(i))}
+                options={Array.from({ length: 12 }, (_, step) => stepNumeral(step, block.freeQuality === "diminished" || block.freeQuality === "halfDiminished"))}
                 onChange={(v) => onChange({ freeRoot: v })}
               />
             </Field>
@@ -143,7 +147,16 @@ export function Inspector({
         <Field label="Sus">
           <Select value={block.susIndex} options={SUS_NAMES} disabled={isLeadingTone} onChange={(v) => onChange({ susIndex: v })} />
         </Field>
-        {offScale && (
+        {canAlter && (
+          <Field label="3rd">
+            <Segmented
+              options={["Key", "Major", "Minor"]}
+              value={Math.max(0, THIRDS.indexOf(block.third as (typeof THIRDS)[number]))}
+              onChange={(i) => onChange({ third: THIRDS[i] })}
+            />
+          </Field>
+        )}
+        {canAlter && (
           <Field label="Fifth">
             <Segmented
               options={["5", "♭5", "♯5"]}
@@ -152,7 +165,16 @@ export function Inspector({
             />
           </Field>
         )}
-        {offScale && tensions.length > 0 && (
+        {canAlter && hasSeventh && (
+          <Field label="7th">
+            <Segmented
+              options={["Key", "maj7", "\u266D7", "\u00B07"]}
+              value={Math.max(0, SEVENTHS.indexOf(block.seventh as (typeof SEVENTHS)[number]))}
+              onChange={(i) => onChange({ seventh: SEVENTHS[i] })}
+            />
+          </Field>
+        )}
+        {canAlter && tensions.length > 0 && (
           <Field label="Tension">
             <Select
               value={Math.max(0, tensions.indexOf(block.tension ?? "") + 1)}

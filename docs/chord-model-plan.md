@@ -11,46 +11,51 @@ Every chord is built by stacking thirds from the key's scale, with a few tweaks 
 
 The fix should keep the app feeling guided: everything starts from what the key gives you, and every change from that is visible and easy to undo.
 
-## The model: who decides the notes
+## The model: where the root comes from, plus Alter
 
-Revised 2026-10-10. A flat list of chord types was tried and dropped: it was overloaded, it duplicated what Diatonic already means, and it hid basics like the dominant.
+Revised 2026-10-10, twice:
+- **A flat list of chord types was dropped.** It was overloaded, and it hid basics like the dominant.
+- **A strict "only Free can step off the key" rule was relaxed.** It slowed down quick edits and lost the numbered spelling.
 
-| Category | Who decides the notes | What you choose |
+**The principle: every chord keeps a number in the key.**
+
+**Category: where the root comes from.**
+
+| Category | Root | Base formula |
 |---|---|---|
-| **Diatonic** | The home key's scale | Degree, **Shape** and Sus |
-| **Borrowed** (diatonic plus a Mode) | Another mode's scale, on the same tonic | The Mode, listed by its result ("Dorian → F7"), then Shape and Sus |
-| **Applied** | The function (dominant of, tritone sub of, leading-tone into) | Function and target, then Shape, Sus, **Fifth** and **Tension** |
-| **Free** | You | Root and **Quality** (Major, Minor, Dominant, Diminished, Augmented, Half-diminished), then Shape, Sus, Fifth and Tension |
+| **Diatonic** | A degree of the key's scale | The scale's own tones (Shape, Sus) |
+| **Borrowed** (diatonic plus a Mode) | Same degree, another mode's scale | That mode's tones. The Mode list shows results ("Dorian → F7"). |
+| **Applied** | A function: dominant of, tritone sub of, leading-tone into a target | The function's formula |
+| **Free** | A step from the key's root (`freeRoot`, 0-11), shown as a numeral: ♭II, III, ♯IV… | A Quality: Major, Minor, Dominant, Diminished, Augmented, Half-diminished |
 
-**The rails are enforced in the engine.** Diatonic and borrowed chords take every note from their scale, so the engine ignores `aug`, `flat5` and `tension` on them.
+**Alter**, available on every category except the fixed leading-tone dim7:
+- It's a collapsed group that opens on its own when a block has an alteration.
+- **3rd** (`third`): major or minor.
+- **5th** (`aug`, `flat5`): ♭5 or ♯5.
+- **7th** (`seventh`): maj, ♭7 or °7, when the shape has a 7th.
+- **Tension** (`tension`): ♭9, ♯9, ♯11 or ♭13, when the shape has that tone.
+- Unset means "what the source gives".
+- The engine applies all of these in one place in `buildChord`.
 
-**How a diatonic chord changes color:** you borrow a mode. Some examples:
-- IV7 (a dominant) is IV from Dorian.
-- i(maj7) is i from harmonic minor.
-- ii⌀7 is ii from Aeolian.
-- V7♭9 is V9 from harmonic minor.
+**Shape** (`extensionIndex`, editors use `SHAPE_ORDER`): Triad, add9, 6, 6/9, 7, 9, 11, 13.
 
-**Controls, in order:**
-- **Shape** (`extensionIndex`, shown in `SHAPE_ORDER`): Triad, add9, 6, 6/9, 7, 9, 11, 13. These are the scale's own tones; add9 and 6/9 add the scale's 9th without a 7th.
-- **Sus:** the scale's 2nd or 4th.
-- **Fifth:** ♭5 or ♯5, on applied and free chords only.
-- **Tension** (`tension`): ♭9, ♯9, ♯11 or ♭13. It only applies where the chord has that tone (9ths need shape 9/11/13, ♯11 needs 11/13, ♭13 needs 13). Applied and free chords only.
-- **Voicing:** inversion, drop and octave. Later, an optional hand-placed shape stored by role (see the voicing editor below).
-
-**Labels:**
-- A diatonic 7th says what kind it is: IVmaj7, V7, ii7, vii⌀7, i(maj7).
-- Tensions read as V7(♭9)/ii and A7(b9).
-- Names come from the notes actually built: Cadd9, C6/9, G9(#11).
+**Labels (`blockLabel`) are always numerals, read from the chord's real notes:**
+- The case shows the 3rd, then °, + or ø.
+- The 7th's kind: maj7, 7, (maj7), °7.
+- Then shape, tension, sus, and ♭5/♯5.
+- Examples: ii with a major 3rd and ♭7 reads II7; IVmaj7; V+7; vi(maj7); V7(♭9)/ii.
+- **Free chords read their step:** III, ♭VI, ♭III (E♭, spelled to match the step). Diminished free chords take sharp steps, as leading-tone chords: ♯i°7 = C♯dim7 in C.
+- The chord name (small) stays in letters.
 
 **Saved songs are not a compatibility constraint.** The owner has said to rearchitect freely.
 
 **The engine translates both ways:**
 - **Forward:** block → notes. This is `buildChord`.
-- **Reverse:** notes plus key → ranked candidate blocks in these categories, most guided first: a degree, then a borrowed mode, then applied, then free. It powers the voicing editor's suggestions, reharmonization suggestions and lesson feedback.
+- **Reverse:** notes plus key → ranked candidate blocks, most guided first: a plain degree, then borrowed, applied, a degree with Alter, then free. It powers the voicing editor's suggestions, reharmonization suggestions and lesson feedback.
 
 ## Build order
 
-1. Done: the categories above, with Shape, Mode-by-result, Fifth, Tension and the free qualities.
+1. Done: categories, Shape, Mode listed by result, Alter (3rd, 5th, 7th, Tension), free roots as steps, numeral labels for everything.
 2. **Reverse lookup:** notes → candidate blocks, tested on its own in the engine.
 3. **Voicing editor** (below).
 4. **Reharmonization suggestions,** built on the reverse lookup and the melody lane in Learn.
@@ -69,6 +74,6 @@ Revised 2026-10-10. A flat list of chord types was tried and dropped: it was ove
 
 ## Rules for every step
 
-- On the rails first: Diatonic and borrowed chords never take off-scale settings; color comes from Mode. Off-scale tools live in Applied and Free.
+- On the rails first: every choice starts at what the key gives. Alter is collapsed by default, and any change shows in the block's numeral.
 - Change chord logic in the engine only (`engine/src/engine.js`). Then run the engine tests, `npm run sync-engine` and `npm test` in `mobile/`, and check that the device still builds.
 - Write expected notes and names in tests from theory, never copied from the code's output.

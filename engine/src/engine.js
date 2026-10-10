@@ -130,10 +130,12 @@ function degreeLabels(modeName) {
   return labels;
 }
 
-// TENSIONS: an altered extension on an applied or free chord, the colors a key doesn't
-// give (a diatonic chord gets these by borrowing a mode instead). Each moves one tone
-// the chord already has: the 9th (14 semitones) down or up, the 11th (17) up, or the
-// 13th (21) down. A tension whose tone isn't in the chord does nothing.
+// ALTER choices (block.third, block.seventh, block.tension; the 5th is block.aug / flat5).
+// Unset means "what the key (or the function, or the free quality) gives".
+var THIRDS = {major: 4, minor: 3};
+var SEVENTHS = {maj: 11, min: 10, dim: 9};
+// TENSIONS move one tone the chord already has: the 9th (14 semitones) down or up, the
+// 11th (17) up, or the 13th (21) down. A tension whose tone isn't in the chord does nothing.
 var TENSIONS = {"b9": [14, 13], "#9": [14, 15], "#11": [17, 18], "b13": [21, 20]};
 var TENSION_ROLES = {"b9": 9, "#9": 9, "#11": 11, "b13": 13};
 // "G9" with a flat 9 reads G7(b9): when the altered tone is the chord's top extension,
@@ -180,14 +182,13 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     var quality = FREE_QUALITY_INTERVALS[block.freeQuality] ? block.freeQuality : "major";
     var qualityIntervals = FREE_QUALITY_INTERVALS[quality];
     degreeIndex = -1; // not a degree of the key
-    chordRootOffset = (((block.freeRoot || 0) - masterRootIndex) % 12 + 12) % 12;
+    // freeRoot is a step above the key's root (0-11), so a free chord keeps its number
+    // (III, \u266DVI) and moves with the key like every other block.
+    chordRootOffset = (((block.freeRoot || 0) % 12) + 12) % 12;
     offsets = is6 ? qualityIntervals.slice(0, 3).concat([9]) : qualityIntervals.slice(0, toneCount);
     if (susName === "sus2") offsets[1] = 2;
     else if (susName === "sus4") offsets[1] = 5;
-    if (block.aug) offsets[2] = 8;
-    else if (effectiveFlat5) offsets[2] = 6;
     if (addNine) offsets.push(qualityIntervals[4]);
-    appliedTension = applyTension(offsets, block.tension);
   } else if (isApplied) {
     // The target's OWN diatonic root -- same scale-walk the plain diatonic
     // path below uses, just to locate where the target sits, not to shape
@@ -211,11 +212,8 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
         offsets = DOMINANT_INTERVALS.slice(0, toneCount);
         if (susName === "sus2") offsets[1] = 2; // fixed major 2nd -- not scale-derived, dominant quality is fixed
         else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
-        if (block.aug) offsets[2] = 8;
-        else if (effectiveFlat5) offsets[2] = 6;
       }
       if (addNine) offsets.push(DOMINANT_INTERVALS[4]);
-      appliedTension = applyTension(offsets, block.tension);
     }
   } else {
     var degree = DEGREE_NAMES[block.degreeIndex];
@@ -226,12 +224,25 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     for (var k = 0; k < toneCount; k++) offsets.push(extended[degreeIndex + k*2] - chordRootOffset);
     if (susName === "sus2") offsets[1] = extended[degreeIndex+1] - chordRootOffset;
     else if (susName === "sus4") offsets[1] = extended[degreeIndex+3] - chordRootOffset;
-    // On the rails: a diatonic or borrowed chord takes every note from its scale. A raised
-    // or flattened 5th is not the key's, so it belongs to applied and free chords only;
-    // borrowing a mode is how a diatonic chord changes color.
-    effectiveAug = false; effectiveFlat5 = false;
+
     if (is6) offsets.push(extended[degreeIndex+5] - chordRootOffset);
     if (addNine) offsets.push(extended[degreeIndex+8] - chordRootOffset);
+  }
+
+  // ALTER: every chord but the fixed leading-tone dim7 can step off what its source
+  // gives -- a major or minor 3rd, a flat or raised 5th, a major, flat or diminished
+  // 7th, and a tension. Each starts at "what the key gives" (unset), and the block's
+  // label shows any change, so the chord keeps its number (ii with a major 3rd and a
+  // flat 7th reads II7).
+  if (!(isApplied && fn === "leadingTone")) {
+    if (effectiveSus === "none" && (offsets[1] === 3 || offsets[1] === 4) && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
+    // (An applied 6 chord keeps its plain dominant triad, as the original app did.)
+    if (!(isApplied && is6)) {
+      if (block.aug) offsets[2] = 8;
+      else if (effectiveFlat5) offsets[2] = 6;
+    }
+    if (offsets.length >= 4 && !is6 && !addNine && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
+    appliedTension = applyTension(offsets, block.tension);
   }
 
   var base = 60 + NOTE_NAME_TO_OFFSET[NOTE_NAMES[masterRootIndex]] + block.octave*12;
@@ -301,6 +312,12 @@ function getChordSymbol(chord, masterRootIndex) {
   var preferFlats = chord.isApplied && chord.appliedFunction === "tritoneSub"
     ? true
     : keyPrefersFlats(masterRootIndex, MASTER_MODE_NAMES.indexOf(chord.resolvedMode));
+  // A free chord is spelled the way its step is numbered: \u266DIII is E\u266D, \u266FIV is F\u266F.
+  if (chord.isFree) {
+    var stepAcc = stepNumeral(chord.chordRootPitch - masterRootIndex, isDiminishedTriad(chord)).charAt(0);
+    if (stepAcc === "\u266D") preferFlats = true;
+    else if (stepAcc === "\u266F") preferFlats = false;
+  }
   var rootName = pitchToNoteName(chord.chordRootPitch, preferFlats);
   if (chord.addNine || chord.tension) {
     // Name the chord without its added 9th / with its natural extension, then say what
@@ -562,8 +579,6 @@ function computeBassPitchForBlock(block, chord, pattern, bassWrapLow) {
 // numeral plus its formula (V7, \u266DVI, ii7, V7/ii, vii\u00B07/V), and `name` small, the
 // chord itself (G7, A\u266D, Dm7). A free chord has no degree in the key, so its large
 // label is its root and quality (E, F\u266Fm7). Shared by the phone app and the device.
-var FUNCTION_SHORT = {dominant: "V", tritoneSub: "subV", leadingTone: "vii\u00B0"};
-var QUALITY_SHORT = {major: "", minor: "m", dominant: "", diminished: "\u00B0", augmented: "+", halfDiminished: "\u00F8"};
 // The extension part of a label with a tension: "9" with a flat 9 reads "7(\u266D9)".
 function tensionLabel(chord, extPart) {
   if (!chord.tension) return extPart;
@@ -575,42 +590,69 @@ function tensionLabel(chord, extPart) {
 }
 function prettyAccidentals(sym) { return sym.replace(/b(?=\d)/g, "\u266D").replace(/#/g, "\u266F"); }
 
+// The numeral for a chromatic step above the key's root (a free chord's root), spelled
+// against the major scale: I, \u266DII, II, \u266DIII, III, IV, \u266FIV, V, \u266DVI, VI, \u266DVII, VII.
+var STEP_NUMERALS = [["", 0], ["\u266D", 1], ["", 1], ["\u266D", 2], ["", 2], ["", 3], ["\u266F", 3], ["", 4], ["\u266D", 5], ["", 5], ["\u266D", 6], ["", 6]];
+// A diminished chord on a chromatic step is a leading-tone chord into the step above, so
+// it's numbered and spelled with a sharp (\u266Fi\u00B07 = C\u266Fdim7 in C, \u266Fiv\u00B07), not a flat.
+var SHARP_STEP_NUMERALS = {1: ["\u266F", 0], 3: ["\u266F", 1], 6: ["\u266F", 3], 8: ["\u266F", 4], 10: ["\u266F", 5]};
+function stepNumeral(step, sharpen) {
+  step = ((step % 12) + 12) % 12;
+  var n = (sharpen && SHARP_STEP_NUMERALS[step]) || STEP_NUMERALS[step];
+  return n[0] + ROMAN_BASE[n[1]];
+}
+function isDiminishedTriad(chord) { return chord.sus === "none" && chord.offsets[1] === 3 && chord.offsets[2] === 6; }
+
+// What follows a numeral, read from the chord's actual notes: the numeral's case says
+// major or minor (so it is decided here too), then \u00B0 / + / \u00F8, the 7th's kind (maj7, 7,
+// (maj7), \u00B07), the shape (6, 6/9, add9, 9, 11, 13), a tension, sus, and a \u266D5 / \u266F5 that
+// the triad sign doesn't already say.
+function numeralSuffix(chord, ext) {
+  var o = chord.offsets, third = o[1], fifth = o[2];
+  var sus = chord.sus !== "none";
+  var lower = !sus && third === 3;
+  var triad = "";
+  if (!sus && third === 3 && fifth === 6) triad = "\u00B0";
+  else if (!sus && third === 4 && fifth === 8) triad = "+";
+  var fifthMark = "";
+  if (!triad && fifth === 6) fifthMark = "\u266D5";
+  else if (!triad && fifth === 8) fifthMark = "\u266F5";
+  var extPart = "";
+  if (ext === "6" || ext === "6/9" || ext === "add9") extPart = ext;
+  else if (ext === "7" || ext === "9" || ext === "11" || ext === "13") {
+    var seventh = o[3];
+    if (triad === "\u00B0" && seventh === 10) { triad = "\u00F8"; extPart = ext; }
+    else if (seventh === 11) extPart = lower ? "(maj" + ext + ")" : "maj" + ext;
+    else extPart = ext;
+  }
+  extPart = tensionLabel(chord, extPart);
+  var susMark = chord.sus === "sus2" || chord.sus === "sus4" ? chord.sus : "";
+  return {lower: lower, text: triad + extPart + susMark + fifthMark};
+}
+function caseNumeral(numeral, lower) { return lower ? numeral.replace(/[IV]+/, function (r) { return r.toLowerCase(); }) : numeral; }
+
+// What a block shows: `degree` large -- always a number in the key (V7, \u266DVI, II7, V7/ii,
+// a free chord's step like III or \u266DVI) -- and `name` small (G7, A\u266D). Shared by the
+// phone app and the device.
 function blockLabel(block, masterRootIndex, masterModeIndex) {
   var chord = buildChord(block, masterRootIndex, masterModeIndex);
   var name = getChordSymbol(chord, masterRootIndex).replace(/ \(.*\)$/, "");
   var ext = EXTENSION_NAMES[block.extensionIndex];
-  var extMark = ext === "triad" ? "" : ext;
-  var susMark = block.susIndex === 1 ? "sus2" : block.susIndex === 2 ? "sus4" : "";
-  var fifthMark = chord.aug ? "+" : chord.flat5 ? "\u266D5" : "";
   var degree;
   if (block.chordSource === "applied") {
     var target = degreeLabels(MASTER_MODE_NAMES[masterModeIndex])[block.appliedTargetIndex] || "?";
-    var fn = FUNCTION_SHORT[block.appliedFunction] || "V";
-    degree = fn + (block.appliedFunction === "leadingTone" ? "7" : tensionLabel(chord, extMark)) + susMark + fifthMark + "/" + target;
+    var lt = block.appliedFunction === "leadingTone";
+    var sfx = numeralSuffix(chord, lt ? "7" : ext);
+    var fnBase = {dominant: "V", tritoneSub: "subV", leadingTone: "VII"}[block.appliedFunction] || "V";
+    degree = caseNumeral(fnBase, sfx.lower) + sfx.text + "/" + target;
   } else if (block.chordSource === "free") {
-    var root = pitchToNoteName(block.freeRoot || 0, keyPrefersFlats(masterRootIndex, masterModeIndex)).replace("#", "\u266F");
-    var q = FREE_QUALITY_INTERVALS[block.freeQuality] ? block.freeQuality : "major";
-    var stacked = ["7", "9", "11", "13"].indexOf(extMark) >= 0;
-    // A dominant triad sounds as a plain major triad, so it only reads "7" once a 7th is there.
-    var qMark = q === "dominant" ? extMark
-      : q === "major" ? (stacked ? "maj" + extMark : extMark)
-      : q === "halfDiminished" ? (stacked ? "\u00F8" + extMark : "\u00B0" + extMark)
-      : QUALITY_SHORT[q] + extMark;
-    degree = root + tensionLabel(chord, qMark) + susMark + fifthMark;
+    var fs = numeralSuffix(chord, ext);
+    degree = caseNumeral(stepNumeral(block.freeRoot || 0, isDiminishedTriad(chord)), fs.lower) + fs.text;
   } else {
     var mode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[masterModeIndex];
-    var numeral = degreeLabels(mode)[block.degreeIndex];
-    // A diminished degree (vii\u00B0) already has its flat five; don't say it twice.
-    if (chord.flat5 && /\u00B0$/.test(numeral)) fifthMark = "";
-    // A stacked 7th says which 7th the scale gave, as roman numerals do: IVmaj7 (major
-    // 7th), V7 and ii7 (flat 7th), i(maj7), vii\u00F87 (half-diminished), vii\u00B07.
-    var o = chord.offsets;
-    if (!chord.is6 && !chord.addNine && o.length >= 4 && chord.sus === "none") {
-      if (o[3] === 11 && o[1] === 4) extMark = "maj" + extMark;
-      else if (o[3] === 11 && o[1] === 3) extMark = "(maj" + extMark + ")";
-      else if (o[3] === 10 && o[1] === 3 && o[2] === 6) numeral = numeral.replace("\u00B0", "\u00F8");
-    }
-    degree = numeral + extMark + susMark + fifthMark;
+    var accidental = (degreeLabels(mode)[block.degreeIndex].match(/^[\u266D\u266F]*/) || [""])[0];
+    var ds = numeralSuffix(chord, ext);
+    degree = accidental + caseNumeral(ROMAN_BASE[block.degreeIndex], ds.lower) + ds.text;
   }
   return {degree: degree, name: name};
 }
@@ -630,7 +672,7 @@ export {
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
   getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel, blockLabel,
-  TENSIONS, SHAPE_ORDER,
+  TENSIONS, SHAPE_ORDER, stepNumeral,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock

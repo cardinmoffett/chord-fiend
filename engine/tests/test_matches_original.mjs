@@ -67,13 +67,11 @@ names.forEach(function (n) {
   if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
   same(n, orig[n], engine[n]);
 });
-same('the only additions are free mode, blockLabel, shapes and tensions', additions.slice().sort(), ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'SHAPE_ORDER', 'TENSIONS', 'blockLabel']);
+same('the only additions are free mode, blockLabel, shapes, tensions and step numerals', additions.slice().sort(), ['FREE_QUALITIES', 'FREE_QUALITY_INTERVALS', 'SHAPE_ORDER', 'TENSIONS', 'blockLabel', 'stepNumeral']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
-// Diatonic and borrowed chords now take every note from their scale, so the app's ♯5 on
-// them is no longer an engine feature: those blocks are compared with aug off only.
-console.log('\n=== diatonic and borrowed chords: every key, home mode, block mode, degree, extension and sus ===');
+console.log('\n=== diatonic and borrowed chords: every key, home mode, block mode, degree, extension, sus and aug ===');
 var combo = 0;
 for (var root = 0; root < 12; root++) {
   state.masterRootIndex = root;
@@ -83,7 +81,7 @@ for (var root = 0; root < 12; root++) {
       for (var deg = 0; deg < 7; deg++)
         for (var ext = 0; ext < orig.EXTENSION_NAMES.length; ext++)
           for (var sus = 0; sus < 3; sus++)
-            for (var aug = 0; aug < 1; aug++) {
+            for (var aug = 0; aug < 2; aug++) {
               combo++;
               // inversion, drop and octave cycle through their values across the sweep
               var b = blk({degreeIndex: deg, blockModeIndex: bm, extensionIndex: ext, susIndex: sus, aug: aug,

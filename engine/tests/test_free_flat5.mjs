@@ -19,8 +19,8 @@ check('E major in C: E G# B', notes({chordSource: 'free', freeRoot: 4, freeQuali
 check('...named E', sym({chordSource: 'free', freeRoot: 4, freeQuality: 'major'}), 'E');
 check('F minor 7 in C: F Ab C Eb', notes({chordSource: 'free', freeRoot: 5, freeQuality: 'minor', extensionIndex: 2}), [65, 68, 72, 75]);
 check('...named Fm7', sym({chordSource: 'free', freeRoot: 5, freeQuality: 'minor', extensionIndex: 2}), 'Fm7');
-check('Bb dominant 9 in F: Bb D F Ab C', notes({chordSource: 'free', freeRoot: 10, freeQuality: 'dominant', extensionIndex: 3}, 5), [70, 74, 77, 80, 84]);
-check('...named Bb9 in F, which spells with flats', sym({chordSource: 'free', freeRoot: 10, freeQuality: 'dominant', extensionIndex: 3}, 5), 'B' + F + '9');
+check('in F, the step IV, dominant 9: Bb D F Ab C', notes({chordSource: 'free', freeRoot: 5, freeQuality: 'dominant', extensionIndex: 3}, 5), [70, 74, 77, 80, 84]);
+check('...named Bb9 in F, which spells with flats', sym({chordSource: 'free', freeRoot: 5, freeQuality: 'dominant', extensionIndex: 3}, 5), 'B' + F + '9');
 check('a root below the key root sits above it, as degrees do (A in C is 69, not 57)', notes({chordSource: 'free', freeRoot: 9, freeQuality: 'minor'})[0], 69);
 check('octave moves it like any block', notes({chordSource: 'free', freeRoot: 9, freeQuality: 'minor', octave: -1})[0], 57);
 check('major 7th quality is a real major 7th', chord({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: 2}).offsets, [0, 4, 7, 11]);
@@ -53,10 +53,10 @@ check('the leading-tone chord ignores it (it already has one)', chord({chordSour
 check('flat5 is reported on the chord', [chord({chordSource: 'free', freeRoot: 0, freeQuality: 'major', flat5: 1}).flat5, chord({chordSource: 'free', freeRoot: 0, freeQuality: 'major'}).flat5], [true, false]);
 check('sus chords with b5 say so', sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, susIndex: 2, flat5: 1}), 'G7sus4b5');
 
-console.log('=== on the rails: a diatonic or borrowed chord ignores a raised or flat 5th (its scale decides) ===');
-check('V with aug in C is still G B D', notes({degreeIndex: 4, aug: 1}), [67, 71, 74]);
-check('V7 with flat5 in C is still G7', sym({degreeIndex: 4, extensionIndex: 2, flat5: 1}), 'G7');
-check('ii7 in C borrowed from Aeolian is the half-diminished Dm7b5 (that is how a diatonic chord gets it)', sym({degreeIndex: 1, extensionIndex: 2, blockModeIndex: 6}), 'Dm7b5');
+console.log('=== a diatonic chord can be altered too (and its label says so) ===');
+check('V with aug in C: G B D#', notes({degreeIndex: 4, aug: 1}), [67, 71, 75]);
+check('V7 with flat5 in C: G7b5', sym({degreeIndex: 4, extensionIndex: 2, flat5: 1}), 'G7b5');
+check('ii7 in C borrowed from Aeolian is the half-diminished Dm7b5', sym({degreeIndex: 1, extensionIndex: 2, blockModeIndex: 6}), 'Dm7b5');
 
 console.log('=== augmented 7th chords get a name (the app showed "G?7") ===');
 check('free G7 with a raised 5th: G B D# F, named G7#5', [notes({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, aug: 1}), sym({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2, aug: 1})], [[67, 71, 75, 77], 'G7#5']);

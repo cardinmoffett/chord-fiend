@@ -1,8 +1,12 @@
 // Types for engine.js, for TypeScript callers such as the device. engine.js stays plain JavaScript.
 
 export interface Block {
-  /** Applied and free chords only: an altered extension, "b9" | "#9" | "#11" | "b13". */
+  /** Alter: an altered extension, "b9" | "#9" | "#11" | "b13". */
   tension?: string;
+  /** Alter: force a major or minor 3rd. Unset = what the key gives. */
+  third?: "major" | "minor";
+  /** Alter: force a major, flat or diminished 7th (when the shape has one). */
+  seventh?: "maj" | "min" | "dim";
   degreeIndex: number;
   blockModeIndex: number;
   extensionIndex: number;
@@ -20,7 +24,7 @@ export interface Block {
   appliedFunction: "dominant" | "tritoneSub" | "leadingTone";
   /** Lowers the 5th a semitone. An engine addition; missing means off. */
   flat5?: number | boolean;
-  /** Free mode's root, as a pitch class 0-11. An engine addition. */
+  /** Free mode's root, as a step above the key's root (0-11), so it reads as a numeral (III, ♭VI). */
   freeRoot?: number;
   /** Free mode's quality. An engine addition; missing means major. */
   freeQuality?: "major" | "minor" | "dominant" | "diminished" | "augmented" | "halfDiminished";
@@ -109,3 +113,5 @@ export function blockLabel(block: Block, masterRootIndex: number, masterModeInde
 export const TENSIONS: Record<string, [number, number]>;
 /** The order editors list the Shape choices in, as extensionIndex values. */
 export const SHAPE_ORDER: number[];
+/** The numeral for a chromatic step above the key's root (a free chord's root); sharpen spells diminished chords with sharps. */
+export function stepNumeral(step: number, sharpen?: boolean): string;

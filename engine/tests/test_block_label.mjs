@@ -43,18 +43,34 @@ check('vii' + DIM + '7/V in C (leading-tone into G) is F' + S + 'dim7', lbl({cho
 console.log('=== the fifth ===');
 check('applied V/I augmented reads V+/I', lbl({chordSource: 'applied', appliedTargetIndex: 0, appliedFunction: 'dominant', aug: 1}).degree, 'V+/I');
 check('applied V7/I with a flat 5 reads V7' + F + '5/I', lbl({chordSource: 'applied', appliedTargetIndex: 0, appliedFunction: 'dominant', extensionIndex: 2, flat5: 1}).degree, 'V7' + F + '5/I');
-check('free G augmented reads G+', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'augmented'}).degree, 'G+');
-check('a diatonic V ignores aug (on the rails): plain V', lbl({degreeIndex: 4, aug: 1}), {degree: 'V', name: 'G'});
 
-console.log('=== free: root and quality, since it has no degree in the key ===');
-check('free E major in C', lbl({chordSource: 'free', freeRoot: 4, freeQuality: 'major'}).degree, 'E');
-check('free F minor 7 in C', lbl({chordSource: 'free', freeRoot: 5, freeQuality: 'minor', extensionIndex: 2}).degree, 'Fm7');
-check('free C major 7 in C', lbl({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: 2}).degree, 'Cmaj7');
-check('free G dominant 7 in C', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2}).degree, 'G7');
-check('free G dominant 9 in C', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 3}).degree, 'G9');
-check('free G dominant with no 7th sounds as G major, so reads G', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant'}), {degree: 'G', name: 'G'});
-check('free B' + F + ' in F spells with a flat', lbl({chordSource: 'free', freeRoot: 10, freeQuality: 'major'}, 5).degree, 'B' + F);
-check('free F' + S + ' minor in D spells with a sharp', lbl({chordSource: 'free', freeRoot: 6, freeQuality: 'minor'}, 2).degree, 'F' + S + 'm');
+console.log('=== free: the root is a step from the key, so it still reads as a number ===');
+check('free III (E major) in C', lbl({chordSource: 'free', freeRoot: 4, freeQuality: 'major'}), {degree: 'III', name: 'E'});
+check('free iv7 (F minor 7) in C', lbl({chordSource: 'free', freeRoot: 5, freeQuality: 'minor', extensionIndex: 2}), {degree: 'iv7', name: 'Fm7'});
+check('free Imaj7 in C', lbl({chordSource: 'free', freeRoot: 0, freeQuality: 'major', extensionIndex: 2}).degree, 'Imaj7');
+check('free V7 (dominant) in C', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 2}).degree, 'V7');
+check('free V9 in C', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant', extensionIndex: 3}).degree, 'V9');
+check('free dominant with no 7th is a major triad: V', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'dominant'}), {degree: 'V', name: 'G'});
+check('free ' + F + 'VI in C is A' + F + ' major, spelled with a flat', lbl({chordSource: 'free', freeRoot: 8, freeQuality: 'major'}), {degree: F + 'VI', name: 'A' + F});
+check('free ' + F + 'III in C is E' + F + ' (not D#)', lbl({chordSource: 'free', freeRoot: 3, freeQuality: 'major'}), {degree: F + 'III', name: 'E' + F});
+check('free ' + S + 'IV in C is F#', lbl({chordSource: 'free', freeRoot: 6, freeQuality: 'major'}).name, 'F#');
+check('free ' + F + 'II in C (D' + F + ' major, the Neapolitan)', lbl({chordSource: 'free', freeRoot: 1, freeQuality: 'major'}).degree, F + 'II');
+check('free ' + S + 'iv' + '° in C (F' + S + ' diminished)', lbl({chordSource: 'free', freeRoot: 6, freeQuality: 'diminished'}).degree, S + 'iv°');
+check('free diminished 7 a half step above C is ' + S + 'i°7, C#dim7 (not ' + F + 'ii)', lbl({chordSource: 'free', freeRoot: 1, freeQuality: 'diminished', extensionIndex: 2}), {degree: S + 'i°7', name: 'C#dim7'});
+check('free diminished on ' + S + 'V: ' + S + 'v° (G#dim)', lbl({chordSource: 'free', freeRoot: 8, freeQuality: 'diminished'}), {degree: S + 'v°', name: 'G#dim'});
+check('the step moves with the key: free III in F is A major', lbl({chordSource: 'free', freeRoot: 4, freeQuality: 'major'}, 5), {degree: 'III', name: 'A'});
+check('free V+ (augmented) in C', lbl({chordSource: 'free', freeRoot: 7, freeQuality: 'augmented'}).degree, 'V+');
+
+console.log('=== alter: any chord can step off the key, and its number says so ===');
+check('ii with a major 3rd and a flat 7th reads II7 (D F# A C)', lbl({degreeIndex: 1, extensionIndex: 2, third: 'major', seventh: 'min'}), {degree: 'II7', name: 'D7'});
+check('vi with a major 3rd reads VI (A C# E)', lbl({degreeIndex: 5, third: 'major'}), {degree: 'VI', name: 'A'});
+check('I with a flat 7th reads I7 (C E G Bb)', lbl({extensionIndex: 2, seventh: 'min'}), {degree: 'I7', name: 'C7'});
+check('vi7 with a major 7th reads vi(maj7)', lbl({degreeIndex: 5, extensionIndex: 2, seventh: 'maj'}), {degree: 'vi(maj7)', name: 'Am(maj7)'});
+check('V with a raised 5th reads V+ (G B D#)', lbl({degreeIndex: 4, aug: 1}), {degree: 'V+', name: 'Gaug'});
+check('V7 with a flat 5th reads V7' + F + '5', lbl({degreeIndex: 4, extensionIndex: 2, flat5: 1}), {degree: 'V7' + F + '5', name: 'G7b5'});
+check('V9 with a flat 9 reads V7(' + F + '9)', lbl({degreeIndex: 4, extensionIndex: 3, tension: 'b9'}), {degree: 'V7(' + F + '9)', name: 'G7(b9)'});
+check('IV7 from the key is IVmaj7; with a flat 7th it reads IV7', lbl({degreeIndex: 3, extensionIndex: 2, seventh: 'min'}), {degree: 'IV7', name: 'F7'});
+check('a sus chord ignores a 3rd it does not have', lbl({degreeIndex: 4, susIndex: 2, third: 'minor'}).degree, 'Vsus4');
 
 console.log(ok ? 'ALL PASSED' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);
