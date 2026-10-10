@@ -1264,6 +1264,7 @@ var SEVENTHS = {maj: 11, min: 10, dim: 9};
 var NINTHS = {"b9": 13, "9": 14, "#9": 15};
 var ELEVENTHS = {"11": 17, "#11": 18};
 var THIRTEENTHS = {"b13": 20, "13": 21};
+var BB = "\u266D\u266D"; // a double flat, as labels print it
 var ALTER_FIELDS = ["third", "fifth", "seventh", "ninth", "eleventh", "thirteenth"];
 // The value each Alter field reads from a chord's actual offsets.
 function valueOf(table, offset) {
@@ -1279,10 +1280,13 @@ function alteredExtensionName(name, toneCount, tensions) {
     var altered = tensions.map(function (t) { return Number(t.replace(/[^0-9]/g, "")); });
     var n = top;
     while (n > 7 && altered.indexOf(n) >= 0) n -= 2;
-    // (a minor chord's "m(maj9)" keeps its bracket: "m(maj7)(b9)")
-    if (n !== top) name = name.replace(new RegExp(top + "(\\)?)$"), n + "$1");
+    // (a minor chord's "m(maj9)" keeps its bracket: "m(maj7)(b9)"; a chosen bb7 stays in
+    // front of the list: "9(bb7)" with a flat 9 reads "(bb7,b9)")
+    if (n !== top) name = name.replace(new RegExp(top + "(\\)?)(\\((?:bb|" + BB + ")7\\))?$"), n + "$1$2");
   }
-  return name + "(" + tensions.join(",") + ")";
+  return (name + "(" + tensions.join(",") + ")")
+    .replace(new RegExp("((?:bb|" + BB + ")7)\\)\\("), "$1,")
+    .replace(new RegExp("7\\(((?:bb|" + BB + ")7)"), "($1");
 }
 
 function buildChord(block, masterRootIndex, masterModeIndex) {
@@ -1514,6 +1518,8 @@ function getChordSymbol(chord, masterRootIndex) {
       else if (q==="min" && seventh===10) base = rootName+"m"+d2;
       else if (q==="min" && seventh===11) base = rootName+"m(maj"+d2+")";
       else if (q==="dim" && seventh===9) base = rootName+"dim"+d2;
+      // A double-flat 7th chosen on anything but a diminished triad is named as such: C(bb7), Dm9(bb7).
+      else if (seventh===9 && q!=="?") base = rootName+{maj:"",min:"m",aug:third===3?"m#5":"aug",b5:"(b5)"}[q]+(d2==="7"?"":d2)+"(bb7)";
       else if (q==="dim" && seventh===10) base = rootName+"m"+d2+"b5";
       else if (q==="aug" && seventh===11) base = rootName+"maj"+d2+"#5";
       else if (q==="aug" && seventh===10) base = rootName+(third===3?"m":"")+d2+"#5"; // G7#5, Dm7#5 (the original app had no name for these and showed "G?7")
@@ -1744,7 +1750,7 @@ function tensionLabel(chord, extPart) {
   var pretty = tensions.map(prettyAccidentals);
   if (extPart === "add9") return "add" + pretty[0];
   if (extPart === "6/9") return "6/" + pretty[0];
-  var m = extPart.match(/(9|11|13)\)?$/);
+  var m = extPart.match(new RegExp("(9|11|13)\\)?(\\(" + BB + "7\\))?$"));
   if (!m) return extPart + "(" + pretty.join(",") + ")";
   return alteredExtensionName(extPart, {"9": 5, "11": 6, "13": 7}[m[1]], pretty);
 }
@@ -1857,6 +1863,8 @@ function numeralSuffix(chord, ext) {
     var seventh = o[3];
     if (triad === "\u00B0" && seventh === 10) { triad = "\u00F8"; extPart = ext; }
     else if (seventh === 11) extPart = lower ? "(maj" + ext + ")" : "maj" + ext;
+    // a double-flat 7th is only "\u00B07" on a diminished triad; elsewhere it's spelled out
+    else if (seventh === 9 && triad !== "\u00B0") extPart = (ext === "7" ? "" : ext) + "(" + BB + "7)";
     else extPart = ext;
   }
   extPart = tensionLabel(chord, extPart);

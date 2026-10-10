@@ -40,6 +40,8 @@ function sameName(label, a, b) {
   if (typeof a === 'string' && a.indexOf('?') >= 0 && typeof b === 'string') {
     var m = /^([A-G][#\u266D]?)\?(\d+)(.*)$/.exec(a);
     if (m && (b === m[1] + m[2] + '#5' + m[3] || b === m[1] + 'm' + m[2] + '#5' + m[3])) { passes++; return; }
+    // ...or a double-flat 7th the app couldn't name, spelled out: B?7 -> Bm#5(bb7), B?9 -> Bm#59(bb7)
+    if (m && b === m[1] + 'm#5' + (m[2] === '7' ? '' : m[2]) + '(bb7)' + m[3]) { passes++; return; }
   }
   same(label, a, b);
 }
