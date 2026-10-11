@@ -3433,7 +3433,6 @@ function toggleGroup(labelText, options, value, onChange) {
 // at the middle flip the sheet's state, which is exactly the jitter this
 // avoids.
 var editorExpanded = false;
-var EDITOR_COLLAPSED_HEIGHT = 204; // shows tabs, pads and Length
 var EDITOR_SNAP_FRACTION = 0.2; // must cross 20% of the full travel range to flip state
 
 // Remembers the workspace's scroll position from the moment the drawer last
@@ -3463,11 +3462,28 @@ function editorExpandedHeightPx() {
   var editorEl = document.getElementById("editor");
   return Math.min(editorEl.scrollHeight, editorExpandedCeilingPx());
 }
+// Collapsed is the whole editor down to the Alter header: everything but the Alter rows.
+var alterRowsEl = null; // set by appendAlterGroup; null when the block has no Alter
+function editorCollapsedHeightPx() {
+  var editorEl = document.getElementById("editor");
+  var rows = alterRowsEl;
+  if (!rows || !rows.parentNode || !rows.getBoundingClientRect) return editorExpandedHeightPx();
+  var top = rows.getBoundingClientRect().top - editorEl.getBoundingClientRect().top + editorEl.scrollTop;
+  return Math.min(Math.round(top), editorExpandedHeightPx());
+}
+// Open or close the drawer from code (the Alter header), the same as a flick.
+function setEditorExpanded(open) {
+  if (open === editorExpanded) return;
+  editorExpanded = open;
+  if (!open) document.getElementById("editor").scrollTop = 0;
+  renderEditor();
+  snapEditorPanel();
+}
 function setEditorPanelHeight(px) {
   document.getElementById("editor").style.height = px + "px";
 }
 function snapEditorPanel(skipScrollIntoView) {
-  var target = editorExpanded ? editorExpandedHeightPx() : EDITOR_COLLAPSED_HEIGHT;
+  var target = editorExpanded ? editorExpandedHeightPx() : editorCollapsedHeightPx();
   setEditorPanelHeight(target);
   logAudio("[DRAWER] snapEditorPanel target=" + target + " applied=" + document.getElementById("editor").style.height + " expanded=" + editorExpanded);
   // touch-action, not preventDefault(), is what actually governs whether a
@@ -3550,7 +3566,7 @@ document.getElementById("timeline").addEventListener("scroll", function () {
       return; // still could be a plain tap -- don't touch the layout yet
     }
     if (!moved) { moved = true; suppressNextClick = requireThreshold; } // only the whole-shelf path needs to swallow the resulting click
-    var min = EDITOR_COLLAPSED_HEIGHT, max = editorExpandedHeightPx();
+    var min = editorCollapsedHeightPx(), max = editorExpandedHeightPx();
     var newHeight = Math.max(min, Math.min(max, startHeight + dy));
     setEditorPanelHeight(newHeight);
     logAudio("[DRAWER] move y=" + e.clientY + " dy=" + dy + " -> height=" + newHeight);
@@ -3570,12 +3586,17 @@ document.getElementById("timeline").addEventListener("scroll", function () {
       logAudio("[DRAWER] treated as a plain tap (finalDy=" + finalDy + "), no snap");
       return; // genuinely just a tap/noise -- let the tapped control handle its own click normally
     }
-    var min = EDITOR_COLLAPSED_HEIGHT, max = editorExpandedHeightPx();
+    var min = editorCollapsedHeightPx(), max = editorExpandedHeightPx();
     var threshold = (max - min) * EDITOR_SNAP_FRACTION;
     var wasExpanded = editorExpanded;
     if (editorExpanded && finalDy < -threshold) editorExpanded = false;
     else if (!editorExpanded && finalDy > threshold) editorExpanded = true;
     // otherwise: not a decisive enough drag -- springs back to the starting state
+    // The Alter header's arrow follows the drawer; a closed drawer starts back at the top.
+    if (wasExpanded !== editorExpanded) {
+      if (!editorExpanded) editorEl.scrollTop = 0;
+      renderEditor();
+    }
     logAudio("[DRAWER] finalDy=" + finalDy + " threshold=" + threshold.toFixed(1) + " wasExpanded=" + wasExpanded + " nowExpanded=" + editorExpanded);
 
     // Expanding pushes the workspace's scroll position up to keep the
@@ -3781,7 +3802,6 @@ function fieldShape(block, onChange) {
 // engine's alterRows decides which), each showing the chord's real value. Tapping
 // another value changes it; tapping the key's own value clears the change. A changed
 // row's label is accent-colored. Collapsed by default; opens on its own for an altered block.
-var alterOpen = false;
 function blockIsAltered(b) {
   return ALTER_FIELDS.some(function (f) { return b[f] !== undefined; }) || !!(b.aug || b.flat5 || b.susIndex) ||
     (b.chordSource !== "applied" && b.chordSource !== "free" && !!b.blockModeIndex);
@@ -3801,15 +3821,17 @@ function appendAlterGroup(parent, block) {
   var canBorrow = block.chordSource !== "applied" && block.chordSource !== "free";
   if (!rows.length && !canBorrow) return;
   var altered = blockIsAltered(block);
-  var open = alterOpen || altered;
+  // The drawer has two stops: collapsed shows everything down to this header; flicking
+  // it open (or tapping the header) means "alter", and it grows to show every Alter row.
+  // The rows are always built, so the drag reveals them as it goes.
   var head = document.createElement("button");
   head.className = "alter-toggle" + (altered ? " altered" : "");
-  head.textContent = (open ? "▾ " : "▸ ") + (canBorrow ? "Alter · Borrow" : "Alter") + (altered ? " • changed" : "");
-  head.addEventListener("click", function () { alterOpen = !open; renderEditor(); });
+  head.textContent = (editorExpanded ? "▾ " : "▸ ") + (canBorrow ? "Alter · Borrow" : "Alter") + (altered ? " • changed" : "");
+  head.addEventListener("click", function () { setEditorExpanded(!editorExpanded); });
   parent.appendChild(head);
-  if (!open) return;
   var grid = document.createElement("div");
   grid.className = "alter-rows";
+  alterRowsEl = grid;
   parent.appendChild(grid);
   var fields = {};
   rows.forEach(function (row) {
@@ -3861,6 +3883,7 @@ function modeOptionLabels(block) {
 
 function renderEditor() {
   editor.innerHTML = "";
+  alterRowsEl = null;
   if (!editingBlocks.length) return;
   var block = editingBlocks[state.currentIndex];
   var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
@@ -3961,8 +3984,6 @@ function renderEditor() {
   shapeRow.appendChild(fieldPosition(block, chord, done));
   shapeRow.appendChild(fieldSelect("Spread", SPREAD_NAMES, block.dropIndex || 0, function (v) { block.dropIndex = v; done(); }));
 
-  // 5. Alter, collapsed, always last: Borrow (Diatonic chords) and a row per chord tone.
-  appendAlterGroup(grid, block);
 
   var actions = document.createElement("div");
   actions.className = "block-actions";
@@ -3990,7 +4011,13 @@ function renderEditor() {
 
   actions.appendChild(backBtn); actions.appendChild(fwdBtn); actions.appendChild(delBtn);
   grid.appendChild(actions);
+
+  // 5. Alter, always last: its header ends the collapsed drawer; the rows (Borrow on
+  // Diatonic chords, then a row per chord tone) fill the expanded one.
+  appendAlterGroup(grid, block);
   editor.appendChild(grid);
+  // The content just changed (a tab can add or drop a row of pads), so fit the drawer.
+  setEditorPanelHeight(editorExpanded ? editorExpandedHeightPx() : editorCollapsedHeightPx());
 
   // A linked box is read-only. Tapping blocks on the timeline to hear them
   // still works; nothing here can change the content.
