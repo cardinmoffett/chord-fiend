@@ -573,12 +573,39 @@
 
 
 
+  /* The editor is fixed rows, most-used first, so nothing moves when the category
+     changes: Chord / Root (two slots) / Shape + Length / Voicing / Alter / actions. */
   .editor-grid {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 10px;
-    align-items: flex-end;
   }
+  .editor-row { display: grid; gap: 8px; align-items: end; }
+  .editor-row.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .editor-row.voicing { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .editor-row .field { min-width: 0; }
+  .editor-row.chord .toggle-row button { flex: 1; }
+  .length-inline { display: flex; gap: 6px; align-items: center; }
+  .length-inline select { flex: 1; min-width: 0; }
+  .length-inline .toggle-row button { padding: 3px 7px; font-size: 16px; line-height: 1.2; }
+  .stepper {
+    display: flex; align-items: center;
+    background: var(--bg-elevated); border: 1px solid var(--line); border-radius: 7px;
+    height: 32px;
+  }
+  .stepper button {
+    background: none; border: none; color: var(--text);
+    width: 28px; height: 100%; font-size: 16px; font-family: inherit; cursor: pointer;
+  }
+  .stepper button:disabled { color: var(--text-faint); }
+  .stepper span { flex: 1; text-align: center; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+  .bass-btn {
+    height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--bg-elevated); color: var(--text-dim); font: inherit; font-size: 12px; font-weight: 600;
+  }
+  .bass-btn.active { background: var(--accent); border-color: var(--accent); color: #1a1200; }
+  .alter-rows { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .editor-grid .block-actions { margin-left: 0; justify-content: flex-end; }
 
   .block-actions {
     display: flex;
@@ -3260,11 +3287,7 @@ function renderTimeline() {
   });
 }
 
-function fieldSelect(labelText, options, value, onChange) {
-  var wrap = document.createElement("div");
-  wrap.className = "field";
-  var label = document.createElement("label");
-  label.textContent = labelText;
+function makeSelect(options, value, onChange) {
   var sel = document.createElement("select");
   options.forEach(function (opt, i) {
     var o = document.createElement("option");
@@ -3273,28 +3296,34 @@ function fieldSelect(labelText, options, value, onChange) {
   });
   sel.value = value;
   sel.addEventListener("change", function () { onChange(parseInt(sel.value, 10)); });
-  wrap.appendChild(label); wrap.appendChild(sel);
-  return wrap;
+  return sel;
 }
-
-// Dropdown over a numeric range -- better for mobile than a fiddly number
-// spinner. Options carry their ACTUAL value (not array index), so this
-// works cleanly for ranges that don't start at 0 (like octave).
-function fieldRangeSelect(labelText, value, min, max, formatFn, onChange) {
+function fieldSelect(labelText, options, value, onChange) {
   var wrap = document.createElement("div");
   wrap.className = "field";
   var label = document.createElement("label");
   label.textContent = labelText;
-  var sel = document.createElement("select");
-  for (var n = min; n <= max; n++) {
-    var opt = document.createElement("option");
-    opt.value = n;
-    opt.textContent = formatFn ? formatFn(n) : String(n);
-    sel.appendChild(opt);
-  }
-  sel.value = value;
-  sel.addEventListener("change", function () { onChange(parseInt(sel.value, 10)); });
-  wrap.appendChild(label); wrap.appendChild(sel);
+  wrap.appendChild(label); wrap.appendChild(makeSelect(options, value, onChange));
+  return wrap;
+}
+
+// A compact \u2212 / + stepper over a list of choices (by index), for settings you nudge
+// rather than pick from a list: drop and octave.
+function fieldStepper(labelText, names, value, onChange) {
+  var wrap = document.createElement("div");
+  wrap.className = "field";
+  var label = document.createElement("label");
+  label.textContent = labelText;
+  var box = document.createElement("div");
+  box.className = "stepper";
+  var down = document.createElement("button"); down.textContent = "\u2212";
+  var shown = document.createElement("span"); shown.textContent = names[value] !== undefined ? names[value] : "";
+  var up = document.createElement("button"); up.textContent = "+";
+  down.disabled = value <= 0; up.disabled = value >= names.length - 1;
+  down.addEventListener("click", function () { if (value > 0) onChange(value - 1); });
+  up.addEventListener("click", function () { if (value < names.length - 1) onChange(value + 1); });
+  box.appendChild(down); box.appendChild(shown); box.appendChild(up);
+  wrap.appendChild(label); wrap.appendChild(box);
   return wrap;
 }
 
@@ -3329,7 +3358,7 @@ function toggleGroup(labelText, options, value, onChange) {
 // at the middle flip the sheet's state, which is exactly the jitter this
 // avoids.
 var editorExpanded = false;
-var EDITOR_COLLAPSED_HEIGHT = 118;
+var EDITOR_COLLAPSED_HEIGHT = 170; // shows the first three editor rows: Chord, Root, Shape + Length
 var EDITOR_SNAP_FRACTION = 0.2; // must cross 20% of the full travel range to flip state
 
 // Remembers the workspace's scroll position from the moment the drawer last
@@ -3610,7 +3639,7 @@ function clearAlter(block) {
 function rootChange(block, apply) {
   return function (v) { apply(v); clearAlter(block); refresh(); previewCurrentBlock(); };
 }
-function appendAlterGroup(grid, block) {
+function appendAlterGroup(parent, block) {
   var rows = alterRows(block, state.masterRootIndex, state.masterModeIndex);
   if (!rows.length) return;
   var altered = blockIsAltered(block);
@@ -3619,8 +3648,11 @@ function appendAlterGroup(grid, block) {
   head.className = "alter-toggle" + (altered ? " altered" : "");
   head.textContent = (open ? "▾ " : "▸ ") + "Alter" + (altered ? " • changed" : "");
   head.addEventListener("click", function () { alterOpen = !open; renderEditor(); });
-  grid.appendChild(head);
+  parent.appendChild(head);
   if (!open) return;
+  var grid = document.createElement("div");
+  grid.className = "alter-rows";
+  parent.appendChild(grid);
   rows.forEach(function (row) {
     var values = row.choices.map(function (c) { return c.value; });
     var field = toggleGroup(row.label, row.choices.map(function (c) { return c.label; }), values.indexOf(row.value), function (i) {
@@ -3664,17 +3696,24 @@ function renderEditor() {
   var grid = document.createElement("div");
   grid.className = "editor-grid";
 
-  // Degree (or Target/Function), Extension, and Duration come FIRST --
-  // this is deliberate, not cosmetic: when the sheet is collapsed, it's the
-  // TOP of this grid that stays visible, so these three are what you get at
-  // a glance without dragging it open.
-  grid.appendChild(toggleGroup("Chord", ["Diatonic", "Applied", "Free"], isFree ? 2 : isApplied ? 1 : 0, rootChange(block, function (v) {
+  // FIXED ROWS, most-used first. The collapsed sheet shows the first three (Chord,
+  // Root, Shape + Length): everything needed for fast editing. Controls never come
+  // and go above Alter -- one that doesn't apply is greyed out -- so switching the
+  // category doesn't move anything, and Alter opens at the bottom.
+  function row(cls) { var r = document.createElement("div"); r.className = "editor-row " + cls; grid.appendChild(r); return r; }
+  var done = function () { refresh(); previewCurrentBlock(); };
+
+  // 1. Where the root comes from.
+  var chordRow = row("chord");
+  chordRow.appendChild(toggleGroup("Chord", ["Diatonic", "Applied", "Free"], isFree ? 2 : isApplied ? 1 : 0, rootChange(block, function (v) {
     // Switching to Free keeps the root you already have; you then move it anywhere.
     // A free chord starts as a major triad (with a flat 7th when the shape has one).
     if (v === 2 && !isFree) block.freeRoot = ((chord.chordRootPitch - state.masterRootIndex) % 12 + 12) % 12;
     block.chordSource = v === 2 ? "free" : v === 1 ? "applied" : "diatonic";
   })));
 
+  // 2. The root: always two slots in the same place.
+  var rootRow = row("two");
   if (isFree) {
     // The root is a step from the key's root, so it keeps a number: "\u266DIII (E\u266D)".
     var prefersFlats = keyPrefersFlats(state.masterRootIndex, state.masterModeIndex);
@@ -3683,57 +3722,63 @@ function renderEditor() {
       var flats = numeral.charAt(0) === "\u266D" ? true : numeral.charAt(0) === "\u266F" ? false : prefersFlats;
       return numeral + "  (" + pitchToNoteName(state.masterRootIndex + step, flats).replace("#", "\u266F") + ")";
     });
-    grid.appendChild(fieldSelect("Root", rootNames, block.freeRoot || 0, rootChange(block, function (v) { block.freeRoot = v; })));
+    rootRow.appendChild(fieldSelect("Root", rootNames, block.freeRoot || 0, rootChange(block, function (v) { block.freeRoot = v; })));
+    rootRow.appendChild(document.createElement("div"));
   } else if (isApplied) {
-    grid.appendChild(fieldSelect("Target", degreeLabels(MASTER_MODE_NAMES[state.masterModeIndex]), block.appliedTargetIndex, rootChange(block, function (v) { block.appliedTargetIndex = v; })));
-    grid.appendChild(fieldSelect("Function", APPLIED_FUNCTIONS.map(function (f) { return APPLIED_FUNCTION_LABELS[f]; }), APPLIED_FUNCTIONS.indexOf(block.appliedFunction), rootChange(block, function (v) { block.appliedFunction = APPLIED_FUNCTIONS[v]; })));
+    rootRow.appendChild(fieldSelect("Function", APPLIED_FUNCTIONS.map(function (f) { return APPLIED_FUNCTION_LABELS[f]; }), APPLIED_FUNCTIONS.indexOf(block.appliedFunction), rootChange(block, function (v) { block.appliedFunction = APPLIED_FUNCTIONS[v]; })));
+    rootRow.appendChild(fieldSelect("Target", degreeLabels(MASTER_MODE_NAMES[state.masterModeIndex]), block.appliedTargetIndex, rootChange(block, function (v) { block.appliedTargetIndex = v; })));
   } else {
-    grid.appendChild(fieldSelect("Degree", degreeLabels(chord.resolvedMode), block.degreeIndex, rootChange(block, function (v) { block.degreeIndex = v; })));
+    rootRow.appendChild(fieldSelect("Degree", degreeLabels(chord.resolvedMode), block.degreeIndex, rootChange(block, function (v) { block.degreeIndex = v; })));
+    // Mode sits next to Degree: each option says what it makes of this degree.
+    rootRow.appendChild(fieldSelect("Mode", modeOptionLabels(block), block.blockModeIndex, rootChange(block, function (v) { block.blockModeIndex = v; })));
   }
 
-  // Who decides the notes sets where the root comes from: the key's scale (diatonic), a
-  // borrowed mode, a function (applied), or a step you pick (free). Shape takes the
-  // scale's own tones. ALTER, collapsed until opened, lets a chord step off that, one
-  // tone at a time, and the block's number shows it (II7, V+, V13(\u266D9)). A new root or
-  // kind clears Alter; a new shape keeps the alterations it still has tones for.
-  // The leading-tone chord is a fixed diminished 7th and takes none of these.
+  // 3. Shape and length. Shape takes the scale's own tones (fixed on the leading-tone
+  // dim7, so greyed there). The feel (straight, dotted, triplet) sits inline with Duration.
   var isLeadingTone = isApplied && block.appliedFunction === "leadingTone";
-  if (!isLeadingTone) {
-    grid.appendChild(fieldShape(block, function (v) {
-      block.extensionIndex = v;
-      var fitted = alterFitToShape(block);
-      ["seventh", "ninth", "eleventh", "thirteenth"].forEach(function (f) { if (fitted[f] === undefined) delete block[f]; });
-      refresh(); previewCurrentBlock();
-    }));
-  }
-  grid.appendChild(fieldSelect("Duration", DURATION_NAMES, block.durationIndex, function (v) { block.durationIndex = v; refresh(); previewCurrentBlock(); }));
+  var shapeRow = row("two");
+  var shapeField = fieldShape(block, function (v) {
+    block.extensionIndex = v;
+    var fitted = alterFitToShape(block);
+    ["seventh", "ninth", "eleventh", "thirteenth"].forEach(function (f) { if (fitted[f] === undefined) delete block[f]; });
+    done();
+  });
+  if (isLeadingTone) shapeField.children[1].disabled = true;
+  shapeRow.appendChild(shapeField);
+  var lengthField = document.createElement("div");
+  lengthField.className = "field";
+  var lengthLabel = document.createElement("label");
+  lengthLabel.textContent = "Length";
+  var lengthInline = document.createElement("div");
+  lengthInline.className = "length-inline";
+  lengthInline.appendChild(makeSelect(DURATION_NAMES, block.durationIndex, function (v) { block.durationIndex = v; done(); }));
+  var feel = toggleGroup("", ["\u2669", "\u2669.", "\u2669\u00B3"], block.durationModifier, function (v) { block.durationModifier = v; done(); }).children[1];
+  Array.prototype.forEach.call(feel.children, function (b, i) { b.title = DURATION_MODIFIER_NAMES[i]; });
+  lengthInline.appendChild(feel);
+  lengthField.appendChild(lengthLabel); lengthField.appendChild(lengthInline);
+  shapeRow.appendChild(lengthField);
 
-  // Everything else -- only visible once the sheet is dragged open.
-  if (!isFree && !isApplied) {
-    grid.appendChild(fieldSelect("Mode", modeOptionLabels(block), block.blockModeIndex, rootChange(block, function (v) { block.blockModeIndex = v; })));
-  } else if (isApplied) {
-    // An applied chord's mode only decides where its target sits.
-    grid.appendChild(fieldSelect("Mode", BLOCK_MODE_NAMES, block.blockModeIndex, rootChange(block, function (v) { block.blockModeIndex = v; })));
-  }
+  // 4. Voicing: inversion (a dropdown naming the tone in the bass), drop and octave
+  // (steppers), and the bass part on or off.
+  var voicingRow = row("voicing");
+  voicingRow.appendChild(fieldSelect("Inversion", chord.toneLabels, chord.inversion, function (v) { block.inversion = v; done(); }));
+  voicingRow.appendChild(fieldStepper("Drop", ["Close", "Drop 2", "Drop 3", "2+4"], block.dropIndex || 0, function (v) { block.dropIndex = v; done(); }));
+  var octaves = [-3, -2, -1, 0, 1, 2, 3];
+  voicingRow.appendChild(fieldStepper("Octave", octaves.map(function (n) { return n > 0 ? "+" + n : String(n); }), octaves.indexOf(block.octave), function (v) { block.octave = octaves[v]; done(); }));
+  var bassWrap = document.createElement("div");
+  bassWrap.className = "field";
+  var bassLabel = document.createElement("label");
+  bassLabel.textContent = "Bass";
+  var bassBtn = document.createElement("button");
+  var bassOn = block.bassToneIndex !== -1;
+  bassBtn.className = "bass-btn" + (bassOn ? " active" : "");
+  bassBtn.textContent = bassOn ? "On" : "Off";
+  bassBtn.addEventListener("click", function () { block.bassToneIndex = bassOn ? -1 : 0; refresh(); });
+  bassWrap.appendChild(bassLabel); bassWrap.appendChild(bassBtn);
+  voicingRow.appendChild(bassWrap);
+
+  // 5. Alter, collapsed, always last: opening it only adds rows below.
   appendAlterGroup(grid, block);
-  grid.appendChild(fieldSelect("Drop", DROP_NAMES, block.dropIndex, function (v) { block.dropIndex = v; refresh(); previewCurrentBlock(); }));
-  // One option per tone the chord actually has, named by what that tone IS in
-  // this chord (1, b3, 5, b7 / 1, 4, 5 for a sus4 / 1, 3, #5 for an aug...).
-  // The stored value stays the tone's POSITION, so saved songs are unaffected;
-  // chord.inversion is the effective (clamped) one, so a value left over from a
-  // bigger chord still shows a real choice instead of a blank dropdown.
-  grid.appendChild(fieldSelect("Inversion", chord.toneLabels, chord.inversion, function (v) { block.inversion = v; refresh(); previewCurrentBlock(); }));
-  grid.appendChild(fieldRangeSelect("Octave", block.octave, -3, 3, function (n) { return n > 0 ? "+" + n : String(n); }, function (v) { block.octave = v; refresh(); previewCurrentBlock(); }));
-  grid.appendChild(toggleGroup("Feel", DURATION_MODIFIER_NAMES, block.durationModifier, function (v) { block.durationModifier = v; refresh(); previewCurrentBlock(); }));
-
-  // Pitch is the bass PATTERN's job now (scale degree, not a chord tone) --
-  // this is just a per-block mute.
-  var bassOptions = ["Bass off", "Bass on"];
-  var bassArrayIndex = block.bassToneIndex === -1 ? 0 : 1;
-  grid.appendChild(fieldSelect("Bass", bassOptions, bassArrayIndex, function (v) {
-    block.bassToneIndex = v === 0 ? -1 : 0;
-    refresh();
-  }));
 
   var actions = document.createElement("div");
   actions.className = "block-actions";
