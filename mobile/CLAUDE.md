@@ -68,7 +68,7 @@ Run these from `mobile/`.
 
 GitHub Pages, published by `../.github/workflows/pages.yml` on every push to `main` that touches `mobile/`. The workflow runs `npm test` first and publishes nothing if a test fails. It is an installable PWA: on iPhone, open it in Safari, then Share, then Add to Home Screen. After that it works offline.
 
-Updates: the service worker serves the cached copy first and fetches the new one in the background, so a change appears the second time the app is opened after a deploy.
+Updates: the service worker fetches the page (index.html) from the network first and falls back to the cached copy offline, so a change appears the first time the app is opened after a deploy. Other files are cache-first, refreshed in the background. Bump `VERSION` in `sw.js` when its logic or file list changes.
 
 Saved songs live in localStorage for the site's address. An app installed to the home screen on iPhone keeps its own storage, separate from Safari. Changing the address (a new repo name, a custom domain) starts with empty storage, so add project export and import before doing that.
 

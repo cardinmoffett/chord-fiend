@@ -3469,7 +3469,10 @@ function editorCollapsedHeightPx() {
   var rows = alterRowsEl;
   if (!rows || !rows.parentNode || !rows.getBoundingClientRect) return editorExpandedHeightPx();
   var top = rows.getBoundingClientRect().top - editorEl.getBoundingClientRect().top + editorEl.scrollTop;
-  return Math.min(Math.round(top), editorExpandedHeightPx());
+  // The drawer's height includes its bottom padding, which on an iPhone also holds the
+  // home-indicator area: add it, or that strip hides the Alter header.
+  var pad = parseFloat(window.getComputedStyle(editorEl).paddingBottom) || 0;
+  return Math.min(Math.round(top + pad), editorExpandedHeightPx());
 }
 // Open or close the drawer from code (the Alter header), the same as a flick.
 function setEditorExpanded(open) {
