@@ -468,14 +468,6 @@
      across a measure boundary always reads as one seamless shape. */
   .seg.block-boundary { border-right: 1px solid rgba(0,0,0,0.18); }
   .seg { flex-direction: column; }
-  /* The Alter group's header: a full row of the editor; accent-colored when the block is altered. */
-  .alter-toggle {
-    flex: 0 0 100%;
-    text-align: left;
-    background: none; border: none; padding: 4px 0;
-    font-size: 12px; font-weight: 600; color: var(--text-dim);
-  }
-  .alter-toggle.altered { color: var(--accent); }
   .field.altered label { color: var(--accent); }
   /* A field whose value overrides what the key would give (a chosen chord Type). */
   /* The chord's job in the key (V7, \266DVI, V7/ii) is the headline; the chord's name sits under it. */
@@ -622,6 +614,9 @@
   }
   .stepper button:disabled { color: var(--text-faint); }
   .stepper span { flex: 1; text-align: center; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; }
+  /* Alter shows only in the expanded drawer; setEditorPanelHeight reveals it. */
+  .alter-section { overflow: hidden; max-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .alter-caption { font-size: 12px; font-weight: 700; color: var(--text-dim); padding-top: 2px; }
   /* Alter's rows pair up: Borrow beside 5th, 3rd beside 7th, 9th beside 11th. */
   .alter-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 8px; align-items: end; }
   .alter-rows .field { min-width: 0; }
@@ -3459,30 +3454,31 @@ function editorExpandedCeilingPx() {
 // element's own current (possibly clipped) height, so this is accurate
 // whether called while collapsed or expanded.
 function editorExpandedHeightPx() {
+  var h = editorContentPx(true);
+  if (isNaN(h)) h = document.getElementById("editor").scrollHeight;
+  return Math.min(h, editorExpandedCeilingPx());
+}
+// The drawer's two stops: collapsed is the editor without Alter (the main controls and the
+// block buttons); expanded adds the Alter section between them. Both are measured from
+// the content, so they fit each tab.
+var alterRowsEl = null; // the Alter section; set by appendAlterGroup, null when the block has none
+var editorGridEl = null; // the editor's content; set by renderEditor
+function editorContentPx(withAlter) {
   var editorEl = document.getElementById("editor");
-  return Math.min(editorEl.scrollHeight, editorExpandedCeilingPx());
+  if (!editorGridEl || !editorGridEl.getBoundingClientRect) return NaN;
+  var cs = window.getComputedStyle(editorEl);
+  var h = editorGridEl.getBoundingClientRect().height + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  if (alterRowsEl) h += (withAlter ? alterRowsEl.scrollHeight : 0) - alterRowsEl.offsetHeight;
+  return Math.round(h);
 }
-// Collapsed is the whole editor down to the Alter header: everything but the Alter rows.
-var alterRowsEl = null; // set by appendAlterGroup; null when the block has no Alter
-function editorCollapsedHeightPx() {
-  var editorEl = document.getElementById("editor");
-  var rows = alterRowsEl;
-  if (!rows || !rows.parentNode || !rows.getBoundingClientRect) return editorExpandedHeightPx();
-  var top = rows.getBoundingClientRect().top - editorEl.getBoundingClientRect().top + editorEl.scrollTop;
-  // The drawer's height includes its bottom padding, which on an iPhone also holds the
-  // home-indicator area: add it, or that strip hides the Alter header.
-  var pad = parseFloat(window.getComputedStyle(editorEl).paddingBottom) || 0;
-  return Math.min(Math.round(top + pad), editorExpandedHeightPx());
-}
-// Open or close the drawer from code (the Alter header), the same as a flick.
-function setEditorExpanded(open) {
-  if (open === editorExpanded) return;
-  editorExpanded = open;
-  if (!open) document.getElementById("editor").scrollTop = 0;
-  renderEditor();
-  snapEditorPanel();
-}
+function editorCollapsedHeightPx() { return Math.min(editorContentPx(false), editorExpandedCeilingPx()); }
+// Sets the drawer's height and reveals as much of the Alter section as fits above the
+// block buttons: none when collapsed, all of it when expanded, part of it mid-drag.
 function setEditorPanelHeight(px) {
+  if (alterRowsEl) {
+    var base = editorContentPx(false);
+    alterRowsEl.style.maxHeight = (editorExpanded && px >= editorExpandedHeightPx()) ? "none" : Math.max(0, px - base) + "px";
+  }
   document.getElementById("editor").style.height = px + "px";
 }
 function snapEditorPanel(skipScrollIntoView) {
@@ -3595,11 +3591,7 @@ document.getElementById("timeline").addEventListener("scroll", function () {
     if (editorExpanded && finalDy < -threshold) editorExpanded = false;
     else if (!editorExpanded && finalDy > threshold) editorExpanded = true;
     // otherwise: not a decisive enough drag -- springs back to the starting state
-    // The Alter header's arrow follows the drawer; a closed drawer starts back at the top.
-    if (wasExpanded !== editorExpanded) {
-      if (!editorExpanded) editorEl.scrollTop = 0;
-      renderEditor();
-    }
+    if (wasExpanded && !editorExpanded) editorEl.scrollTop = 0; // a closed drawer starts back at the top
     logAudio("[DRAWER] finalDy=" + finalDy + " threshold=" + threshold.toFixed(1) + " wasExpanded=" + wasExpanded + " nowExpanded=" + editorExpanded);
 
     // Expanding pushes the workspace's scroll position up to keep the
@@ -3823,19 +3815,20 @@ function appendAlterGroup(parent, block) {
   var rows = alterRows(block, state.masterRootIndex, state.masterModeIndex);
   var canBorrow = block.chordSource !== "applied" && block.chordSource !== "free";
   if (!rows.length && !canBorrow) return;
-  var altered = blockIsAltered(block);
-  // The drawer has two stops: collapsed shows everything down to this header; flicking
-  // it open (or tapping the header) means "alter", and it grows to show every Alter row.
-  // The rows are always built, so the drag reveals them as it goes.
-  var head = document.createElement("button");
-  head.className = "alter-toggle" + (altered ? " altered" : "");
-  head.textContent = (editorExpanded ? "▾ " : "▸ ") + (canBorrow ? "Alter · Borrow" : "Alter") + (altered ? " • changed" : "");
-  head.addEventListener("click", function () { setEditorExpanded(!editorExpanded); });
-  parent.appendChild(head);
+  // ALTER lives only in the expanded drawer: it sits between the main controls and the
+  // block buttons, and the drawer's height reveals it (see setEditorPanelHeight), so a
+  // drag opens it gradually. Collapsed, it takes no room at all.
+  var section = document.createElement("div");
+  section.className = "alter-section";
+  var caption = document.createElement("div");
+  caption.className = "alter-caption";
+  caption.textContent = canBorrow ? "Alter \u00B7 Borrow" : "Alter";
+  section.appendChild(caption);
   var grid = document.createElement("div");
   grid.className = "alter-rows";
-  alterRowsEl = grid;
-  parent.appendChild(grid);
+  section.appendChild(grid);
+  parent.appendChild(section);
+  alterRowsEl = section;
   var fields = {};
   rows.forEach(function (row) {
     var values = row.choices.map(function (c) { return c.value; });
@@ -3887,6 +3880,7 @@ function modeOptionLabels(block) {
 function renderEditor() {
   editor.innerHTML = "";
   alterRowsEl = null;
+  editorGridEl = null;
   if (!editingBlocks.length) return;
   var block = editingBlocks[state.currentIndex];
   var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
@@ -4013,12 +4007,11 @@ function renderEditor() {
   delBtn.addEventListener("click", deleteCurrentBlock);
 
   actions.appendChild(backBtn); actions.appendChild(fwdBtn); actions.appendChild(delBtn);
-  grid.appendChild(actions);
-
-  // 5. Alter, always last: its header ends the collapsed drawer; the rows (Borrow on
-  // Diatonic chords, then a row per chord tone) fill the expanded one.
+  // 5. Alter (expanded drawer only), then the block buttons, always at the bottom right.
   appendAlterGroup(grid, block);
+  grid.appendChild(actions);
   editor.appendChild(grid);
+  editorGridEl = grid;
   // The content just changed (a tab can add or drop a row of pads), so fit the drawer.
   setEditorPanelHeight(editorExpanded ? editorExpandedHeightPx() : editorCollapsedHeightPx());
 
