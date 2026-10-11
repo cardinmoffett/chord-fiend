@@ -500,8 +500,8 @@
     z-index: 1;
   }
   /* A copy/paste selection: a long press marks the anchor, a second tap the other end. */
-  .seg.in-range { box-shadow: inset 0 0 0 3px var(--text), 0 0 0 1px var(--text); z-index: 2; }
-  .seg.in-range::after { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,0.18); pointer-events: none; }
+  .seg.in-range { box-shadow: inset 0 0 0 3px var(--accent); z-index: 2; }
+  .seg.in-range::after { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,0.32); pointer-events: none; }
   .seg.applied-chord {
     box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55);
   }
@@ -627,11 +627,7 @@
   .editor-grid .block-actions { margin-left: 0; justify-content: flex-end; }
   .editor-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .clip-actions { display: flex; gap: 6px; }
-  .clip-btn {
-    height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line);
-    background: var(--bg-elevated); color: var(--text); font: inherit; font-size: 13px; font-weight: 600;
-  }
-  .clip-btn:disabled { color: var(--text-faint); }
+  button.icon:disabled { color: var(--text-faint); }
 
   .block-actions {
     display: flex;
@@ -2952,11 +2948,16 @@ function backgroundForBlock(block) {
 
 // COPY AND PASTE. A long press on a block marks the selection's anchor; the next tap on
 // another block sets the other end. Any tap after that -- on a block or on empty
-// timeline -- clears it. Copy takes the selection (or, with none, the current block);
-// Paste inserts copies after the selection (or the current block).
+// timeline -- clears it, and so does Copy. Copy takes the selection (or, with none, the
+// current block: no long press needed); Paste inserts copies after the selection (or the
+// current block). Delete and the nudge arrows act on the selection too.
 var blockSelection = null; // {anchor, end}; end is null until the second tap
 var blockClipboard = [];   // copies of the last blocks copied (this session)
 var LONG_PRESS_MS = 450;
+var CLIP_ICONS = {
+  copy: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5.5" y="5.5" width="8" height="8.5" rx="1.5"/><path d="M3.5 10.5h-.5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"/></svg>',
+  paste: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="10" height="11.5" rx="1.5"/><rect x="5.75" y="1.5" width="4.5" height="3" rx="1" fill="var(--bg-panel)"/></svg>'
+};
 function selectionRange() {
   if (!blockSelection) return null;
   var a = blockSelection.anchor, b = blockSelection.end === null ? a : blockSelection.end;
@@ -2979,6 +2980,8 @@ function clearBlockSelection() {
 function copyBlocks() {
   var r = selectionRange() || {from: state.currentIndex, to: state.currentIndex};
   blockClipboard = editingBlocks.slice(r.from, r.to + 1).map(function (b) { return JSON.parse(JSON.stringify(b)); });
+  blockSelection = null; // copying is done with the selection
+  showSelection();
   renderEditor();
 }
 function pasteBlocks() {
@@ -4103,16 +4106,15 @@ function renderEditor() {
   clip.className = "clip-actions";
   var range = selectionRange();
   var copyBtn = document.createElement("button");
-  copyBtn.className = "clip-btn";
-  var count = range ? range.to - range.from + 1 : 1;
-  copyBtn.textContent = count > 1 ? "Copy " + count : "Copy";
-  copyBtn.title = range ? "Copy the selected blocks" : "Copy this block (long-press a block to select several)";
+  copyBtn.className = "icon";
+  copyBtn.innerHTML = CLIP_ICONS.copy;
+  copyBtn.title = range ? "Copy the selected blocks" : "Copy this block";
   copyBtn.addEventListener("click", copyBlocks);
   var pasteBtn = document.createElement("button");
-  pasteBtn.className = "clip-btn";
-  pasteBtn.textContent = blockClipboard.length > 1 ? "Paste " + blockClipboard.length : "Paste";
+  pasteBtn.className = "icon";
+  pasteBtn.innerHTML = CLIP_ICONS.paste;
   pasteBtn.disabled = !blockClipboard.length;
-  pasteBtn.title = "Insert the copied blocks after " + (range ? "the selection" : "this block");
+  pasteBtn.title = "Paste after " + (range ? "the selection" : "this block");
   pasteBtn.addEventListener("click", pasteBlocks);
   clip.appendChild(copyBtn); clip.appendChild(pasteBtn);
   var bar = document.createElement("div");
@@ -4177,20 +4179,31 @@ function addBlock() {
   refresh();
 }
 
+// Delete and the nudge arrows act on the copy selection when there is one, else on the
+// current block. A section always keeps at least one block.
 function deleteCurrentBlock() {
   if (isEditorLocked()) return;
-  if (editingBlocks.length <= 1) return;
-  editingBlocks.splice(state.currentIndex, 1);
-  if (state.currentIndex >= editingBlocks.length) state.currentIndex = editingBlocks.length - 1;
+  var r = selectionRange() || {from: state.currentIndex, to: state.currentIndex};
+  var n = r.to - r.from + 1;
+  if (editingBlocks.length - n < 1) return;
+  editingBlocks.splice(r.from, n);
+  blockSelection = null;
+  state.currentIndex = Math.min(r.from, editingBlocks.length - 1);
   refresh();
 }
 
 function moveBlock(dir) {
   if (isEditorLocked()) return;
-  var i = state.currentIndex, j = i + dir;
-  if (j < 0 || j >= editingBlocks.length) return;
-  var tmp = editingBlocks[i]; editingBlocks[i] = editingBlocks[j]; editingBlocks[j] = tmp;
-  state.currentIndex = j;
+  var r = selectionRange() || {from: state.currentIndex, to: state.currentIndex};
+  if (r.from + dir < 0 || r.to + dir >= editingBlocks.length) return;
+  var moving = editingBlocks.splice(r.from, r.to - r.from + 1);
+  Array.prototype.splice.apply(editingBlocks, [r.from + dir, 0].concat(moving));
+  // The selection moves with its blocks, so repeated nudges keep going.
+  if (blockSelection) {
+    blockSelection.anchor += dir;
+    if (blockSelection.end !== null) blockSelection.end += dir;
+  }
+  state.currentIndex += dir;
   refresh();
 }
 
