@@ -3,7 +3,6 @@ import {
   APPLIED_FUNCTION_LABELS,
   BLOCK_MODE_NAMES,
   DROP_NAMES,
-  DURATION_MODIFIER_NAMES,
   DURATION_NAMES,
   EXTENSION_NAMES,
   MASTER_MODE_NAMES,
@@ -24,6 +23,8 @@ const SOURCES = [
   { value: "applied", label: "Applied" },
   { value: "free", label: "Free" },
 ] as const;
+/** Straight, dotted, triplet, inline with the length. */
+const FEEL_SYMBOLS = ["\u2669", "\u2669.", "\u2669\u00B3"];
 const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
 /** A new root or kind (category, degree, mode, function, target, free root) starts with no alterations. */
 const CLEAR_ALTER: Partial<Block> = {
@@ -121,6 +122,8 @@ export function Inspector({
                 onChange={(v) => rootChange({ freeRoot: v })}
               />
             </Field>
+            {/* an empty second slot, so the fields after it stay put across categories */}
+            <div />
           </>
         )}
 
@@ -136,16 +139,12 @@ export function Inspector({
             }}
           />
         </Field>
-        {rows.map((row) => (
-          <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
-            <Segmented
-              options={row.choices.map((c) => c.label)}
-              value={row.choices.findIndex((c) => c.value === row.value)}
-              home={row.choices.findIndex((c) => c.value === row.keyValue)}
-              onChange={(i) => onChange(alterChange(block, row.field, row.choices[i].value, song.rootIndex, song.modeIndex))}
-            />
-          </Field>
-        ))}
+        <Field label="Length" wide>
+          <span className="length-inline">
+            <Select value={block.durationIndex} options={DURATION_NAMES} onChange={(v) => onChange({ durationIndex: v })} />
+            <Segmented options={FEEL_SYMBOLS} value={block.durationModifier} onChange={(i) => onChange({ durationModifier: i })} />
+          </span>
+        </Field>
         <Field label="Inversion">
           <Select value={chord.inversion} options={chord.toneLabels} onChange={(v) => onChange({ inversion: v })} />
         </Field>
@@ -159,12 +158,16 @@ export function Inspector({
             onChange={(v) => onChange({ octave: OCTAVES[v] })}
           />
         </Field>
-        <Field label="Duration">
-          <Select value={block.durationIndex} options={DURATION_NAMES} onChange={(v) => onChange({ durationIndex: v })} />
-        </Field>
-        <Field label="Feel" wide>
-          <Segmented options={DURATION_MODIFIER_NAMES} value={block.durationModifier} onChange={(i) => onChange({ durationModifier: i })} />
-        </Field>
+        {rows.map((row) => (
+          <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
+            <Segmented
+              options={row.choices.map((c) => c.label)}
+              value={row.choices.findIndex((c) => c.value === row.value)}
+              home={row.choices.findIndex((c) => c.value === row.keyValue)}
+              onChange={(i) => onChange(alterChange(block, row.field, row.choices[i].value, song.rootIndex, song.modeIndex))}
+            />
+          </Field>
+        ))}
       </div>
 
       <div className="inspector-actions">
