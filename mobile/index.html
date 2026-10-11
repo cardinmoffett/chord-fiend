@@ -1591,21 +1591,21 @@ function getDurationBeats(block) {
   return base;
 }
 
-// LENGTH as editors show it: a base note (quarter, half, whole -- the lengths chords
-// take) and one modifier: a feel (straight, dotted, triplet) or a multiplier (x2, x3, x4
+// LENGTH as editors show it: a base note (quarter, half, whole, double whole -- the
+// lengths chords take) and one modifier: a feel (straight, dotted, triplet) or a multiplier (x2, x3, x4
 // tie copies together; x1/2, x1/4 split it). Stored as durationIndex (the base),
 // durationModifier (the feel) and durationMult (an engine addition; missing means 1).
-var LENGTH_BASES = ["quarter", "half", "whole"];
-var LENGTH_BASE_INDEX = {quarter: 4, half: 3, whole: 2};
+var LENGTH_BASES = ["quarter", "half", "whole", "double"];
+var LENGTH_BASE_INDEX = {quarter: 4, half: 3, whole: 2, double: 1};
 var LENGTH_MODS = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
 var LENGTH_MOD_LABELS = {straight: "Straight", dotted: "Dotted", triplet: "Triplet", x2: "\u00D72", x3: "\u00D73", x4: "\u00D74", "x1/2": "\u00D7\u00BD", "x1/4": "\u00D7\u00BC"};
 var LENGTH_MULTS = {x2: 2, x3: 3, x4: 4, "x1/2": 0.5, "x1/4": 0.25};
 function lengthParts(block) {
   var idx = block.durationIndex, mult = block.durationMult || 1;
-  // The other stored lengths fold into a base and a multiplier: 4 bars is a whole x4.
-  var fold = {0: [2, 4], 1: [2, 2], 5: [4, 0.5], 6: [4, 0.25]}[idx];
+  // The other stored lengths fold into a base and a multiplier: 4 bars is a double x2.
+  var fold = {0: [1, 2], 5: [4, 0.5], 6: [4, 0.25]}[idx];
   if (fold) { idx = fold[0]; mult *= fold[1]; }
-  var base = {2: "whole", 3: "half", 4: "quarter"}[idx] || "whole";
+  var base = {1: "double", 2: "whole", 3: "half", 4: "quarter"}[idx] || "whole";
   var mod = "straight";
   if (block.durationModifier === 1) mod = "dotted";
   else if (block.durationModifier === 2) mod = "triplet";
@@ -3722,7 +3722,8 @@ var SPREAD_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
 var NOTE_ICONS = {
   quarter: '<svg width="14" height="22" viewBox="0 0 14 22" aria-hidden="true"><ellipse cx="6" cy="17" rx="5" ry="3.6" transform="rotate(-20 6 17)" fill="currentColor"/><rect x="9.6" y="1" width="1.6" height="16" fill="currentColor"/></svg>',
   half: '<svg width="14" height="22" viewBox="0 0 14 22" aria-hidden="true"><ellipse cx="6" cy="17" rx="4.4" ry="3" transform="rotate(-20 6 17)" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="9.6" y="1" width="1.6" height="16" fill="currentColor"/></svg>',
-  whole: '<svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><ellipse cx="9" cy="13" rx="6.4" ry="4.2" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>'
+  whole: '<svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><ellipse cx="9" cy="13" rx="6.4" ry="4.2" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>',
+  double: '<svg width="26" height="22" viewBox="0 0 26 22" aria-hidden="true"><ellipse cx="13" cy="13" rx="6.4" ry="4.2" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="2" y="6" width="1.5" height="14" fill="currentColor"/><rect x="4.8" y="6" width="1.5" height="14" fill="currentColor"/><rect x="19.7" y="6" width="1.5" height="14" fill="currentColor"/><rect x="22.5" y="6" width="1.5" height="14" fill="currentColor"/></svg>'
 };
 // Apply a set of block fields; undefined clears a field.
 function setFields(block, change) {

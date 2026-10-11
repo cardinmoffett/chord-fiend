@@ -35,7 +35,7 @@ const FUNCTION_NAMES: Record<string, string> = { dominant: "Dominant", tritoneSu
 const FUNCTION_PREFIX: Record<string, string> = { dominant: "V/", tritoneSub: "subV/", leadingTone: "vii\u00B0/" };
 /** The Length menu: feels, then multipliers that tie copies together, then splits. */
 const LENGTH_MENU: LengthMod[] = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
-const NOTE_LABELS: Record<string, string> = { quarter: "\u2669", half: "\u{1D15E}", whole: "\u{1D15D}" };
+const NOTE_LABELS: Record<string, string> = { quarter: "\u2669", half: "\u{1D15E}", whole: "\u{1D15D}", double: "\u{1D15C}" };
 const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
 /** A new root or kind (tab, degree, function, target, free root, borrowed mode) starts with no alterations. */
 const CLEAR_ALTER: Partial<Block> = {
