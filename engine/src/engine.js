@@ -710,6 +710,28 @@ function alterFitToShape(block) {
   return b;
 }
 
+// POSITION: inversion and octave as one control that rotates the chord a note at a time.
+// Up moves the lowest note to the top (the next inversion; past the last one, root
+// position an octave up); down moves the top note to the bottom. So voice leading's usual
+// "inversion up, octave down" is a tap or two, never a jump. Returns the block's new
+// {inversion, octave}, or null at the octave limit (-3..+3).
+var POSITION_OCTAVES = [-3, 3];
+function positionStep(block, chord, dir) {
+  var n = chord.toneLabels.length;
+  var inv = chord.inversion, oct = block.octave || 0;
+  inv += dir;
+  if (inv >= n) { inv = 0; oct += 1; }
+  if (inv < 0) { inv = n - 1; oct -= 1; }
+  if (oct < POSITION_OCTAVES[0] || oct > POSITION_OCTAVES[1]) return null;
+  return {inversion: inv, octave: oct};
+}
+// What the Position control shows: the tone in the bass, and the octave when it isn't 0
+// ("3", "\u266D7 +1", "5 \u22121").
+function positionLabel(block, chord) {
+  var oct = block.octave || 0;
+  return chord.toneLabels[chord.inversion] + (oct ? " " + (oct > 0 ? "+" + oct : "\u2212" + (-oct)) : "");
+}
+
 // The numeral for a chromatic step above the key's root (a free chord's root), spelled
 // against the major scale: I, \u266DII, II, \u266DIII, III, IV, \u266FIV, V, \u266DVI, VI, \u266DVII, VII.
 var STEP_NUMERALS = [["", 0], ["\u266D", 1], ["", 1], ["\u266D", 2], ["", 2], ["", 3], ["\u266F", 3], ["", 4], ["\u266D", 5], ["", 5], ["\u266D", 6], ["", 6]];
@@ -794,7 +816,7 @@ export {
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
   getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel, blockLabel,
-  SHAPE_ORDER, ALTER_FIELDS, stepNumeral, withoutAlter, alterRows, alterChange, alterFitToShape,
+  SHAPE_ORDER, ALTER_FIELDS, positionStep, positionLabel, stepNumeral, withoutAlter, alterRows, alterChange, alterFitToShape,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock

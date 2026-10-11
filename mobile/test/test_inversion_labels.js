@@ -211,58 +211,52 @@ check('negative or missing inversion is treated as root position', api.buildChor
 report('clamping');
 
 // ----------------------------------------------------------------------
-section('the editor dropdown');
-function findInversionSelect() {
+section('the editor Position control');
+// Position is inversion + octave in one control: the label names the tone in the bass,
+// up moves the lowest note to the top, down the top note to the bottom.
+function findPosition() {
   var found = null;
   (function walk(el) {
     el.children.forEach(function (c) {
-      if (c.children && c.children.length >= 2 && c.children[0].textContent === 'Inversion') found = c.children[1];
+      if (c.children && c.children.length >= 2 && c.children[0].textContent === 'Position') found = c.children[1];
       walk(c);
     });
   })(byId['editor']);
   return found;
 }
-function optionTexts(sel) { return sel.children.map(function (o) { return o.textContent; }); }
-
 function openEditorOn(block) {
   api.S().masterRootIndex = 0; api.S().masterModeIndex = MODE.Ionian;
   api.setEditing([block]);
   api.renderEditor();
-  return findInversionSelect();
+  return findPosition();
 }
-var s1 = openEditorOn(blk({degreeIndex: 0}));
-check('triad: dropdown offers 1 3 5', !!s1 && eq(optionTexts(s1), ['1', '3', '5']));
-check('...and is no longer the old fixed list of 7 numbers', optionTexts(s1).length === 3);
-var s2 = openEditorOn(blk({degreeIndex: 4, extensionIndex: 2}));
-check('dominant 7th: 1 3 5 b7', eq(optionTexts(s2), ['1', '3', '5', F + '7']));
-var s3 = openEditorOn(blk({degreeIndex: 0, susIndex: 2}));
-check('changing to sus4 changes the options: 1 4 5', eq(optionTexts(s3), ['1', '4', '5']));
-var s4 = openEditorOn(blk({chordSource: 'free', freeRoot: 0, fifth: '#5'}));
-check('a free augmented chord offers 1 3 #5', eq(optionTexts(s4), ['1', '3', S + '5']));
-var s5 = openEditorOn(blk({degreeIndex: 0, extensionIndex: api.EXTENSION_NAMES.indexOf('add9')}));
-check('add9 offers 1 3 5 9', eq(optionTexts(s5), ['1', '3', '5', '9']));
-var s5 = openEditorOn(blk({degreeIndex: 0, extensionIndex: 5}));
-check('13th chord offers all seven tones', eq(optionTexts(s5), ['1', '3', '5', '7', '9', '11', '13']));
-check('every option\'s value is its position (what gets stored), so saved songs line up', s5.children.every(function (o, i) { return o.value === i; }));
+function shown(box) { return box.children[1].textContent; }
+function tap(box, which) { box.children[which === 'up' ? 2 : 0]._h['click'][0]({}); }
 
-var held = blk({degreeIndex: 4, extensionIndex: 2, inversion: 2});
-var s6 = openEditorOn(held);
-check('a chord stored at inversion 2 shows the "5" selected', s6.value === 2 && optionTexts(s6)[s6.value] === '5');
-var stale = blk({degreeIndex: 0, extensionIndex: 0, inversion: 6});
-var s7 = openEditorOn(stale);
-check('a leftover inversion from a bigger chord still selects a real option (no blank dropdown)', s7.value === 2 && s7.value < s7.children.length);
+var p1 = openEditorOn(blk({degreeIndex: 0}));
+check('a root-position triad shows 1 in the bass', !!p1 && shown(p1) === '1');
+var p2 = openEditorOn(blk({degreeIndex: 4, extensionIndex: 2, inversion: 3}));
+check('V7 in 3rd inversion shows ' + F + '7', shown(p2) === F + '7');
+var p3 = openEditorOn(blk({degreeIndex: 0, susIndex: 2, inversion: 1}));
+check('sus4 in 1st inversion shows 4', shown(p3) === '4');
+var p4 = openEditorOn(blk({degreeIndex: 0, extensionIndex: 0, inversion: 6}));
+check('a leftover inversion from a bigger chord shows the real bass tone (5)', shown(p4) === '5');
+var p5 = openEditorOn(blk({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone', inversion: 3}));
+check('leading-tone chord in 3rd inversion shows ' + F + F + '7', shown(p5) === F + F + '7');
 
-var live = blk({degreeIndex: 4, extensionIndex: 2});
-var s8 = openEditorOn(live);
-s8.value = '3';
-s8._h['change'][0]({});
-check('picking the 7th stores inversion 3 on the block', live.inversion === 3);
-check('...and the chord really does put the 7th in the bass', api.buildChord(live, 0, MODE.Ionian).pitches[0] === api.buildChord(blk({degreeIndex: 4, extensionIndex: 2}), 0, MODE.Ionian).pitches[3]);
-check('...and it was saved', writes.length > 0 && JSON.stringify(JSON.parse(writes[writes.length - 1][1])).length > 0);
-
-// A leading-tone chord: the dropdown offers its real dim7 tones.
-var s9 = openEditorOn(blk({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone'}));
-check('leading-tone chord dropdown: 1 b3 b5 bb7', eq(optionTexts(s9), ['1', F + '3', F + '5', F + F + '7']));
-report('editor dropdown');
+var live = blk({degreeIndex: 0});
+tap(openEditorOn(live), 'up');
+check('up from root position: 1st inversion, same octave', live.inversion === 1 && live.octave === 0);
+check('...and it was saved', writes.length > 0);
+var top = blk({degreeIndex: 0, inversion: 2});
+tap(openEditorOn(top), 'up');
+check('up from the last inversion: root position an octave up', top.inversion === 0 && top.octave === 1);
+var down = blk({degreeIndex: 0});
+tap(openEditorOn(down), 'down');
+check('down from root position: 2nd inversion an octave down (G below C E)', down.inversion === 2 && down.octave === -1);
+check('...so the top note really moved to the bottom', JSON.stringify(api.buildChord(down, 0, MODE.Ionian).pitches) === JSON.stringify([55, 60, 64]));
+var shownAfter = openEditorOn(down);
+check('...and the label says 5 with the octave', shown(shownAfter) === '5 −1');
+report('editor Position control');
 
 console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');

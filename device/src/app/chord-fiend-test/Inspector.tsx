@@ -1,8 +1,6 @@
 import {
-  APPLIED_FUNCTIONS,
-  APPLIED_FUNCTION_LABELS,
   BLOCK_MODE_NAMES,
-  DROP_NAMES,
+  DURATION_MODIFIER_NAMES,
   DURATION_NAMES,
   EXTENSION_NAMES,
   MASTER_MODE_NAMES,
@@ -12,18 +10,26 @@ import {
   alterRows,
   buildChord,
   degreeLabels,
+  getChordSymbol,
+  positionLabel,
+  positionStep,
   stepNumeral,
+  withoutAlter,
 } from "../../../../engine/src/engine.js";
 import { IndexDropdown } from "./Dropdown";
 import type { Block, Song } from "./song";
 
-const OCTAVES = [-2, -1, 0, 1, 2];
-const SOURCES = [
-  { value: "diatonic", label: "Diatonic" },
-  { value: "applied", label: "Applied" },
+/** The kinds: the key's own degrees, the three applied functions (sharing the degree list as their target), and Free. */
+const KINDS = [
+  { value: "key", label: "Key" },
+  { value: "dominant", label: "V/" },
+  { value: "tritoneSub", label: "subV/" },
+  { value: "leadingTone", label: "vii\u00B0/" },
   { value: "free", label: "Free" },
 ] as const;
-/** Straight, dotted, triplet, inline with the length. */
+/** Length buttons run shortest to longest (DURATION_NAMES is stored longest first). */
+const DURATION_ORDER = [6, 5, 4, 3, 2, 1, 0];
+/** Straight, dotted, triplet: one button that cycles. */
 const FEEL_SYMBOLS = ["\u2669", "\u2669.", "\u2669\u00B3"];
 const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
 /** A new root or kind (category, degree, mode, function, target, free root) starts with no alterations. */
@@ -31,6 +37,7 @@ const CLEAR_ALTER: Partial<Block> = {
   third: undefined, fifth: undefined, seventh: undefined, ninth: undefined, eleventh: undefined, thirteenth: undefined,
   aug: 0, flat5: 0, susIndex: 0,
 };
+const DROP_SHORT = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
 
 /** The editor for the selected block: every setting a block has, as in the app's editor panel. */
 export function Inspector({
@@ -65,68 +72,83 @@ export function Inspector({
   // the chord as it is (a V7: 3, 5, \u266D7). Choosing the key's own value clears the change.
   const rows = alterRows(block, song.rootIndex, song.modeIndex);
   const rootChange = (change: Partial<Block>) => onChange({ ...change, ...CLEAR_ALTER });
+  const kind = block.chordSource === "free" ? "free" : block.chordSource === "applied" ? block.appliedFunction : "key";
+  const up = positionStep(block, chord, 1);
+  const down = positionStep(block, chord, -1);
+  // Borrow from, listed by result ("Dorian \u2192 F7"), each shown without alterations
+  // (picking one clears them).
+  const borrowLabels = BLOCK_MODE_NAMES.map((m, i) => {
+    const c = buildChord({ ...withoutAlter(block), blockModeIndex: i }, song.rootIndex, song.modeIndex);
+    return (i === 0 ? "Key" : m) + " \u2192 " + getChordSymbol(c, song.rootIndex).replace(/ \(.*\)$/, "");
+  });
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
     <fieldset className={locked ? "inspector locked" : "inspector"} disabled={locked}>
       <div className="inspector-grid">
+        {/* 1. Kind + root. Key ii -> V/ is V/ii: the degree carries over as the target. */}
         <Field label="Chord" wide>
           <Segmented
-            options={SOURCES.map((x) => x.label)}
-            value={SOURCES.findIndex((x) => x.value === block.chordSource)}
+            options={KINDS.map((k) => k.label)}
+            value={KINDS.findIndex((k) => k.value === kind)}
             onChange={(i) => {
-              // Free keeps the root you have; a free chord starts as a major triad (\u266D7 with a 7th).
-              const toFree = SOURCES[i].value === "free" && block.chordSource !== "free";
-              rootChange({
-                chordSource: SOURCES[i].value,
-                ...(toFree ? { freeRoot: (((chord.chordRootPitch - song.rootIndex) % 12) + 12) % 12 } : {}),
-              });
+              const next = KINDS[i].value;
+              const degree = block.chordSource === "applied" ? block.appliedTargetIndex : block.chordSource === "free" ? null : block.degreeIndex;
+              if (next === "free") {
+                // Free keeps the root you have; a free chord starts as a major triad (\u266D7 with a 7th).
+                rootChange({
+                  chordSource: "free",
+                  blockModeIndex: 0,
+                  ...(block.chordSource !== "free" ? { freeRoot: (((chord.chordRootPitch - song.rootIndex) % 12) + 12) % 12 } : {}),
+                });
+              } else if (next === "key") {
+                rootChange({ chordSource: "diatonic", blockModeIndex: 0, ...(degree !== null ? { degreeIndex: degree } : {}) });
+              } else {
+                rootChange({ chordSource: "applied", appliedFunction: next, blockModeIndex: 0, ...(degree !== null ? { appliedTargetIndex: degree } : {}) });
+              }
             }}
           />
         </Field>
-
         {block.chordSource === "diatonic" && (
-          <>
-            <Field label="Degree">
-              <Select value={block.degreeIndex} options={degreeLabels(degreeMode)} onChange={(v) => rootChange({ degreeIndex: v })} />
-            </Field>
-            <Field label="Mode">
-              <Select
-                value={block.blockModeIndex}
-                options={BLOCK_MODE_NAMES.map((m, i) => (i === 0 ? "Thru (the key's mode)" : m))}
-                onChange={(v) => rootChange({ blockModeIndex: v })}
-              />
-            </Field>
-          </>
+          <Field label="Degree">
+            <Select value={block.degreeIndex} options={degreeLabels(degreeMode)} onChange={(v) => rootChange({ degreeIndex: v, blockModeIndex: block.blockModeIndex })} />
+          </Field>
         )}
         {block.chordSource === "applied" && (
-          <>
-            <Field label="Function">
-              <Select
-                value={Math.max(0, APPLIED_FUNCTIONS.indexOf(block.appliedFunction))}
-                options={APPLIED_FUNCTIONS.map((f) => APPLIED_FUNCTION_LABELS[f])}
-                onChange={(v) => rootChange({ appliedFunction: APPLIED_FUNCTIONS[v] as Block["appliedFunction"] })}
-              />
-            </Field>
-            <Field label="Target">
-              <Select value={block.appliedTargetIndex} options={homeLabels} onChange={(v) => rootChange({ appliedTargetIndex: v })} />
-            </Field>
-          </>
+          <Field label="Of">
+            <Select value={block.appliedTargetIndex} options={homeLabels} onChange={(v) => rootChange({ appliedTargetIndex: v })} />
+          </Field>
         )}
         {block.chordSource === "free" && (
-          <>
-            <Field label="Root">
-              <Select
-                value={block.freeRoot ?? 0}
-                options={Array.from({ length: 12 }, (_, step) => stepNumeral(step, chord.offsets[1] === 3 && chord.offsets[2] === 6))}
-                onChange={(v) => rootChange({ freeRoot: v })}
-              />
-            </Field>
-            {/* an empty second slot, so the fields after it stay put across categories */}
-            <div />
-          </>
+          <Field label="Root">
+            <Select
+              value={block.freeRoot ?? 0}
+              options={Array.from({ length: 12 }, (_, step) => stepNumeral(step, chord.offsets[1] === 3 && chord.offsets[2] === 6))}
+              onChange={(v) => rootChange({ freeRoot: v })}
+            />
+          </Field>
         )}
 
+        {/* 2. Length, one click, with the feel cycling straight / dotted / triplet. */}
+        <Field label="Length" wide>
+          <span className="length-inline">
+            <Segmented
+              options={DURATION_ORDER.map((i) => DURATION_NAMES[i].replace(/\/1$/, ""))}
+              value={DURATION_ORDER.indexOf(block.durationIndex)}
+              onChange={(i) => onChange({ durationIndex: DURATION_ORDER[i] })}
+            />
+            <button
+              type="button"
+              className={block.durationModifier ? "feel on" : "feel"}
+              title={DURATION_MODIFIER_NAMES[block.durationModifier || 0] + " (click to change)"}
+              onClick={() => onChange({ durationModifier: ((block.durationModifier || 0) + 1) % 3 })}
+            >
+              {FEEL_SYMBOLS[block.durationModifier || 0]}
+            </button>
+          </span>
+        </Field>
+
+        {/* 3. Shape and Position (inversion + octave, a note at a time). */}
         <Field label="Shape">
           <Select
             value={Math.max(0, SHAPE_ORDER.indexOf(block.extensionIndex))}
@@ -139,25 +161,27 @@ export function Inspector({
             }}
           />
         </Field>
-        <Field label="Length" wide>
-          <span className="length-inline">
-            <Select value={block.durationIndex} options={DURATION_NAMES} onChange={(v) => onChange({ durationIndex: v })} />
-            <Segmented options={FEEL_SYMBOLS} value={block.durationModifier} onChange={(i) => onChange({ durationModifier: i })} />
+        <Field label="Position">
+          <span className="stepper">
+            <button type="button" title="Top note to the bottom" disabled={!down} onClick={() => down && onChange(down)}>
+              ▼
+            </button>
+            <span>{positionLabel(block, chord)}</span>
+            <button type="button" title="Bottom note to the top" disabled={!up} onClick={() => up && onChange(up)}>
+              ▲
+            </button>
           </span>
         </Field>
-        <Field label="Inversion">
-          <Select value={chord.inversion} options={chord.toneLabels} onChange={(v) => onChange({ inversion: v })} />
-        </Field>
         <Field label="Drop">
-          <Select value={block.dropIndex} options={DROP_NAMES} onChange={(v) => onChange({ dropIndex: v })} />
+          <Select value={block.dropIndex} options={DROP_SHORT} onChange={(v) => onChange({ dropIndex: v })} />
         </Field>
-        <Field label="Octave">
-          <Select
-            value={OCTAVES.indexOf(block.octave)}
-            options={OCTAVES.map((o) => (o > 0 ? "+" + o : String(o)))}
-            onChange={(v) => onChange({ octave: OCTAVES[v] })}
-          />
-        </Field>
+
+        {/* 4. Alter: Borrow from (Key chords), then a row per chord tone. */}
+        {block.chordSource === "diatonic" && (
+          <Field label="Borrow from" altered={!!block.blockModeIndex}>
+            <Select value={block.blockModeIndex} options={borrowLabels} onChange={(v) => rootChange({ blockModeIndex: v })} />
+          </Field>
+        )}
         {rows.map((row) => (
           <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
             <Segmented
