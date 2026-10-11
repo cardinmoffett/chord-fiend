@@ -500,8 +500,7 @@
     z-index: 1;
   }
   /* A copy/paste selection: a long press marks the anchor, a second tap the other end. */
-  .seg.in-range { box-shadow: inset 0 0 0 3px var(--accent); z-index: 2; }
-  .seg.in-range::after { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,0.32); pointer-events: none; }
+  .seg.in-range { box-shadow: inset 0 0 0 3px #3b82f6, 0 0 8px rgba(59,130,246,0.45); z-index: 2; }
   .seg.applied-chord {
     box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55);
   }
@@ -2956,7 +2955,8 @@ var blockClipboard = [];   // copies of the last blocks copied (this session)
 var LONG_PRESS_MS = 450;
 var CLIP_ICONS = {
   copy: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5.5" y="5.5" width="8" height="8.5" rx="1.5"/><path d="M3.5 10.5h-.5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"/></svg>',
-  paste: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="10" height="11.5" rx="1.5"/><rect x="5.75" y="1.5" width="4.5" height="3" rx="1" fill="var(--bg-panel)"/></svg>'
+  // Paste: an arrow dropping into a tray -- "put it here".
+  paste: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.75v7.5M5 6.5 8 9.5 11 6.5"/><path d="M2.25 9.5v3.25a1 1 0 0 0 1 1h9.5a1 1 0 0 0 1-1V9.5"/></svg>'
 };
 function selectionRange() {
   if (!blockSelection) return null;
