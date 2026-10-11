@@ -146,7 +146,7 @@ export function withoutAlter(block: Block): Block;
 export function positionStep(block: Block, chord: Chord, dir: 1 | -1): { inversion: number; octave: number } | null;
 /** The Position control's text: the bass tone, plus the octave when it isn't 0 ("3", "♭7 +1"). */
 export function positionLabel(block: Block, chord: Chord): string;
-export type LengthBase = "quarter" | "half" | "whole";
+export type LengthBase = "quarter" | "half" | "whole" | "double";
 export type LengthMod = "straight" | "dotted" | "triplet" | "x2" | "x3" | "x4" | "x1/2" | "x1/4";
 export const LENGTH_BASES: LengthBase[];
 export const LENGTH_MODS: LengthMod[];

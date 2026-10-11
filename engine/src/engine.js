@@ -428,21 +428,21 @@ function getDurationBeats(block) {
   return base;
 }
 
-// LENGTH as editors show it: a base note (quarter, half, whole -- the lengths chords
-// take) and one modifier: a feel (straight, dotted, triplet) or a multiplier (x2, x3, x4
+// LENGTH as editors show it: a base note (quarter, half, whole, double whole -- the
+// lengths chords take) and one modifier: a feel (straight, dotted, triplet) or a multiplier (x2, x3, x4
 // tie copies together; x1/2, x1/4 split it). Stored as durationIndex (the base),
 // durationModifier (the feel) and durationMult (an engine addition; missing means 1).
-var LENGTH_BASES = ["quarter", "half", "whole"];
-var LENGTH_BASE_INDEX = {quarter: 4, half: 3, whole: 2};
+var LENGTH_BASES = ["quarter", "half", "whole", "double"];
+var LENGTH_BASE_INDEX = {quarter: 4, half: 3, whole: 2, double: 1};
 var LENGTH_MODS = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
 var LENGTH_MOD_LABELS = {straight: "Straight", dotted: "Dotted", triplet: "Triplet", x2: "\u00D72", x3: "\u00D73", x4: "\u00D74", "x1/2": "\u00D7\u00BD", "x1/4": "\u00D7\u00BC"};
 var LENGTH_MULTS = {x2: 2, x3: 3, x4: 4, "x1/2": 0.5, "x1/4": 0.25};
 function lengthParts(block) {
   var idx = block.durationIndex, mult = block.durationMult || 1;
-  // The other stored lengths fold into a base and a multiplier: 4 bars is a whole x4.
-  var fold = {0: [2, 4], 1: [2, 2], 5: [4, 0.5], 6: [4, 0.25]}[idx];
+  // The other stored lengths fold into a base and a multiplier: 4 bars is a double x2.
+  var fold = {0: [1, 2], 5: [4, 0.5], 6: [4, 0.25]}[idx];
   if (fold) { idx = fold[0]; mult *= fold[1]; }
-  var base = {2: "whole", 3: "half", 4: "quarter"}[idx] || "whole";
+  var base = {1: "double", 2: "whole", 3: "half", 4: "quarter"}[idx] || "whole";
   var mod = "straight";
   if (block.durationModifier === 1) mod = "dotted";
   else if (block.durationModifier === 2) mod = "triplet";
