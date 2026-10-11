@@ -51,6 +51,8 @@ Revised 2026-10-10, twice:
 
 **Shape** (`extensionIndex`, editors use `SHAPE_ORDER`): Triad, add9, 6, 6/9, 7, 9, 11, 13.
 
+**Names that promise an interval get that interval, in every mode** (fixed 2026-10-11): sus2 is a whole step, sus4 a perfect 4th, the 6 a major 6th, the added 9th a major 9th. Before, they came from the mode, so Phrygian's "sus2" had a half step and Lydian's "sus4" a raised 4th. The stacked 9th, 11th and 13th still come from the mode, and the name says when one isn't natural: iii9 in C reads iii7(♭9) / Em7(b9), IV11 reads IVmaj9(♯11).
+
 **Labels (`blockLabel`) are always numerals, read from the chord's real notes:**
 - The case shows the 3rd, then °, + or ø.
 - The 7th's kind: maj7, 7, (maj7), °7.

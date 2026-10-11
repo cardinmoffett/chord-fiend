@@ -52,7 +52,7 @@ function blk(o) { return Object.assign(orig.defaultBlock(), o); }
 // everything else must match exactly. (alter only reads back the chord's own tones.)
 function appShape(ch) {
   var c = Object.assign({}, ch);
-  if (c.isFree !== false || c.flat5 !== false || c.bassOffsets !== null || c.addNine !== false || c.tensions.length !== 0)
+  if (c.isFree !== false || c.flat5 !== false || c.bassOffsets !== null || c.addNine !== false)
     return {unexpected: {isFree: c.isFree, flat5: c.flat5, bassOffsets: c.bassOffsets, addNine: c.addNine, tensions: c.tensions}};
   delete c.isFree; delete c.flat5; delete c.bassOffsets; delete c.addNine; delete c.tensions; delete c.alter;
   return c;
@@ -74,7 +74,7 @@ same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
 console.log('\n=== diatonic and borrowed chords: every key, home mode, block mode, degree, extension, sus and aug ===');
-var combo = 0;
+var combo = 0, changed = 0, renamed = 0;
 for (var root = 0; root < 12; root++) {
   state.masterRootIndex = root;
   for (var mm = 0; mm < engine.MASTER_MODE_NAMES.length; mm++) {
@@ -89,12 +89,22 @@ for (var root = 0; root < 12; root++) {
               var b = blk({degreeIndex: deg, blockModeIndex: bm, extensionIndex: ext, susIndex: sus, aug: aug,
                 inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
               var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
+              // Deliberate changes from the app (checked by theory in test_shapes_tensions):
+              // sus2, sus4 and the 6 are fixed intervals, not read from the mode, so a
+              // Phrygian "sus2" or an Aeolian "6" now has a whole step / major 6th.
+              var fixedSus = sus > 0 && a1.offsets[1] !== (sus === 1 ? 2 : 5);
+              var fixed6 = a1.is6 && a1.offsets[3] !== 9;
+              if (fixedSus || fixed6) { changed++; continue; }
               same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, appShape(e1));
+              // ...and an extension the mode makes non-natural is named (Em7(b9), not Em9).
+              if (e1.tensions.length) { renamed++; continue; }
               sameName('getChordSymbol ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
             }
   }
 }
 report('buildChord and getChordSymbol (' + combo + ' blocks)');
+same('some blocks differ on purpose: fixed sus and 6 (' + changed + '), named extensions (' + renamed + ')', changed > 0 && renamed > 0, true);
+report('deliberate differences are the expected kinds');
 
 console.log('\n=== applied chords: every key, home mode, target, function, extension, sus and aug ===');
 combo = 0;
