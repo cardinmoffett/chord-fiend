@@ -499,6 +499,9 @@
     box-shadow: inset 0 0 0 3px var(--accent), 0 0 10px rgba(255,180,84,0.55);
     z-index: 1;
   }
+  /* A copy/paste selection: a long press marks the anchor, a second tap the other end. */
+  .seg.in-range { box-shadow: inset 0 0 0 3px var(--text), 0 0 0 1px var(--text); z-index: 2; }
+  .seg.in-range::after { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,0.18); pointer-events: none; }
   .seg.applied-chord {
     box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55);
   }
@@ -622,6 +625,13 @@
   .alter-rows .field { min-width: 0; }
   .alter-rows .toggle-row button { flex: 1; padding: 5px 2px; }
   .editor-grid .block-actions { margin-left: 0; justify-content: flex-end; }
+  .editor-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .clip-actions { display: flex; gap: 6px; }
+  .clip-btn {
+    height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--bg-elevated); color: var(--text); font: inherit; font-size: 13px; font-weight: 600;
+  }
+  .clip-btn:disabled { color: var(--text-faint); }
 
   .block-actions {
     display: flex;
@@ -2940,6 +2950,48 @@ function backgroundForBlock(block) {
   return "linear-gradient(180deg, " + top + ", " + bottom + ")";
 }
 
+// COPY AND PASTE. A long press on a block marks the selection's anchor; the next tap on
+// another block sets the other end. Any tap after that -- on a block or on empty
+// timeline -- clears it. Copy takes the selection (or, with none, the current block);
+// Paste inserts copies after the selection (or the current block).
+var blockSelection = null; // {anchor, end}; end is null until the second tap
+var blockClipboard = [];   // copies of the last blocks copied (this session)
+var LONG_PRESS_MS = 450;
+function selectionRange() {
+  if (!blockSelection) return null;
+  var a = blockSelection.anchor, b = blockSelection.end === null ? a : blockSelection.end;
+  var lo = Math.max(0, Math.min(a, b)), hi = Math.min(editingBlocks.length - 1, Math.max(a, b));
+  return lo <= hi ? {from: lo, to: hi} : null;
+}
+function showSelection() {
+  var r = selectionRange();
+  document.querySelectorAll(".seg").forEach(function (s) {
+    var i = Number(s.dataset.blockIndex);
+    s.classList.toggle("in-range", !!r && i >= r.from && i <= r.to);
+  });
+}
+function clearBlockSelection() {
+  if (!blockSelection) return;
+  blockSelection = null;
+  showSelection();
+  renderEditor();
+}
+function copyBlocks() {
+  var r = selectionRange() || {from: state.currentIndex, to: state.currentIndex};
+  blockClipboard = editingBlocks.slice(r.from, r.to + 1).map(function (b) { return JSON.parse(JSON.stringify(b)); });
+  renderEditor();
+}
+function pasteBlocks() {
+  if (isEditorLocked() || !blockClipboard.length) return;
+  var r = selectionRange();
+  var at = (r ? r.to : state.currentIndex) + 1;
+  var copies = blockClipboard.map(function (b) { return JSON.parse(JSON.stringify(b)); });
+  Array.prototype.splice.apply(editingBlocks, [at, 0].concat(copies));
+  state.currentIndex = at;
+  blockSelection = null;
+  refresh();
+}
+
 // One chord block on the timeline (or one piece of it, where a block wraps across
 // rows): its look, its label, and tap-to-hear / tap-to-select. widthCss sets its width;
 // boundary draws the divider where a different block follows.
@@ -2952,6 +3004,8 @@ function buildSegElement(seg, widthCss, boundary) {
   el.style.flex = "0 0 " + widthCss; // explicit no-grow/no-shrink, exact duration-proportional width
   el.style.background = backgroundForBlock(block);
   if (seg.blockIndex === state.currentIndex) el.classList.add("selected");
+  var range = selectionRange();
+  if (range && seg.blockIndex >= range.from && seg.blockIndex <= range.to) el.classList.add("in-range");
   if (playback.active && seg.blockIndex === playback.currentlySounding) el.classList.add("sounding");
   // Only show a dividing line where this segment ends AND a different
   // block actually follows it (not just because a measure ends here).
@@ -2998,6 +3052,7 @@ function buildSegElement(seg, widthCss, boundary) {
   }
 
   var held = false;
+  var longPressTimer = null;
   el.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     // While playing, a tap only selects the block for editing: no sound, and the
@@ -3013,7 +3068,26 @@ function buildSegElement(seg, widthCss, boundary) {
       scrollSelectedBlockIntoView();
       return;
     }
+    // Selecting for copy: a tap while only the anchor is marked sets the other end of the
+    // range (no sound, nothing else changes). Any other tap while a selection shows
+    // clears it, then acts as a normal tap.
+    if (blockSelection && blockSelection.end === null && seg.blockIndex !== blockSelection.anchor) {
+      blockSelection.end = seg.blockIndex;
+      showSelection();
+      renderEditor();
+      return;
+    }
+    if (blockSelection) { blockSelection = null; showSelection(); }
     stopPlayback();
+    // A long press (held without the touch turning into a scroll) marks the anchor.
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(function () {
+      if (!held) return;
+      blockSelection = {anchor: seg.blockIndex, end: null};
+      showSelection();
+      renderEditor();
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
+    }, LONG_PRESS_MS);
     el.setPointerCapture(e.pointerId); // keeps pointerup/cancel targeted at THIS segment even if
       // the finger drifts elsewhere during the hold (segments allow pan-y for scrolling, so a
       // touch that turns into a scroll can otherwise hand its remaining events to a different
@@ -3038,6 +3112,7 @@ function buildSegElement(seg, widthCss, boundary) {
     }
   });
   var release = function () {
+    clearTimeout(longPressTimer);
     if (held) {
       releaseHeld();
       try { bassSynth.triggerRelease(); } catch (e) {}
@@ -3536,6 +3611,11 @@ function scrollSelectedBlockIntoView() {
   selected.scrollIntoView({block: "nearest", inline: "nearest", behavior: "smooth"});
   setTimeout(function () { programmaticScrollGuard = false; }, 500);
 }
+// A tap on empty timeline space clears a copy selection.
+document.getElementById("timeline").addEventListener("pointerdown", function (e) {
+  if (e.target.closest && e.target.closest(".seg")) return;
+  clearBlockSelection();
+});
 // While playing, a tap on empty timeline space (not on a block) lets go of a pinned
 // block: the selection follows the playhead again from the block now playing.
 document.getElementById("timeline").addEventListener("click", function (e) {
@@ -4017,9 +4097,30 @@ function renderEditor() {
   delBtn.addEventListener("click", deleteCurrentBlock);
 
   actions.appendChild(backBtn); actions.appendChild(fwdBtn); actions.appendChild(delBtn);
+
+  // Copy and Paste sit at the lower left, the block buttons at the lower right.
+  var clip = document.createElement("div");
+  clip.className = "clip-actions";
+  var range = selectionRange();
+  var copyBtn = document.createElement("button");
+  copyBtn.className = "clip-btn";
+  var count = range ? range.to - range.from + 1 : 1;
+  copyBtn.textContent = count > 1 ? "Copy " + count : "Copy";
+  copyBtn.title = range ? "Copy the selected blocks" : "Copy this block (long-press a block to select several)";
+  copyBtn.addEventListener("click", copyBlocks);
+  var pasteBtn = document.createElement("button");
+  pasteBtn.className = "clip-btn";
+  pasteBtn.textContent = blockClipboard.length > 1 ? "Paste " + blockClipboard.length : "Paste";
+  pasteBtn.disabled = !blockClipboard.length;
+  pasteBtn.title = "Insert the copied blocks after " + (range ? "the selection" : "this block");
+  pasteBtn.addEventListener("click", pasteBlocks);
+  clip.appendChild(copyBtn); clip.appendChild(pasteBtn);
+  var bar = document.createElement("div");
+  bar.className = "editor-bottom";
+  bar.appendChild(clip); bar.appendChild(actions);
   // 5. Alter (expanded drawer only), then the block buttons, always at the bottom right.
   appendAlterGroup(grid, block);
-  grid.appendChild(actions);
+  grid.appendChild(bar);
   editor.appendChild(grid);
   editorGridEl = grid;
   // The content just changed (a tab can add or drop a row of pads), so fit the drawer.
@@ -5004,6 +5105,7 @@ function applyEditorLock() {
 // After inlining/relinking the box that's open in the editor.
 function afterLinkChange(slot) {
   editingBlocks = resolveSlot(slot).blocks;
+  blockSelection = null;
   if (state.currentIndex >= editingBlocks.length) state.currentIndex = 0;
   updateSectionNameButton();
   applyEditorLock();
@@ -5044,6 +5146,7 @@ function openSectionForEditing(id) {
   if (!section) return;
   editingRef = {kind: "section", id: id};
   editingBlocks = section.blocks;
+  blockSelection = null;
   state.currentIndex = 0;
   switchToSectionView();
 }
@@ -5053,6 +5156,7 @@ function openSlotForEditing(id) {
   if (!slot) return;
   editingRef = {kind: "slot", id: id};
   editingBlocks = resolveSlot(slot).blocks;
+  blockSelection = null;
   state.currentIndex = 0;
   switchToSectionView();
 }
@@ -6398,6 +6502,7 @@ function openLesson(lessonId) {
   sandbox = {title: lesson.title, blocks: lesson.blocks(), lessonId: lessonId, melody: lesson.melody || null};
   editingRef = {kind: "scratch"};
   editingBlocks = sandbox.blocks;
+  blockSelection = null;
   state.currentIndex = 0;
   currentView = "section";
   document.getElementById("songViewContainer").classList.add("hidden-view");
