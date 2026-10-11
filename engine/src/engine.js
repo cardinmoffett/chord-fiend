@@ -413,10 +413,35 @@ function getChordSymbol(chord, masterRootIndex) {
 }
 
 function getDurationBeats(block) {
-  var base = DURATION_BEATS[DURATION_NAMES[block.durationIndex]];
+  var base = DURATION_BEATS[DURATION_NAMES[block.durationIndex]] * (block.durationMult || 1);
   if (block.durationModifier === 1) return base * 1.5;
   if (block.durationModifier === 2) return base * (2/3);
   return base;
+}
+
+// LENGTH as editors show it: a base note (quarter, half, whole -- the lengths chords
+// take) and one modifier: a feel (straight, dotted, triplet) or a multiplier (x2, x3, x4
+// tie copies together; x1/2, x1/4 split it). Stored as durationIndex (the base),
+// durationModifier (the feel) and durationMult (an engine addition; missing means 1).
+var LENGTH_BASES = ["quarter", "half", "whole"];
+var LENGTH_BASE_INDEX = {quarter: 4, half: 3, whole: 2};
+var LENGTH_MODS = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
+var LENGTH_MOD_LABELS = {straight: "Straight", dotted: "Dotted", triplet: "Triplet", x2: "\u00D72", x3: "\u00D73", x4: "\u00D74", "x1/2": "\u00D7\u00BD", "x1/4": "\u00D7\u00BC"};
+var LENGTH_MULTS = {x2: 2, x3: 3, x4: 4, "x1/2": 0.5, "x1/4": 0.25};
+function lengthParts(block) {
+  var idx = block.durationIndex, mult = block.durationMult || 1;
+  // The other stored lengths fold into a base and a multiplier: 4 bars is a whole x4.
+  var fold = {0: [2, 4], 1: [2, 2], 5: [4, 0.5], 6: [4, 0.25]}[idx];
+  if (fold) { idx = fold[0]; mult *= fold[1]; }
+  var base = {2: "whole", 3: "half", 4: "quarter"}[idx] || "whole";
+  var mod = "straight";
+  if (block.durationModifier === 1) mod = "dotted";
+  else if (block.durationModifier === 2) mod = "triplet";
+  else for (var k in LENGTH_MULTS) if (LENGTH_MULTS[k] === mult) mod = k;
+  return {base: base, mod: mod};
+}
+function lengthChange(base, mod) {
+  return {durationIndex: LENGTH_BASE_INDEX[base], durationModifier: mod === "dotted" ? 1 : mod === "triplet" ? 2 : 0, durationMult: LENGTH_MULTS[mod] || 1};
 }
 
 // bassToneIndex: -1 = Off, -2 = Random (among this chord's own tones), 0+ = a
@@ -725,11 +750,12 @@ function positionStep(block, chord, dir) {
   if (oct < POSITION_OCTAVES[0] || oct > POSITION_OCTAVES[1]) return null;
   return {inversion: inv, octave: oct};
 }
-// What the Position control shows: the tone in the bass, and the octave when it isn't 0
-// ("3", "\u266D7 +1", "5 \u22121").
+// What the Inversion control shows: the tone in the bass, and an arrow per octave the
+// chord has moved ("3", "\u266D7 \u2191", "5 \u2193\u2193").
 function positionLabel(block, chord) {
-  var oct = block.octave || 0;
-  return chord.toneLabels[chord.inversion] + (oct ? " " + (oct > 0 ? "+" + oct : "\u2212" + (-oct)) : "");
+  var oct = block.octave || 0, arrows = "";
+  for (var i = 0; i < Math.abs(oct); i++) arrows += oct > 0 ? "\u2191" : "\u2193";
+  return chord.toneLabels[chord.inversion] + (arrows ? " " + arrows : "");
 }
 
 // The numeral for a chromatic step above the key's root (a free chord's root), spelled
@@ -816,7 +842,8 @@ export {
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,
   getDurationBeats, defaultBlock, chordToneLabel, chordToneRoles, appliedFunctionLabel, blockLabel,
-  SHAPE_ORDER, ALTER_FIELDS, positionStep, positionLabel, stepNumeral, withoutAlter, alterRows, alterChange, alterFitToShape,
+  SHAPE_ORDER, ALTER_FIELDS, positionStep, positionLabel, stepNumeral,
+  LENGTH_BASES, LENGTH_MODS, LENGTH_MOD_LABELS, lengthParts, lengthChange, withoutAlter, alterRows, alterChange, alterFitToShape,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
   chordTonePitch, bassOctaveShift, computeBassPitchForBlock

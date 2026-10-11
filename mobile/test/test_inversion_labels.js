@@ -211,14 +211,14 @@ check('negative or missing inversion is treated as root position', api.buildChor
 report('clamping');
 
 // ----------------------------------------------------------------------
-section('the editor Position control');
-// Position is inversion + octave in one control: the label names the tone in the bass,
+section('the editor Inversion control');
+// Inversion is inversion + octave in one control: the label names the tone in the bass,
 // up moves the lowest note to the top, down the top note to the bottom.
 function findPosition() {
   var found = null;
   (function walk(el) {
     el.children.forEach(function (c) {
-      if (c.children && c.children.length >= 2 && c.children[0].textContent === 'Position') found = c.children[1];
+      if (c.children && c.children.length >= 2 && c.children[0].textContent === 'Inversion') found = c.children[1];
       walk(c);
     });
   })(byId['editor']);
@@ -256,7 +256,7 @@ tap(openEditorOn(down), 'down');
 check('down from root position: 2nd inversion an octave down (G below C E)', down.inversion === 2 && down.octave === -1);
 check('...so the top note really moved to the bottom', JSON.stringify(api.buildChord(down, 0, MODE.Ionian).pitches) === JSON.stringify([55, 60, 64]));
 var shownAfter = openEditorOn(down);
-check('...and the label says 5 with the octave', shown(shownAfter) === '5 −1');
-report('editor Position control');
+check('...and the label says 5 with a down arrow', shown(shownAfter) === '5 \u2193');
+report('editor Inversion control');
 
 console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');

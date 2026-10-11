@@ -24,7 +24,7 @@ Revised 2026-10-10, twice:
 | Category | Root | Base formula |
 |---|---|---|
 | **Diatonic** | A degree of the key's scale | The scale's own tones (Shape, Sus) |
-| **Borrowed** (diatonic plus a Mode) | Same degree, another mode's scale | That mode's tones. Chosen under Alter as "Borrow from", listed by result ("Dorian → F7"). |
+| **Borrowed** (diatonic plus a Mode) | Same degree, another mode's scale | That mode's tones. Chosen under Alter as "Borrow", listed by result ("Dorian → F7"). |
 | **Applied** | A function: dominant of, tritone sub of, leading-tone into a target | The function's formula |
 | **Free** | A step from the key's root (`freeRoot`, 0-11), shown as a numeral: ♭II, III, ♯IV… | A major triad, with a ♭7 when the shape has one. Alter shapes it from there (no Quality menu). |
 
