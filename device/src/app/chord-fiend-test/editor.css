@@ -262,3 +262,9 @@ fieldset.inspector.locked { opacity: 0.55; }
 .part-flyout-list { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; }
 .cf .part-flyout-list button { border: none; background: transparent; text-align: left; padding: 6px 8px; }
 .cf .part-flyout-list button:hover { background: var(--panel-2); }
+/* Length: the feel button cycles straight / dotted / triplet. Position: a down / up stepper. */
+.cf .length-inline .feel { width: 34px; padding: 4px 0; font-size: 15px; }
+.cf .length-inline .feel.on { color: var(--accent); border-color: var(--accent); }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.cf .stepper button { border: none; border-radius: 0; background: transparent; padding: 5px 10px; }
+.stepper > span { flex: 1; min-width: 56px; text-align: center; font-weight: 600; }

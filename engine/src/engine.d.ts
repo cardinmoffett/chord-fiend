@@ -140,3 +140,7 @@ export const SHAPE_ORDER: number[];
 export function stepNumeral(step: number, sharpen?: boolean): string;
 /** The block with every Alter choice cleared: what the key gives. */
 export function withoutAlter(block: Block): Block;
+/** Rotate the chord one note up (dir 1) or down (-1): the new inversion and octave, or null at the octave limit. */
+export function positionStep(block: Block, chord: Chord, dir: 1 | -1): { inversion: number; octave: number } | null;
+/** The Position control's text: the bass tone, plus the octave when it isn't 0 ("3", "♭7 +1"). */
+export function positionLabel(block: Block, chord: Chord): string;
