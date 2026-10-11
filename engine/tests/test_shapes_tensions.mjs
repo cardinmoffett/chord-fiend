@@ -117,5 +117,21 @@ check('13 -> 9 keeps the 3rd, 7th and 9th', [fit.third, fit.seventh, fit.ninth, 
 fit = alterFitToShape(blk({extensionIndex: SHAPE.add9, seventh: 'maj', ninth: '#9'}));
 check('-> add9 drops the 7th, keeps the 9th', [fit.seventh, fit.ninth], [undefined, '#9']);
 
+console.log('=== names that promise an interval get that interval, in any mode ===');
+var PHRYGIAN = 2, LYDIAN = 3;
+check('i sus2 in C Phrygian is C D G (a whole step), Csus2, not C Db G', [rootOrder(chord({susIndex: 1}, 0, PHRYGIAN)), sym({susIndex: 1}, 0, PHRYGIAN)], [pcs('C D G'), 'Csus2']);
+check('I sus4 in C Lydian is C F G (a perfect 4th), not C F# G', rootOrder(chord({susIndex: 2}, 0, LYDIAN)), pcs('C F G'));
+check('IV sus4 in C is F Bb C, Fsus4', [rootOrder(chord({degreeIndex: 3, susIndex: 2})), sym({degreeIndex: 3, susIndex: 2})], [pcs('F Bb C'), 'Fsus4']);
+check('i6 in C Aeolian is C Eb G A (a major 6th), Cm6', [rootOrder(chord({extensionIndex: SHAPE['6']}, 0, AEOLIAN)), sym({extensionIndex: SHAPE['6']}, 0, AEOLIAN)], [pcs('C Eb G A'), 'Cm6']);
+check('i add9 in C Phrygian is C Eb G D (a major 9th), Cmadd9', [rootOrder(chord({extensionIndex: SHAPE.add9}, 0, PHRYGIAN)), sym({extensionIndex: SHAPE.add9}, 0, PHRYGIAN)], [pcs('C Eb G D'), 'Cmadd9']);
+check('...and Alter can still flatten that 9th: Cm(addb9)', sym({extensionIndex: SHAPE.add9, ninth: 'b9'}, 0, PHRYGIAN), 'Cm(addb9)');
+
+console.log('=== stacked extensions come from the mode, and the name says when they are not natural ===');
+check('iii9 in C: E G B D F, Em7(b9), label iii7(' + F + '9)', [rootOrder(chord({degreeIndex: 2, extensionIndex: SHAPE['9']})), label({degreeIndex: 2, extensionIndex: SHAPE['9']})], [pcs('E G B D F'), {degree: 'iii7(' + F + '9)', name: 'Em7(b9)'}]);
+check('IV11 in C: F A C E G B, Fmaj9(#11)', [rootOrder(chord({degreeIndex: 3, extensionIndex: SHAPE['11']})), sym({degreeIndex: 3, extensionIndex: SHAPE['11']})], [pcs('F A C E G B'), 'Fmaj9(#11)']);
+check('i13 in C Phrygian: b9 and b13, named Cm11(b9,b13)', sym({extensionIndex: SHAPE['13']}, 0, PHRYGIAN), 'Cm11(b9,b13)');
+check('ii13 in C has only natural extensions: Dm13', sym({degreeIndex: 1, extensionIndex: SHAPE['13']}), 'Dm13');
+check('V13 in C: G13', sym({degreeIndex: 4, extensionIndex: SHAPE['13']}), 'G13');
+
 console.log(ok ? 'ALL PASSED' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);

@@ -235,11 +235,16 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     chordRootOffset = extended[degreeIndex];
     offsets = [];
     for (var k = 0; k < toneCount; k++) offsets.push(extended[degreeIndex + k*2] - chordRootOffset);
-    if (susName === "sus2") offsets[1] = extended[degreeIndex+1] - chordRootOffset;
-    else if (susName === "sus4") offsets[1] = extended[degreeIndex+3] - chordRootOffset;
+    // sus2, sus4, 6 and add9 name exact intervals -- a whole step, a perfect 4th, a major
+    // 6th, a major 9th -- so they're fixed, not read from the mode: Phrygian's half-step
+    // 2nd or Lydian's raised 4th would make a "sus2" or "sus4" that isn't one. (Alter can
+    // still change the added 9th.) The stacked 9th, 11th and 13th do come from the mode,
+    // and the chord's name says so when they aren't natural (iii9 in C reads iii7(b9)).
+    if (susName === "sus2") offsets[1] = 2;
+    else if (susName === "sus4") offsets[1] = 5;
 
-    if (is6) offsets.push(extended[degreeIndex+5] - chordRootOffset);
-    if (addNine) offsets.push(extended[degreeIndex+8] - chordRootOffset);
+    if (is6) offsets.push(9);
+    if (addNine) offsets.push(14);
   }
 
   // ALTER: every chord but the fixed leading-tone dim7 can step off what its source
@@ -265,17 +270,21 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     // sus2 is already the 9th's note and sus4 the 11th's, so those rows step aside.
     if (ninthSlot >= 0 && effectiveSus !== "sus2" && NINTHS[block.ninth] !== undefined) {
       offsets[ninthSlot] = NINTHS[block.ninth];
-      if (block.ninth !== "9") tensions.push(block.ninth);
     }
     if (eleventhSlot >= 0 && effectiveSus !== "sus4" && ELEVENTHS[block.eleventh] !== undefined) {
       offsets[eleventhSlot] = ELEVENTHS[block.eleventh];
-      if (block.eleventh !== "11") tensions.push(block.eleventh);
     }
     if (thirteenthSlot >= 0 && THIRTEENTHS[block.thirteenth] !== undefined) {
       offsets[thirteenthSlot] = THIRTEENTHS[block.thirteenth];
-      if (block.thirteenth !== "13") tensions.push(block.thirteenth);
     }
   }
+  // Every extension that isn't natural is named, whether Alter or the mode put it there:
+  // iii9 in C has an F, a flat 9, so it reads iii7(b9) / Em7(b9), not Em9. (A sus2 is
+  // already the 9th's note and a sus4 the 11th's, so those aren't counted twice.)
+  [[ninthSlot, 9, effectiveSus !== "sus2"], [eleventhSlot, 11, effectiveSus !== "sus4"], [thirteenthSlot, 13, true]].forEach(function (x) {
+    if (x[0] < 0 || !x[2] || offsets[x[0]] === CHORD_DEGREE_REFERENCE[x[1]]) return;
+    tensions.push(chordToneLabel(offsets[x[0]], x[1]).replace(/\u266D/g, "b").replace(/\u266F/g, "#"));
+  });
   // What each Alter row reads on this chord (null where the chord has no such tone).
   var alter = {
     third: effectiveSus !== "none" ? effectiveSus : valueOf(THIRDS, offsets[1]),
