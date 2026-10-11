@@ -1,8 +1,10 @@
 // Service worker: lets the app open with no connection.
-// Every file is served from the cache straight away, then refreshed from the network in
-// the background, so a new version shows up the next time the app is opened.
+// The page itself (index.html) comes from the network first, so a new version shows up
+// the first time the app is opened after it's published; the cache is the fallback when
+// offline. Other files are served from the cache straight away and refreshed in the
+// background.
 // Bump VERSION when the file list changes.
-var VERSION = 'chord-fiend-v1';
+var VERSION = 'chord-fiend-v2';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'vendor/Tone.js'];
 
 self.addEventListener('install', function (e) {
@@ -20,6 +22,18 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  var isPage = req.mode === 'navigate' || /\/(index\.html)?$/.test(url.pathname);
+  if (isPage) {
+    e.respondWith(caches.open(VERSION).then(function (cache) {
+      return fetch(req).then(function (res) {
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      }).catch(function () {
+        return cache.match(req, {ignoreSearch: true}).then(function (hit) { return hit || cache.match('./'); });
+      });
+    }));
+    return;
+  }
   e.respondWith(caches.open(VERSION).then(function (cache) {
     return cache.match(req, {ignoreSearch: true}).then(function (hit) {
       var fresh = fetch(req).then(function (res) {
