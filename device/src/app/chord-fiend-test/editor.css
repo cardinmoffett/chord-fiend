@@ -268,3 +268,17 @@ fieldset.inspector.locked { opacity: 0.55; }
 .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
 .cf .stepper button { border: none; border-radius: 0; background: transparent; padding: 5px 10px; }
 .stepper > span { flex: 1; min-width: 56px; text-align: center; font-weight: 600; }
+/* The drawer: tabs, chord pads, then the fields; Alter's rows pair up. */
+.drawer-stack { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.drawer-stack > .segmented { width: 100%; }
+.drawer-stack > .segmented button { flex: 1; }
+.pads { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.pads.free { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.cf .pad { display: flex; flex-direction: column; align-items: center; padding: 4px 0; min-height: 44px; border: 2px solid transparent; border-radius: 8px; color: #1b1b1d; min-width: 0; }
+.cf .pad b { font-size: 15px; line-height: 1.1; white-space: nowrap; }
+.cf .pad small { font-size: 10px; opacity: 0.75; white-space: nowrap; overflow: hidden; max-width: 100%; }
+.cf .pad em { font-style: normal; font-size: 9px; opacity: 0.75; }
+.cf .pad.on { border-color: var(--text); }
+.cf .pad.out { background: transparent; border-color: var(--line); color: var(--dim); }
+.cf .pad.out.on { border-color: var(--text); }
+.alter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; }

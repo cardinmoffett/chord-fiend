@@ -1,45 +1,54 @@
 import {
+  APPLIED_FUNCTIONS,
   BLOCK_MODE_NAMES,
-  DURATION_MODIFIER_NAMES,
-  DURATION_NAMES,
   EXTENSION_NAMES,
+  LENGTH_BASES,
+  LENGTH_MOD_LABELS,
   MASTER_MODE_NAMES,
+  MODES,
   SHAPE_ORDER,
   alterChange,
   alterFitToShape,
   alterRows,
+  blockLabel as engineBlockLabel,
   buildChord,
   degreeLabels,
   getChordSymbol,
+  lengthChange,
+  lengthParts,
   positionLabel,
   positionStep,
   stepNumeral,
   withoutAlter,
 } from "../../../../engine/src/engine.js";
+import type { LengthMod } from "../../../../engine/src/engine.js";
 import { IndexDropdown } from "./Dropdown";
+import { blockColor } from "./song";
 import type { Block, Song } from "./song";
 
-/** The kinds: the key's own degrees, the three applied functions (sharing the degree list as their target), and Free. */
-const KINDS = [
-  { value: "key", label: "Key" },
-  { value: "dominant", label: "V/" },
-  { value: "tritoneSub", label: "subV/" },
-  { value: "leadingTone", label: "vii\u00B0/" },
+const TABS = [
+  { value: "diatonic", label: "Diatonic" },
+  { value: "applied", label: "Applied" },
   { value: "free", label: "Free" },
 ] as const;
-/** Length buttons run shortest to longest (DURATION_NAMES is stored longest first). */
-const DURATION_ORDER = [6, 5, 4, 3, 2, 1, 0];
-/** Straight, dotted, triplet: one button that cycles. */
-const FEEL_SYMBOLS = ["\u2669", "\u2669.", "\u2669\u00B3"];
+const FUNCTION_NAMES: Record<string, string> = { dominant: "Dominant", tritoneSub: "Tritone sub", leadingTone: "Leading tone" };
+const FUNCTION_PREFIX: Record<string, string> = { dominant: "V/", tritoneSub: "subV/", leadingTone: "vii\u00B0/" };
+/** The Length menu: feels, then multipliers that tie copies together, then splits. */
+const LENGTH_MENU: LengthMod[] = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
+const NOTE_LABELS: Record<string, string> = { quarter: "\u2669", half: "\u{1D15E}", whole: "\u{1D15D}" };
 const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
-/** A new root or kind (category, degree, mode, function, target, free root) starts with no alterations. */
+/** A new root or kind (tab, degree, function, target, free root, borrowed mode) starts with no alterations. */
 const CLEAR_ALTER: Partial<Block> = {
   third: undefined, fifth: undefined, seventh: undefined, ninth: undefined, eleventh: undefined, thirteenth: undefined,
   aug: 0, flat5: 0, susIndex: 0,
 };
-const DROP_SHORT = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
+const SPREAD_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
 
-/** The editor for the selected block: every setting a block has, as in the app's editor panel. */
+/**
+ * The editor for the selected block, laid out like the phone app's drawer: tabs (where the
+ * root comes from), colored chord pads, Length, Shape / Inversion / Spread, then Alter.
+ * It never restates the chord; the selected block does.
+ */
 export function Inspector({
   block,
   song,
@@ -64,134 +73,157 @@ export function Inspector({
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
-  const chord = buildChord(block, song.rootIndex, song.modeIndex);
-  const homeLabels = degreeLabels(MASTER_MODE_NAMES[song.modeIndex]);
-  const degreeMode = block.blockModeIndex ? BLOCK_MODE_NAMES[block.blockModeIndex] : MASTER_MODE_NAMES[song.modeIndex];
-  const isLeadingTone = block.chordSource === "applied" && block.appliedFunction === "leadingTone";
-  // Alter: one row per tone the chord has (the engine's alterRows decides which), showing
-  // the chord as it is (a V7: 3, 5, \u266D7). Choosing the key's own value clears the change.
-  const rows = alterRows(block, song.rootIndex, song.modeIndex);
+  const root = song.rootIndex;
+  const mode = song.modeIndex;
+  const chord = buildChord(block, root, mode);
+  const tab = block.chordSource;
+  const isLeadingTone = tab === "applied" && block.appliedFunction === "leadingTone";
+  const rows = alterRows(block, root, mode);
   const rootChange = (change: Partial<Block>) => onChange({ ...change, ...CLEAR_ALTER });
-  const kind = block.chordSource === "free" ? "free" : block.chordSource === "applied" ? block.appliedFunction : "key";
   const up = positionStep(block, chord, 1);
   const down = positionStep(block, chord, -1);
-  // Borrow from, listed by result ("Dorian \u2192 F7"), each shown without alterations
-  // (picking one clears them).
+  const parts = lengthParts(block);
+  const plain = withoutAlter(block);
+  const nameOf = (b: Block) => getChordSymbol(buildChord(b, root, mode), root).replace(/ \(.*\)$/, "");
+
+  // Switching tabs keeps the root where it can: a degree becomes the applied target (and
+  // back), and Free starts on the chord's own root.
+  const switchTab = (next: Block["chordSource"]) => {
+    if (next === tab) return;
+    const change: Partial<Block> = { chordSource: next, blockModeIndex: 0 };
+    if (next === "free") change.freeRoot = (((chord.chordRootPitch - root) % 12) + 12) % 12;
+    else if (next === "applied" && tab === "diatonic") change.appliedTargetIndex = block.degreeIndex;
+    else if (next === "diatonic" && tab === "applied") change.degreeIndex = block.appliedTargetIndex;
+    rootChange(change);
+  };
+
+  // Pads: the key's seven chords (the selected one shows what the block really is, borrowed
+  // mode included), the seven targets of the chosen applied function (I included), or all
+  // twelve free steps (the key's own tones keep their color).
+  let pads: { top?: string; main: string; sub: string; color?: string; on: boolean; pick: () => void }[];
+  if (tab === "free") {
+    const scale = MODES[MASTER_MODE_NAMES[mode]];
+    pads = Array.from({ length: 12 }, (_, step) => {
+      const cand: Block = { ...plain, chordSource: "free", freeRoot: step, blockModeIndex: 0 };
+      const degree = scale.indexOf(step);
+      return {
+        main: stepNumeral(step),
+        sub: engineBlockLabel(cand, root, mode).name,
+        color: degree >= 0 ? blockColor({ ...plain, chordSource: "diatonic", degreeIndex: degree, blockModeIndex: 0 }) : undefined,
+        on: (block.freeRoot ?? 0) === step,
+        pick: () => rootChange({ freeRoot: step }),
+      };
+    });
+  } else if (tab === "applied") {
+    pads = degreeLabels(MASTER_MODE_NAMES[mode]).map((target, i) => {
+      const cand: Block = { ...plain, chordSource: "applied", appliedTargetIndex: i, blockModeIndex: 0 };
+      return { top: FUNCTION_PREFIX[block.appliedFunction], main: target, sub: nameOf(cand), color: blockColor(cand), on: block.appliedTargetIndex === i, pick: () => rootChange({ appliedTargetIndex: i }) };
+    });
+  } else {
+    pads = Array.from({ length: 7 }, (_, d) => {
+      const on = block.degreeIndex === d;
+      const cand: Block = { ...plain, chordSource: "diatonic", degreeIndex: d, blockModeIndex: on ? block.blockModeIndex : 0 };
+      const lbl = engineBlockLabel(cand, root, mode);
+      // A degree change keeps the borrowed mode.
+      return { main: lbl.degree.replace(/^([\u266D\u266F]*[IVXivx]+[\u00B0+]?).*$/, "$1"), sub: lbl.name, color: blockColor(cand), on, pick: () => rootChange({ degreeIndex: d, blockModeIndex: block.blockModeIndex }) };
+    });
+  }
+
+  // Borrow (Diatonic only): the same degree in another mode, listed by result.
   const borrowLabels = BLOCK_MODE_NAMES.map((m, i) => {
-    const c = buildChord({ ...withoutAlter(block), blockModeIndex: i }, song.rootIndex, song.modeIndex);
-    return (i === 0 ? "Key" : m) + " \u2192 " + getChordSymbol(c, song.rootIndex).replace(/ \(.*\)$/, "");
+    const c = buildChord({ ...plain, blockModeIndex: i }, root, mode);
+    return (i === 0 ? "Key" : m) + " \u2192 " + getChordSymbol(c, root).replace(/ \(.*\)$/, "");
   });
+  const alterOrder = tab === "diatonic" ? ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"] : ["third", "fifth", "seventh", "ninth", "eleventh", "thirteenth"];
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
     <fieldset className={locked ? "inspector locked" : "inspector"} disabled={locked}>
-      <div className="inspector-grid">
-        {/* 1. Kind + root. Key ii -> V/ is V/ii: the degree carries over as the target. */}
-        <Field label="Chord" wide>
+      <div className="drawer-stack">
+        <Segmented options={TABS.map((t) => t.label)} value={TABS.findIndex((t) => t.value === tab)} onChange={(i) => switchTab(TABS[i].value)} />
+        {tab === "applied" && (
           <Segmented
-            options={KINDS.map((k) => k.label)}
-            value={KINDS.findIndex((k) => k.value === kind)}
-            onChange={(i) => {
-              const next = KINDS[i].value;
-              const degree = block.chordSource === "applied" ? block.appliedTargetIndex : block.chordSource === "free" ? null : block.degreeIndex;
-              if (next === "free") {
-                // Free keeps the root you have; a free chord starts as a major triad (\u266D7 with a 7th).
-                rootChange({
-                  chordSource: "free",
-                  blockModeIndex: 0,
-                  ...(block.chordSource !== "free" ? { freeRoot: (((chord.chordRootPitch - song.rootIndex) % 12) + 12) % 12 } : {}),
-                });
-              } else if (next === "key") {
-                rootChange({ chordSource: "diatonic", blockModeIndex: 0, ...(degree !== null ? { degreeIndex: degree } : {}) });
-              } else {
-                rootChange({ chordSource: "applied", appliedFunction: next, blockModeIndex: 0, ...(degree !== null ? { appliedTargetIndex: degree } : {}) });
-              }
-            }}
+            options={APPLIED_FUNCTIONS.map((f) => FUNCTION_NAMES[f])}
+            value={Math.max(0, APPLIED_FUNCTIONS.indexOf(block.appliedFunction))}
+            onChange={(i) => rootChange({ appliedFunction: APPLIED_FUNCTIONS[i] as Block["appliedFunction"] })}
           />
-        </Field>
-        {block.chordSource === "diatonic" && (
-          <Field label="Degree">
-            <Select value={block.degreeIndex} options={degreeLabels(degreeMode)} onChange={(v) => rootChange({ degreeIndex: v, blockModeIndex: block.blockModeIndex })} />
-          </Field>
         )}
-        {block.chordSource === "applied" && (
-          <Field label="Of">
-            <Select value={block.appliedTargetIndex} options={homeLabels} onChange={(v) => rootChange({ appliedTargetIndex: v })} />
+        <div className={tab === "free" ? "pads free" : "pads"}>
+          {pads.map((p, i) => (
+            <button key={i} type="button" className={(p.on ? "pad on" : "pad") + (p.color ? "" : " out")} style={p.color ? { background: p.color } : undefined} onClick={p.pick}>
+              {p.top && <em>{p.top}</em>}
+              <b>{p.main}</b>
+              <small>{p.sub}</small>
+            </button>
+          ))}
+        </div>
+
+        <div className="inspector-grid">
+          <Field label="Length" wide>
+            <span className="length-inline">
+              <Segmented
+                options={LENGTH_BASES.map((b) => NOTE_LABELS[b])}
+                value={LENGTH_BASES.indexOf(parts.base)}
+                onChange={(i) => onChange(lengthChange(LENGTH_BASES[i], parts.mod))}
+              />
+              <Select
+                value={LENGTH_MENU.indexOf(parts.mod)}
+                options={LENGTH_MENU.map((m) => LENGTH_MOD_LABELS[m])}
+                onChange={(v) => onChange(lengthChange(parts.base, LENGTH_MENU[v]))}
+              />
+            </span>
           </Field>
-        )}
-        {block.chordSource === "free" && (
-          <Field label="Root">
+          <Field label="Shape">
             <Select
-              value={block.freeRoot ?? 0}
-              options={Array.from({ length: 12 }, (_, step) => stepNumeral(step, chord.offsets[1] === 3 && chord.offsets[2] === 6))}
-              onChange={(v) => rootChange({ freeRoot: v })}
+              value={Math.max(0, SHAPE_ORDER.indexOf(block.extensionIndex))}
+              options={SHAPE_ORDER.map((i) => SHAPE_LABELS[EXTENSION_NAMES[i]])}
+              disabled={isLeadingTone}
+              onChange={(v) => {
+                // A new shape keeps only the alterations it still has tones for.
+                const fitted = alterFitToShape({ ...block, extensionIndex: SHAPE_ORDER[v] });
+                onChange({ extensionIndex: SHAPE_ORDER[v], seventh: fitted.seventh, ninth: fitted.ninth, eleventh: fitted.eleventh, thirteenth: fitted.thirteenth });
+              }}
             />
           </Field>
-        )}
-
-        {/* 2. Length, one click, with the feel cycling straight / dotted / triplet. */}
-        <Field label="Length" wide>
-          <span className="length-inline">
-            <Segmented
-              options={DURATION_ORDER.map((i) => DURATION_NAMES[i].replace(/\/1$/, ""))}
-              value={DURATION_ORDER.indexOf(block.durationIndex)}
-              onChange={(i) => onChange({ durationIndex: DURATION_ORDER[i] })}
-            />
-            <button
-              type="button"
-              className={block.durationModifier ? "feel on" : "feel"}
-              title={DURATION_MODIFIER_NAMES[block.durationModifier || 0] + " (click to change)"}
-              onClick={() => onChange({ durationModifier: ((block.durationModifier || 0) + 1) % 3 })}
-            >
-              {FEEL_SYMBOLS[block.durationModifier || 0]}
-            </button>
-          </span>
-        </Field>
-
-        {/* 3. Shape and Position (inversion + octave, a note at a time). */}
-        <Field label="Shape">
-          <Select
-            value={Math.max(0, SHAPE_ORDER.indexOf(block.extensionIndex))}
-            options={SHAPE_ORDER.map((i) => SHAPE_LABELS[EXTENSION_NAMES[i]])}
-            disabled={isLeadingTone}
-            onChange={(v) => {
-              // A new shape keeps only the alterations it still has tones for.
-              const fitted = alterFitToShape({ ...block, extensionIndex: SHAPE_ORDER[v] });
-              onChange({ extensionIndex: SHAPE_ORDER[v], seventh: fitted.seventh, ninth: fitted.ninth, eleventh: fitted.eleventh, thirteenth: fitted.thirteenth });
-            }}
-          />
-        </Field>
-        <Field label="Position">
-          <span className="stepper">
-            <button type="button" title="Top note to the bottom" disabled={!down} onClick={() => down && onChange(down)}>
-              ▼
-            </button>
-            <span>{positionLabel(block, chord)}</span>
-            <button type="button" title="Bottom note to the top" disabled={!up} onClick={() => up && onChange(up)}>
-              ▲
-            </button>
-          </span>
-        </Field>
-        <Field label="Drop">
-          <Select value={block.dropIndex} options={DROP_SHORT} onChange={(v) => onChange({ dropIndex: v })} />
-        </Field>
-
-        {/* 4. Alter: Borrow from (Key chords), then a row per chord tone. */}
-        {block.chordSource === "diatonic" && (
-          <Field label="Borrow from" altered={!!block.blockModeIndex}>
-            <Select value={block.blockModeIndex} options={borrowLabels} onChange={(v) => rootChange({ blockModeIndex: v })} />
+          <Field label="Inversion">
+            <span className="stepper">
+              <button type="button" title="Top note to the bottom" disabled={!down} onClick={() => down && onChange(down)}>
+                ▼
+              </button>
+              <span>{positionLabel(block, chord)}</span>
+              <button type="button" title="Bottom note to the top" disabled={!up} onClick={() => up && onChange(up)}>
+                ▲
+              </button>
+            </span>
           </Field>
-        )}
-        {rows.map((row) => (
-          <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
-            <Segmented
-              options={row.choices.map((c) => c.label)}
-              value={row.choices.findIndex((c) => c.value === row.value)}
-              home={row.choices.findIndex((c) => c.value === row.keyValue)}
-              onChange={(i) => onChange(alterChange(block, row.field, row.choices[i].value, song.rootIndex, song.modeIndex))}
-            />
+          <Field label="Spread">
+            <Select value={block.dropIndex} options={SPREAD_NAMES} onChange={(v) => onChange({ dropIndex: v })} />
           </Field>
-        ))}
+        </div>
+
+        <div className="alter-grid">
+          {alterOrder.map((key) => {
+            if (key === "borrow") {
+              return (
+                <Field key="borrow" label="Borrow" altered={!!block.blockModeIndex}>
+                  <Select value={block.blockModeIndex} options={borrowLabels} onChange={(v) => rootChange({ blockModeIndex: v })} />
+                </Field>
+              );
+            }
+            const row = rows.find((r) => r.field === key);
+            if (!row) return null;
+            return (
+              <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
+                <Segmented
+                  options={row.choices.map((c) => c.label)}
+                  value={row.choices.findIndex((c) => c.value === row.value)}
+                  home={row.choices.findIndex((c) => c.value === row.keyValue)}
+                  onChange={(i) => onChange(alterChange(block, row.field, row.choices[i].value, root, mode))}
+                />
+              </Field>
+            );
+          })}
+        </div>
       </div>
 
       <div className="inspector-actions">

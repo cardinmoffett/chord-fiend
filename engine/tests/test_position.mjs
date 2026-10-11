@@ -39,8 +39,9 @@ console.log('=== limits and labels ===');
 check('no step past octave +3', positionStep(blk({octave: 3, inversion: 2}), buildChord(blk({octave: 3, inversion: 2}), 0, 0), 1), null);
 check('no step below octave -3', positionStep(blk({octave: -3}), buildChord(blk({octave: -3}), 0, 0), -1), null);
 check('label: the bass tone', positionLabel(blk({inversion: 1}), buildChord(blk({inversion: 1}), 0, 0)), '3');
-check('label: with the octave when it is not 0', positionLabel(blk({degreeIndex: 4, extensionIndex: 2, inversion: 3, octave: 1}), buildChord(blk({degreeIndex: 4, extensionIndex: 2, inversion: 3, octave: 1}), 0, 0)), '♭7 +1');
-check('label: a negative octave', positionLabel(blk({inversion: 2, octave: -1}), buildChord(blk({inversion: 2, octave: -1}), 0, 0)), '5 −1');
+check('label: an arrow when the chord has moved up an octave', positionLabel(blk({degreeIndex: 4, extensionIndex: 2, inversion: 3, octave: 1}), buildChord(blk({degreeIndex: 4, extensionIndex: 2, inversion: 3, octave: 1}), 0, 0)), '♭7 ↑');
+check('label: an octave down', positionLabel(blk({inversion: 2, octave: -1}), buildChord(blk({inversion: 2, octave: -1}), 0, 0)), '5 ↓');
+check('label: two octaves down shows two arrows', positionLabel(blk({octave: -2}), buildChord(blk({octave: -2}), 0, 0)), '1 ↓↓');
 check('a stored inversion past the chord\'s tones steps from the real one', positionStep(blk({inversion: 6}), buildChord(blk({inversion: 6}), 0, 0), 1), {inversion: 0, octave: 1});
 
 console.log(ok ? 'ALL PASSED' : 'SOME FAILED');

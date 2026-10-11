@@ -69,7 +69,7 @@ names.forEach(function (n) {
   if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
   same(n, orig[n], engine[n]);
 });
-same('the only additions are blockLabel, shapes, Alter, Position and step numerals', additions.slice().sort(), ['ALTER_FIELDS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'blockLabel', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
+same('the only additions are blockLabel, shapes, Alter, Position, Length and step numerals', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'blockLabel', 'lengthChange', 'lengthParts', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 

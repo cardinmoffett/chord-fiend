@@ -573,26 +573,44 @@
 
 
 
-  /* The editor is fixed rows, most-used first, so nothing moves when the category
-     changes: Chord / Root (two slots) / Shape + Length / Voicing / Alter / actions. */
+  /* The editor, top to bottom: tabs, chord pads, Length, Shape / Inversion / Spread, then
+     Alter (collapsed). The drawer never restates the chord; the selected block does. */
   .editor-grid {
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
-  .editor-row { display: grid; gap: 8px; align-items: end; }
-  .editor-row.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .editor-row.voicing { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .editor-row.voicing .bass-btn { width: 100%; }
-  .editor-row .field { min-width: 0; }
-  .editor-row.kind { grid-template-columns: auto minmax(0, 1fr); }
-  .editor-row.kind .toggle-row button { padding: 5px 7px; }
-  .editor-row.length .toggle-row button { flex: 1; padding: 6px 0; font-size: 13px; }
-  .editor-row.length .toggle-row .feel-btn {
-    flex: 0 0 38px; font-size: 17px; line-height: 1; padding: 3px 0;
-    border-left: 1px solid var(--line); border-radius: 0 5px 5px 0; color: var(--text);
+  .editor-tabs { display: flex; background: var(--bg-elevated); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
+  .editor-tabs button {
+    flex: 1; background: none; border: none; border-radius: 7px; padding: 6px 0;
+    font: inherit; font-size: 13px; font-weight: 700; color: var(--text-dim);
   }
-  .editor-row.length .toggle-row .feel-btn.changed { color: var(--accent); }
+  .editor-tabs button.on { background: var(--bg-panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+  .fn-row { display: flex; gap: 6px; }
+  .fn-row button {
+    flex: 1; background: none; border: 1px solid var(--line); border-radius: 16px; padding: 5px 0;
+    font: inherit; font-size: 12px; font-weight: 700; color: var(--text-dim);
+  }
+  .fn-row button.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .pads { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+  .pads.free { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .pad {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 48px; padding: 4px 0; border: 2px solid transparent; border-radius: 9px;
+    font: inherit; color: #1b1b22; cursor: pointer; min-width: 0;
+  }
+  .pad b { font-size: 16px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+  .pad small { font-size: 10px; font-weight: 600; opacity: 0.7; white-space: nowrap; overflow: hidden; max-width: 100%; }
+  .pad em { font-style: normal; font-size: 9px; font-weight: 700; opacity: 0.7; line-height: 1.1; }
+  .pad.on { border-color: var(--text); }
+  .pad.out { background: var(--bg-elevated); color: var(--text-dim); border-color: var(--line); }
+  .pad.out.on { border-color: var(--text); }
+  .editor-row { display: grid; gap: 8px; align-items: end; }
+  .editor-row.length { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  .editor-row.three { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr); }
+  .editor-row .field { min-width: 0; }
+  .note-values button { flex: 1; display: flex; align-items: center; justify-content: center; padding: 3px 0; color: var(--text); }
+  .note-values button.active { color: #1a1200; }
   .stepper {
     display: flex; align-items: center;
     background: var(--bg-elevated); border: 1px solid var(--line); border-radius: 7px;
@@ -600,16 +618,14 @@
   }
   .stepper button {
     background: none; border: none; color: var(--text);
-    width: 28px; height: 100%; font-size: 16px; font-family: inherit; cursor: pointer;
+    width: 28px; height: 100%; font-size: 14px; font-family: inherit; cursor: pointer;
   }
   .stepper button:disabled { color: var(--text-faint); }
-  .stepper span { flex: 1; text-align: center; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; }
-  .bass-btn {
-    height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line);
-    background: var(--bg-elevated); color: var(--text-dim); font: inherit; font-size: 12px; font-weight: 600;
-  }
-  .bass-btn.active { background: var(--accent); border-color: var(--accent); color: #1a1200; }
-  .alter-rows { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .stepper span { flex: 1; text-align: center; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; }
+  /* Alter's rows pair up: Borrow beside 5th, 3rd beside 7th, 9th beside 11th. */
+  .alter-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 8px; align-items: end; }
+  .alter-rows .field { min-width: 0; }
+  .alter-rows .toggle-row button { flex: 1; padding: 5px 2px; }
   .editor-grid .block-actions { margin-left: 0; justify-content: flex-end; }
 
   .block-actions {
@@ -1565,10 +1581,35 @@ function getChordSymbol(chord, masterRootIndex) {
 }
 
 function getDurationBeats(block) {
-  var base = DURATION_BEATS[DURATION_NAMES[block.durationIndex]];
+  var base = DURATION_BEATS[DURATION_NAMES[block.durationIndex]] * (block.durationMult || 1);
   if (block.durationModifier === 1) return base * 1.5;
   if (block.durationModifier === 2) return base * (2/3);
   return base;
+}
+
+// LENGTH as editors show it: a base note (quarter, half, whole -- the lengths chords
+// take) and one modifier: a feel (straight, dotted, triplet) or a multiplier (x2, x3, x4
+// tie copies together; x1/2, x1/4 split it). Stored as durationIndex (the base),
+// durationModifier (the feel) and durationMult (an engine addition; missing means 1).
+var LENGTH_BASES = ["quarter", "half", "whole"];
+var LENGTH_BASE_INDEX = {quarter: 4, half: 3, whole: 2};
+var LENGTH_MODS = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
+var LENGTH_MOD_LABELS = {straight: "Straight", dotted: "Dotted", triplet: "Triplet", x2: "\u00D72", x3: "\u00D73", x4: "\u00D74", "x1/2": "\u00D7\u00BD", "x1/4": "\u00D7\u00BC"};
+var LENGTH_MULTS = {x2: 2, x3: 3, x4: 4, "x1/2": 0.5, "x1/4": 0.25};
+function lengthParts(block) {
+  var idx = block.durationIndex, mult = block.durationMult || 1;
+  // The other stored lengths fold into a base and a multiplier: 4 bars is a whole x4.
+  var fold = {0: [2, 4], 1: [2, 2], 5: [4, 0.5], 6: [4, 0.25]}[idx];
+  if (fold) { idx = fold[0]; mult *= fold[1]; }
+  var base = {2: "whole", 3: "half", 4: "quarter"}[idx] || "whole";
+  var mod = "straight";
+  if (block.durationModifier === 1) mod = "dotted";
+  else if (block.durationModifier === 2) mod = "triplet";
+  else for (var k in LENGTH_MULTS) if (LENGTH_MULTS[k] === mult) mod = k;
+  return {base: base, mod: mod};
+}
+function lengthChange(base, mod) {
+  return {durationIndex: LENGTH_BASE_INDEX[base], durationModifier: mod === "dotted" ? 1 : mod === "triplet" ? 2 : 0, durationMult: LENGTH_MULTS[mod] || 1};
 }
 
 // bassToneIndex: -1 = Off, -2 = Random (among this chord's own tones), 0+ = a
@@ -1877,11 +1918,12 @@ function positionStep(block, chord, dir) {
   if (oct < POSITION_OCTAVES[0] || oct > POSITION_OCTAVES[1]) return null;
   return {inversion: inv, octave: oct};
 }
-// What the Position control shows: the tone in the bass, and the octave when it isn't 0
-// ("3", "\u266D7 +1", "5 \u22121").
+// What the Inversion control shows: the tone in the bass, and an arrow per octave the
+// chord has moved ("3", "\u266D7 \u2191", "5 \u2193\u2193").
 function positionLabel(block, chord) {
-  var oct = block.octave || 0;
-  return chord.toneLabels[chord.inversion] + (oct ? " " + (oct > 0 ? "+" + oct : "\u2212" + (-oct)) : "");
+  var oct = block.octave || 0, arrows = "";
+  for (var i = 0; i < Math.abs(oct); i++) arrows += oct > 0 ? "\u2191" : "\u2193";
+  return chord.toneLabels[chord.inversion] + (arrows ? " " + arrows : "");
 }
 
 // The numeral for a chromatic step above the key's root (a free chord's root), spelled
@@ -3334,33 +3376,14 @@ function fieldSelect(labelText, options, value, onChange) {
   return wrap;
 }
 
-// A compact \u2212 / + stepper over a list of choices (by index), for settings you nudge
-// rather than pick from a list (drop).
-function fieldStepper(labelText, names, value, onChange) {
-  var wrap = document.createElement("div");
-  wrap.className = "field";
-  var label = document.createElement("label");
-  label.textContent = labelText;
-  var box = document.createElement("div");
-  box.className = "stepper";
-  var down = document.createElement("button"); down.textContent = "\u2212";
-  var shown = document.createElement("span"); shown.textContent = names[value] !== undefined ? names[value] : "";
-  var up = document.createElement("button"); up.textContent = "+";
-  down.disabled = value <= 0; up.disabled = value >= names.length - 1;
-  down.addEventListener("click", function () { if (value > 0) onChange(value - 1); });
-  up.addEventListener("click", function () { if (value < names.length - 1) onChange(value + 1); });
-  box.appendChild(down); box.appendChild(shown); box.appendChild(up);
-  wrap.appendChild(label); wrap.appendChild(box);
-  return wrap;
-}
-
-// POSITION: \u25BC moves the top note to the bottom, \u25B2 the lowest note to the top; the
-// octave changes along the way, so a chord never jumps (the engine's positionStep).
+// INVERSION: \u25BC moves the top note to the bottom, \u25B2 the lowest note to the top; the
+// octave changes along the way, so a chord never jumps (the engine's positionStep). The
+// label is the tone in the bass, with an arrow per octave moved ("3 \u2193").
 function fieldPosition(block, chord, onDone) {
   var wrap = document.createElement("div");
   wrap.className = "field";
   var label = document.createElement("label");
-  label.textContent = "Position";
+  label.textContent = "Inversion";
   var box = document.createElement("div");
   box.className = "stepper";
   var steps = [-1, 1].map(function (dir) {
@@ -3410,7 +3433,7 @@ function toggleGroup(labelText, options, value, onChange) {
 // at the middle flip the sheet's state, which is exactly the jitter this
 // avoids.
 var editorExpanded = false;
-var EDITOR_COLLAPSED_HEIGHT = 176; // shows the first three editor rows: kind + root, Length, Shape + Position
+var EDITOR_COLLAPSED_HEIGHT = 204; // shows tabs, pads and Length
 var EDITOR_SNAP_FRACTION = 0.2; // must cross 20% of the full travel range to flip state
 
 // Remembers the workspace's scroll position from the moment the drawer last
@@ -3666,12 +3689,86 @@ document.addEventListener("touchmove", function (e) {
   e.preventDefault();
 }, {passive: false});
 
-// The editor's kinds: the key's own degrees, the three applied functions (each a kind of
-// its own, sharing the degree dropdown as their target), and Free.
-var EDITOR_KINDS = [{value: "key", label: "Key"}, {value: "dominant", label: "V/"}, {value: "tritoneSub", label: "subV/"}, {value: "leadingTone", label: "vii\u00B0/"}, {value: "free", label: "Free"}];
-// Length buttons run shortest to longest (DURATION_NAMES is stored longest first).
-var DURATION_ORDER = [6, 5, 4, 3, 2, 1, 0];
-var FEEL_SYMBOLS = ["\u2669", "\u2669.", "\u2669\u00B3"];
+var APPLIED_FUNCTION_NAMES = {dominant: "Dominant", tritoneSub: "Tritone sub", leadingTone: "Leading tone"};
+var APPLIED_FUNCTION_PREFIX = {dominant: "V/", tritoneSub: "subV/", leadingTone: "vii°/"};
+var SPREAD_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
+// Note icons for the Length buttons, drawn rather than typed: the music-symbol characters
+// for half and whole notes don't show reliably on iPhone.
+var NOTE_ICONS = {
+  quarter: '<svg width="14" height="22" viewBox="0 0 14 22" aria-hidden="true"><ellipse cx="6" cy="17" rx="5" ry="3.6" transform="rotate(-20 6 17)" fill="currentColor"/><rect x="9.6" y="1" width="1.6" height="16" fill="currentColor"/></svg>',
+  half: '<svg width="14" height="22" viewBox="0 0 14 22" aria-hidden="true"><ellipse cx="6" cy="17" rx="4.4" ry="3" transform="rotate(-20 6 17)" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="9.6" y="1" width="1.6" height="16" fill="currentColor"/></svg>',
+  whole: '<svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><ellipse cx="9" cy="13" rx="6.4" ry="4.2" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>'
+};
+// Apply a set of block fields; undefined clears a field.
+function setFields(block, change) {
+  Object.keys(change).forEach(function (k) { if (change[k] === undefined) delete block[k]; else block[k] = change[k]; });
+}
+// The Length modifier menu: feels, then multipliers that tie copies together, then splits.
+function lengthModSelect(current, onPick) {
+  var sel = document.createElement("select");
+  [["Feel", ["straight", "dotted", "triplet"]], ["Tie together", ["x2", "x3", "x4"]], ["Split", ["x1/2", "x1/4"]]].forEach(function (group) {
+    var g = document.createElement("optgroup");
+    g.label = group[0];
+    group[1].forEach(function (mod) {
+      var o = document.createElement("option");
+      o.value = mod; o.textContent = LENGTH_MOD_LABELS[mod];
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  });
+  sel.value = current;
+  sel.addEventListener("change", function () { onPick(sel.value); });
+  return sel;
+}
+// One chord pad: the numeral large, the chord's name small (and the applied function on
+// top), colored like the block it would make.
+function chordPad(top, main, sub, colorBlock, selected, onTap) {
+  var pad = document.createElement("button");
+  pad.className = "pad" + (selected ? " on" : "");
+  if (colorBlock) pad.style.background = backgroundForBlock(colorBlock);
+  else pad.className += " out";
+  if (top) { var t = document.createElement("em"); t.textContent = top; pad.appendChild(t); }
+  var m = document.createElement("b"); m.textContent = main; pad.appendChild(m);
+  var n = document.createElement("small"); n.textContent = sub; pad.appendChild(n);
+  pad.addEventListener("click", onTap);
+  return pad;
+}
+// The pads for the current tab. Diatonic: the key's seven chords (the selected one shows
+// what the block really is, borrowed mode included). Applied: the seven targets for the
+// chosen function, I included. Free: all twelve steps; the key's own tones keep their color.
+function chordPads(block, chord, isApplied, isFree) {
+  var wrap = document.createElement("div");
+  wrap.className = "pads" + (isFree ? " free" : "");
+  var root = state.masterRootIndex, mode = state.masterModeIndex;
+  var plain = withoutAlter(block);
+  function nameOf(b) { return getChordSymbol(buildChord(b, root, mode), root).replace(/ \(.*\)$/, ""); }
+  if (isFree) {
+    var scale = MODES[MASTER_MODE_NAMES[mode]];
+    for (var step = 0; step < 12; step++) (function (step) {
+      var cand = Object.assign({}, plain, {chordSource: "free", freeRoot: step, blockModeIndex: 0});
+      var degree = scale.indexOf(step);
+      var colorBlock = degree >= 0 ? Object.assign({}, plain, {chordSource: "diatonic", degreeIndex: degree, blockModeIndex: 0}) : null;
+      var lbl = blockLabel(cand, root, mode);
+      wrap.appendChild(chordPad(null, stepNumeral(step), lbl.name, colorBlock, (block.freeRoot || 0) === step, rootChange(block, function () { block.freeRoot = step; })));
+    })(step);
+  } else if (isApplied) {
+    var targets = degreeLabels(MASTER_MODE_NAMES[mode]);
+    targets.forEach(function (target, i) {
+      var cand = Object.assign({}, plain, {chordSource: "applied", appliedFunction: block.appliedFunction, appliedTargetIndex: i, blockModeIndex: 0});
+      wrap.appendChild(chordPad(APPLIED_FUNCTION_PREFIX[block.appliedFunction], target, nameOf(cand), cand, block.appliedTargetIndex === i, rootChange(block, function () { block.appliedTargetIndex = i; })));
+    });
+  } else {
+    for (var d = 0; d < 7; d++) (function (d) {
+      var selected = block.degreeIndex === d;
+      // A degree change keeps the borrowed mode, so the pads show what each would be.
+      var cand = Object.assign({}, plain, {chordSource: "diatonic", degreeIndex: d});
+      if (!selected) cand.blockModeIndex = 0;
+      var lbl = blockLabel(cand, root, mode);
+      wrap.appendChild(chordPad(null, lbl.degree.replace(/^([♭♯]*[IVXivx]+[°+]?).*$/, "$1"), lbl.name, cand, selected, rootChange(block, function () { block.degreeIndex = d; })));
+    })(d);
+  }
+  return wrap;
+}
 
 // SHAPE: which of the scale's tones the chord stacks, listed in the engine's SHAPE_ORDER.
 var SHAPE_LABELS = {triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13"};
@@ -3707,20 +3804,14 @@ function appendAlterGroup(parent, block) {
   var open = alterOpen || altered;
   var head = document.createElement("button");
   head.className = "alter-toggle" + (altered ? " altered" : "");
-  head.textContent = (open ? "▾ " : "▸ ") + "Alter" + (altered ? " • changed" : "");
+  head.textContent = (open ? "▾ " : "▸ ") + (canBorrow ? "Alter · Borrow" : "Alter") + (altered ? " • changed" : "");
   head.addEventListener("click", function () { alterOpen = !open; renderEditor(); });
   parent.appendChild(head);
   if (!open) return;
   var grid = document.createElement("div");
   grid.className = "alter-rows";
   parent.appendChild(grid);
-  if (canBorrow) {
-    // BORROW FROM: the same degree in another mode, listed by result ("Dorian \u2192 F7").
-    // A new mode is a new chord, so it clears the tone alterations below.
-    var borrow = fieldSelect("Borrow from", modeOptionLabels(block), block.blockModeIndex, rootChange(block, function (v) { block.blockModeIndex = v; }));
-    if (block.blockModeIndex) borrow.classList.add("altered");
-    grid.appendChild(borrow);
-  }
+  var fields = {};
   rows.forEach(function (row) {
     var values = row.choices.map(function (c) { return c.value; });
     var field = toggleGroup(row.label, row.choices.map(function (c) { return c.label; }), values.indexOf(row.value), function (i) {
@@ -3730,10 +3821,30 @@ function appendAlterGroup(parent, block) {
     });
     if (row.value !== row.keyValue) {
       field.classList.add("altered");
-      var home = field.querySelectorAll(".toggle-row button")[values.indexOf(row.keyValue)];
+      var home = field.children[1].children[values.indexOf(row.keyValue)];
       if (home) home.classList.add("home");
     }
-    grid.appendChild(field);
+    fields[row.field] = field;
+  });
+  if (canBorrow) {
+    // BORROW: the same degree in another mode. The open menu lists results ("Dorian \u2192
+    // F7"); closed it shows just the mode, to fit half a row. A new mode is a new chord,
+    // so it clears the tone alterations.
+    var full = modeOptionLabels(block);
+    var short = BLOCK_MODE_NAMES.map(function (m, i) { return i === 0 ? "Key" : m.replace(/([a-z])([A-Z])/g, "$1 $2"); });
+    var borrow = fieldSelect("Borrow", short, block.blockModeIndex, rootChange(block, function (v) { block.blockModeIndex = v; }));
+    var sel = borrow.children[1];
+    var showFull = function () { full.forEach(function (t, i) { sel.children[i].textContent = t; }); };
+    var showShort = function () { short.forEach(function (t, i) { sel.children[i].textContent = t; }); };
+    sel.addEventListener("focus", showFull);
+    sel.addEventListener("mousedown", showFull);
+    sel.addEventListener("blur", showShort);
+    if (block.blockModeIndex) borrow.classList.add("altered");
+    fields.borrow = borrow;
+  }
+  // Paired rows: Borrow beside 5th, 3rd beside 7th, 9th beside 11th, then 13th.
+  (canBorrow ? ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"] : ["third", "fifth", "seventh", "ninth", "eleventh", "thirteenth"]).forEach(function (k) {
+    if (fields[k]) grid.appendChild(fields[k]);
   });
 }
 
@@ -3764,68 +3875,81 @@ function renderEditor() {
   var grid = document.createElement("div");
   grid.className = "editor-grid";
 
-  // FIXED ROWS. The collapsed sheet shows the first three: kind + root, length (one tap),
-  // shape + inversion. Controls never come and go above Alter -- one that doesn't apply
-  // is greyed out -- and Alter (with Borrow from) opens at the bottom.
+  // The drawer never restates the chord: the selected block on the timeline is the readout.
+  // Top to bottom: tabs (where the root comes from), colored chord pads (one tap sets the
+  // block), Length, then Shape / Inversion / Spread, then Alter (collapsed). The collapsed
+  // sheet shows through Length.
   function row(cls) { var r = document.createElement("div"); r.className = "editor-row " + cls; grid.appendChild(r); return r; }
   var done = function () { refresh(); previewCurrentBlock(); };
+  var tab = isFree ? 2 : isApplied ? 1 : 0;
 
-  // 1. KIND + ROOT. The applied functions are kinds of their own (V/, subV/, vii°/), and
-  // they share the root dropdown with Key: a degree, which for them is the target, so
-  // Key ii -> V/ is V/ii in one tap. Free's root is a step (♭III, III...).
-  var kindRow = row("kind");
-  var kind = isFree ? "free" : isApplied ? block.appliedFunction : "key";
-  var kinds = EDITOR_KINDS.map(function (k) { return k.value; });
-  kindRow.appendChild(toggleGroup("Chord", EDITOR_KINDS.map(function (k) { return k.label; }), kinds.indexOf(kind), rootChange(block, function (v) {
-    var next = kinds[v];
-    var degree = isApplied ? block.appliedTargetIndex : isFree ? null : block.degreeIndex;
-    if (next === "free") {
-      // Free keeps the root you already have and starts as a major triad (♭7 with a 7th).
-      if (!isFree) block.freeRoot = ((chord.chordRootPitch - state.masterRootIndex) % 12 + 12) % 12;
-      block.chordSource = "free";
-    } else if (next === "key") {
-      if (degree !== null) block.degreeIndex = degree;
-      block.chordSource = "diatonic";
-    } else {
-      if (degree !== null) block.appliedTargetIndex = degree;
-      block.chordSource = "applied"; block.appliedFunction = next;
-    }
-    block.blockModeIndex = 0; // a new kind starts from the key's own mode
-  })));
-  var rootField;
-  if (isFree) {
-    var prefersFlats = keyPrefersFlats(state.masterRootIndex, state.masterModeIndex);
-    var rootNames = NOTE_NAMES.map(function (n, step) {
-      var numeral = stepNumeral(step, chord.offsets[1] === 3 && chord.offsets[2] === 6);
-      var flats = numeral.charAt(0) === "♭" ? true : numeral.charAt(0) === "♯" ? false : prefersFlats;
-      return numeral + " (" + pitchToNoteName(state.masterRootIndex + step, flats).replace("#", "♯") + ")";
+  // 1. TABS: Diatonic / Applied / Free. Switching keeps the root where it can: a degree
+  // becomes the applied target (and back), and Free starts on the chord's own root.
+  var tabs = document.createElement("div");
+  tabs.className = "editor-tabs";
+  ["Diatonic", "Applied", "Free"].forEach(function (name, i) {
+    var t = document.createElement("button");
+    t.textContent = name;
+    if (i === tab) t.className = "on";
+    t.addEventListener("click", rootChange(block, function () {
+      if (i === tab) return;
+      if (i === 2) block.freeRoot = ((chord.chordRootPitch - state.masterRootIndex) % 12 + 12) % 12;
+      else if (i === 1 && tab === 0) block.appliedTargetIndex = block.degreeIndex;
+      else if (i === 0 && tab === 1) block.degreeIndex = block.appliedTargetIndex;
+      if (i === 1 && APPLIED_FUNCTIONS.indexOf(block.appliedFunction) < 0) block.appliedFunction = "dominant";
+      block.chordSource = ["diatonic", "applied", "free"][i];
+      block.blockModeIndex = 0;
+    }));
+    tabs.appendChild(t);
+  });
+  grid.appendChild(tabs);
+
+  // 2. PADS, colored like the blocks they make.
+  if (isApplied) {
+    var fnRow = document.createElement("div");
+    fnRow.className = "fn-row";
+    APPLIED_FUNCTIONS.forEach(function (fn) {
+      var f = document.createElement("button");
+      f.textContent = APPLIED_FUNCTION_NAMES[fn];
+      if (fn === block.appliedFunction) f.className = "on";
+      f.addEventListener("click", rootChange(block, function () { block.appliedFunction = fn; }));
+      fnRow.appendChild(f);
     });
-    rootField = fieldSelect("Root", rootNames, block.freeRoot || 0, rootChange(block, function (v) { block.freeRoot = v; }));
-  } else if (isApplied) {
-    rootField = fieldSelect("Of", degreeLabels(MASTER_MODE_NAMES[state.masterModeIndex]), block.appliedTargetIndex, rootChange(block, function (v) { block.appliedTargetIndex = v; }));
-  } else {
-    // A degree change keeps the borrowed mode (its labels already say ♭VI, iv...).
-    rootField = fieldSelect("Degree", degreeLabels(chord.resolvedMode), block.degreeIndex, rootChange(block, function (v) { block.degreeIndex = v; }));
+    grid.appendChild(fnRow);
   }
-  kindRow.appendChild(rootField);
+  grid.appendChild(chordPads(block, chord, isApplied, isFree));
 
-  // 2. LENGTH, one tap: shortest to longest, and a feel button that cycles straight,
-  // dotted, triplet.
+  // 3. LENGTH: a base note in one tap (quarter, half, whole) and one modifier menu
+  // (a feel, or a multiplier that ties copies together or splits the note).
+  var parts = lengthParts(block);
   var lengthRow = row("length");
-  var lengthField = toggleGroup("Length", DURATION_ORDER.map(function (i) { return DURATION_NAMES[i].replace(/\/1$/, ""); }), DURATION_ORDER.indexOf(block.durationIndex), function (v) { block.durationIndex = DURATION_ORDER[v]; done(); });
-  var feelBtn = document.createElement("button");
-  feelBtn.className = "feel-btn" + (block.durationModifier ? " changed" : "");
-  feelBtn.textContent = FEEL_SYMBOLS[block.durationModifier || 0];
-  feelBtn.title = DURATION_MODIFIER_NAMES[block.durationModifier || 0] + " (tap to change)";
-  feelBtn.addEventListener("click", function () { block.durationModifier = ((block.durationModifier || 0) + 1) % 3; done(); });
-  lengthField.children[1].appendChild(feelBtn);
+  var bases = document.createElement("div");
+  bases.className = "toggle-row note-values";
+  LENGTH_BASES.forEach(function (base) {
+    var nb = document.createElement("button");
+    nb.innerHTML = NOTE_ICONS[base];
+    nb.title = base;
+    if (base === parts.base) nb.className = "active";
+    nb.addEventListener("click", function () { setFields(block, lengthChange(base, parts.mod)); done(); });
+    bases.appendChild(nb);
+  });
+  var lengthField = document.createElement("div");
+  lengthField.className = "field";
+  var lengthLabel = document.createElement("label");
+  lengthLabel.textContent = "Length";
+  lengthField.appendChild(lengthLabel); lengthField.appendChild(bases);
   lengthRow.appendChild(lengthField);
+  var modField = document.createElement("div");
+  modField.className = "field";
+  var modLabel = document.createElement("label");
+  modLabel.textContent = " ";
+  modField.appendChild(modLabel); modField.appendChild(lengthModSelect(parts.mod, function (mod) { setFields(block, lengthChange(parts.base, mod)); done(); }));
+  lengthRow.appendChild(modField);
 
-  // 3. Shape (the scale's own tones; fixed on the leading-tone dim7, so greyed there)
-  // and POSITION: inversion and octave as one \u25BC / \u25B2 control that rotates the chord a
-  // note at a time (the engine's positionStep), labeled by the tone in the bass.
+  // 4. Shape (the scale's own tones; fixed on the leading-tone dim7, so greyed there),
+  // Inversion (a note at a time, through the octaves) and Spread (the drop voicings).
   var isLeadingTone = isApplied && block.appliedFunction === "leadingTone";
-  var shapeRow = row("two");
+  var shapeRow = row("three");
   var shapeField = fieldShape(block, function (v) {
     block.extensionIndex = v;
     var fitted = alterFitToShape(block);
@@ -3835,23 +3959,9 @@ function renderEditor() {
   if (isLeadingTone) shapeField.children[1].disabled = true;
   shapeRow.appendChild(shapeField);
   shapeRow.appendChild(fieldPosition(block, chord, done));
+  shapeRow.appendChild(fieldSelect("Spread", SPREAD_NAMES, block.dropIndex || 0, function (v) { block.dropIndex = v; done(); }));
 
-  // 4. Voicing: drop (a stepper) and the bass part on or off.
-  var voicingRow = row("voicing");
-  voicingRow.appendChild(fieldStepper("Drop", ["Close", "Drop 2", "Drop 3", "Drop 2+4"], block.dropIndex || 0, function (v) { block.dropIndex = v; done(); }));
-  var bassWrap = document.createElement("div");
-  bassWrap.className = "field";
-  var bassLabel = document.createElement("label");
-  bassLabel.textContent = "Bass";
-  var bassBtn = document.createElement("button");
-  var bassOn = block.bassToneIndex !== -1;
-  bassBtn.className = "bass-btn" + (bassOn ? " active" : "");
-  bassBtn.textContent = bassOn ? "On" : "Off";
-  bassBtn.addEventListener("click", function () { block.bassToneIndex = bassOn ? -1 : 0; refresh(); });
-  bassWrap.appendChild(bassLabel); bassWrap.appendChild(bassBtn);
-  voicingRow.appendChild(bassWrap);
-
-  // 5. Alter, collapsed, always last: Borrow from (Key chords), then the tone rows.
+  // 5. Alter, collapsed, always last: Borrow (Diatonic chords) and a row per chord tone.
   appendAlterGroup(grid, block);
 
   var actions = document.createElement("div");
@@ -5789,7 +5899,7 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u2-flat6", title: "The Sad Sixth (\u266DVI)",
-        intro: "How it's built: C Aeolian (natural minor) spells C\u2013D\u2013E\u266D\u2013F\u2013G\u2013A\u266D\u2013B\u266D \u2014 its 6th note is A\u266D, a half-step below major's A. Build a chord on THAT note instead of A: A\u266D\u2013C\u2013E\u266D, a major triad where you'd expect vi's minor Am. Same scale position (the 6th degree), borrowed scale. I\u2013V has set up home before block 3 arrives \u2014 try tapping it, opening Alter and setting Borrow from to Aeolian to hear it happen.",
+        intro: "How it's built: C Aeolian (natural minor) spells C\u2013D\u2013E\u266D\u2013F\u2013G\u2013A\u266D\u2013B\u266D \u2014 its 6th note is A\u266D, a half-step below major's A. Build a chord on THAT note instead of A: A\u266D\u2013C\u2013E\u266D, a major triad where you'd expect vi's minor Am. Same scale position (the 6th degree), borrowed scale. I\u2013V has set up home before block 3 arrives \u2014 try tapping it, opening Alter and setting Borrow to Aeolian to hear it happen.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; }
       },
       {
@@ -5809,17 +5919,17 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u3-v-of-v", title: "Borrowing Tension from the Five (V7/V)",
-        intro: "How it's built, step by step: 1) Find your target's root \u2014 V is G. 2) Count up a perfect 5th (7 half-steps) from G: that's D. 3) Build a dominant 7th chord on D \u2014 major triad plus a flatted 7th: D\u2013F\u266F\u2013A\u2013C. That's V7/V. It resolves DOWN a fifth into G, exactly like V7 resolves to I at home \u2014 except G isn't home, so this one's \u201csecondary.\u201d I\u2013vi firmly establishes home before block 3 (ii) leads into the V\u2013I cadence. Try changing block 3 to V/ on V \u2014 and build that D7 yourself. On its own, a V7/V\u2013V move sounds like a plain resolution in another key; here, with home already set up and block 5 returning to it, you can hear it as a detour FROM this key, not an arrival in a new one.",
+        intro: "How it's built, step by step: 1) Find your target's root \u2014 V is G. 2) Count up a perfect 5th (7 half-steps) from G: that's D. 3) Build a dominant 7th chord on D \u2014 major triad plus a flatted 7th: D\u2013F\u266F\u2013A\u2013C. That's V7/V. It resolves DOWN a fifth into G, exactly like V7 resolves to I at home \u2014 except G isn't home, so this one's \u201csecondary.\u201d I\u2013vi firmly establishes home before block 3 (ii) leads into the V\u2013I cadence. Try changing block 3 to Applied → Dominant → V \u2014 and build that D7 yourself. On its own, a V7/V\u2013V move sounds like a plain resolution in another key; here, with home already set up and block 5 returning to it, you can hear it as a detour FROM this key, not an arrival in a new one.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u3-v-of-vi", title: "Tonicizing the Six (V7/vi)",
-        intro: "Same construction as before, new target: vi's root is A. Up a perfect 5th from A is E. Build a dominant 7th there: E\u2013G\u266F\u2013B\u2013D. That's V7/vi, resolving down a fifth into A. Two full bars of I open this one \u2014 home is unmistakable before block 3 arrives. Try changing block 3 (IV) to V/ on vi. Tonicizing vi like this is a common move into a pop bridge, and block 5 brings you back afterward so you can feel the round trip.",
+        intro: "Same construction as before, new target: vi's root is A. Up a perfect 5th from A is E. Build a dominant 7th there: E\u2013G\u266F\u2013B\u2013D. That's V7/vi, resolving down a fifth into A. Two full bars of I open this one \u2014 home is unmistakable before block 3 arrives. Try changing block 3 (IV) to Applied → Dominant → vi. Tonicizing vi like this is a common move into a pop bridge, and block 5 brings you back afterward so you can feel the round trip.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3, extensionIndex:2}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u3-v-of-iv", title: "Tonicizing the Four (V7/IV)",
-        intro: "Same construction, new target: IV's root is F. Up a perfect 5th from F is C \u2014 the home tonic itself. Build a dominant 7th on C: C\u2013E\u2013G\u2013B\u266D. Note this is NOT the same chord as plain I: that B\u266D turns it into a dominant-quality C7, pulling toward F instead of sitting still. I\u2013V\u2013I sets up home clearly before block 3. Try changing block 3 (I) to V/ on IV. This is the classic blues move into the four chord \u2014 heard here against a real established tonic, not in isolation.",
+        intro: "Same construction, new target: IV's root is F. Up a perfect 5th from F is C \u2014 the home tonic itself. Build a dominant 7th on C: C\u2013E\u2013G\u2013B\u266D. Note this is NOT the same chord as plain I: that B\u266D turns it into a dominant-quality C7, pulling toward F instead of sitting still. I\u2013V\u2013I sets up home clearly before block 3. Try changing block 3 (I) to Applied → Dominant → IV. This is the classic blues move into the four chord \u2014 heard here against a real established tonic, not in isolation.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0, extensionIndex:2}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; }
       }
     ]
@@ -5829,12 +5939,12 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u4-subv-of-i", title: "The Sneaky Twin (subV7/I)",
-        intro: "How it's built: start from the REGULAR dominant that resolves to your target. Target I = C, so the regular dominant is G7. Now find the note a TRITONE (6 half-steps) away from G: that's D\u266D. Build a NEW dominant 7th there instead: D\u266D\u2013F\u2013A\u266D\u2013B. It still resolves to C, but the bass now slides DOWN a half-step (D\u266D\u2192C) instead of leaping down a fifth (G\u2192C) \u2014 because G and D\u266D share the exact same tritone (F and B, respelled C\u266D), so either chord can substitute for the other. The same I\u2013vi\u2013ii\u2013V\u2013I shape from Unit 3, home clearly set up by block 2. Try changing block 4 (V) to subV/ on I \u2014 to build that D\u266D7 yourself.",
+        intro: "How it's built: start from the REGULAR dominant that resolves to your target. Target I = C, so the regular dominant is G7. Now find the note a TRITONE (6 half-steps) away from G: that's D\u266D. Build a NEW dominant 7th there instead: D\u266D\u2013F\u2013A\u266D\u2013B. It still resolves to C, but the bass now slides DOWN a half-step (D\u266D\u2192C) instead of leaping down a fifth (G\u2192C) \u2014 because G and D\u266D share the exact same tritone (F and B, respelled C\u266D), so either chord can substitute for the other. The same I\u2013vi\u2013ii\u2013V\u2013I shape from Unit 3, home clearly set up by block 2. Try changing block 4 (V) to Applied → Tritone sub → I \u2014 to build that D\u266D7 yourself.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:1}), learnBlock({degreeIndex:4, extensionIndex:2}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u4-subv-of-iv", title: "A Different Twin (subV7/IV)",
-        intro: "Same method, new target: IV's regular dominant (from Unit 3) was C7. A tritone away from C is G\u266D (tritone subs are conventionally always spelled with flats, regardless of key \u2014 the same reason subV7/I was written D\u266D, not C\u266F). Build a dominant 7th on G\u266D instead: G\u266D\u2013B\u266D\u2013D\u266D\u2013E. It resolves down a half-step into F rather than C7's leap down a fifth. The exact same I\u2013V\u2013I\u2013IV\u2013I skeleton as Unit 3's blues example. Try changing block 3 (I) to subV/ on IV, instead of V/ \u2014 and compare the bass motion into block 4 to the straight secondary dominant version.",
+        intro: "Same method, new target: IV's regular dominant (from Unit 3) was C7. A tritone away from C is G\u266D (tritone subs are conventionally always spelled with flats, regardless of key \u2014 the same reason subV7/I was written D\u266D, not C\u266F). Build a dominant 7th on G\u266D instead: G\u266D\u2013B\u266D\u2013D\u266D\u2013E. It resolves down a half-step into F rather than C7's leap down a fifth. The exact same I\u2013V\u2013I\u2013IV\u2013I skeleton as Unit 3's blues example. Try changing block 3 (I) to Applied → Tritone sub → IV, instead of Dominant \u2014 and compare the bass motion into block 4 to the straight secondary dominant version.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0, extensionIndex:2}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; }
       }
     ]
@@ -5844,7 +5954,7 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u5-passing", title: "The Chromatic Connector",
-        intro: "How it's built: find the note a half-step BELOW your target. Target ii = D, so that's C\u266F. Build a fully-diminished 7th chord there \u2014 stack minor thirds all the way up: C\u266F\u2013E\u2013G\u2013B\u266D. Its root resolves up a half-step right into D itself \u2014 by definition, since this chord's root is always built a half-step below wherever it's headed \u2014 which is why it glues two chords together so smoothly despite being a jarring, unstable sound entirely on its own. Two bars of I establish home, then ii\u2013V\u2013I resolves cleanly. Blocks 2 (I) and 3 (ii) sit a whole step apart \u2014 add a new block between them (+ Add, then move it earlier) and set it to vii\u00B0/ on ii \u2014 to build that C\u266F dim7 yourself.",
+        intro: "How it's built: find the note a half-step BELOW your target. Target ii = D, so that's C\u266F. Build a fully-diminished 7th chord there \u2014 stack minor thirds all the way up: C\u266F\u2013E\u2013G\u2013B\u266D. Its root resolves up a half-step right into D itself \u2014 by definition, since this chord's root is always built a half-step below wherever it's headed \u2014 which is why it glues two chords together so smoothly despite being a jarring, unstable sound entirely on its own. Two bars of I establish home, then ii\u2013V\u2013I resolves cleanly. Blocks 2 (I) and 3 (ii) sit a whole step apart \u2014 add a new block between them (+ Add, then move it earlier) and set it to Applied → Leading tone → ii \u2014 to build that C\u266F dim7 yourself.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:1}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; }
       },
       {
@@ -5859,7 +5969,7 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u6-surprise", title: "A Surprising Turn",
-        intro: "You've now built three ways to find a chord's root: a perfect 5th above a target (Dominant of), a half-step above it (Tritone sub of), or a half-step below it (Leading-tone into). I\u2013IV\u2013I\u2013IV\u2013V\u2013I is a real, clearly-anchored progression. Not every unusual chord needs to resolve conventionally \u2014 try changing block 4 to V/, subV/ or vii\u00B0/ and pick any root, without worrying about whether it \u201cshould\u201d lead anywhere. Some of the richest moments in film scoring are chords used purely for color, heard against a real tonal home like this one.",
+        intro: "You've now built three ways to find a chord's root: a perfect 5th above a target (Dominant of), a half-step above it (Tritone sub of), or a half-step below it (Leading-tone into). I\u2013IV\u2013I\u2013IV\u2013V\u2013I is a real, clearly-anchored progression. Not every unusual chord needs to resolve conventionally \u2014 try changing block 4 to Applied and pick any function and target, without worrying about whether it \u201cshould\u201d lead anywhere. Some of the richest moments in film scoring are chords used purely for color, heard against a real tonal home like this one.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; }
       },
       {
@@ -5874,7 +5984,7 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u7-mid-phrase", title: "Substitution in the Middle",
-        intro: "The same construction as Unit 3: target V's root is G, up a 5th is D, so D7 (D\u2013F\u266F\u2013A\u2013C) is V7/V, resolving down a fifth into G. Every secondary dominant so far has led straight into the final cadence. Here, try changing block 2 (ii) to V/ on V \u2014 the same D7 as before, but now the phrase KEEPS GOING afterward (V\u2013vi\u2013IV\u2013I) instead of resolving right away. A substitution doesn't need to sit right before the ending to be a substitution.",
+        intro: "The same construction as Unit 3: target V's root is G, up a 5th is D, so D7 (D\u2013F\u266F\u2013A\u2013C) is V7/V, resolving down a fifth into G. Every secondary dominant so far has led straight into the final cadence. Here, try changing block 2 (ii) to Applied → Dominant → V \u2014 the same D7 as before, but now the phrase KEEPS GOING afterward (V\u2013vi\u2013IV\u2013I) instead of resolving right away. A substitution doesn't need to sit right before the ending to be a substitution.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; }
       },
       {
@@ -5884,7 +5994,7 @@ var CURRICULUM = [
       },
       {
         id: "u7-chain", title: "Chained Substitutions",
-        intro: "Build each link the same way: vi's root is A, up a 5th is E, so E7 is V7/vi. Then ii's root is D, up a 5th is A, so A7 is V7/ii \u2014 notice that's the SAME letter name as vi's root (A) but a totally different chord (A7 instead of Am), which is exactly what makes it pull toward D next. Secondary dominants can chain this way, each one tonicizing the next stop before moving on. Try changing block 2 (vi) to V/ on vi \u2014 AND block 4 (ii) to V/ on ii \u2014 to build both links yourself: V7/vi leads to vi, V7/ii leads to ii, and only then does V lead home.",
+        intro: "Build each link the same way: vi's root is A, up a 5th is E, so E7 is V7/vi. Then ii's root is D, up a 5th is A, so A7 is V7/ii \u2014 notice that's the SAME letter name as vi's root (A) but a totally different chord (A7 instead of Am), which is exactly what makes it pull toward D next. Secondary dominants can chain this way, each one tonicizing the next stop before moving on. Try changing block 2 (vi) to Applied → Dominant → vi \u2014 AND block 4 (ii) to Applied → Dominant → ii \u2014 to build both links yourself: V7/vi leads to vi, V7/ii leads to ii, and only then does V lead home.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:5, extensionIndex:2}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:1}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; }
       }
     ]
@@ -5896,37 +6006,37 @@ var CURRICULUM = [
       {
         id: "u8-weak-five", title: "The Weak Five",
         masterMode: 5,
-        intro: "i\u2013iv\u2013v\u2013i here is built entirely from natural minor's own notes \u2014 including v, which comes out MINOR (G\u2013B\u266D\u2013D), not a true dominant. That's because natural minor's 7th scale degree (B\u266D) sits a WHOLE STEP below tonic, not a half-step \u2014 no leading tone, so v doesn't pull home the way a major V does. The fix uses a tool you already know: find your target's root (i = C), count up a perfect 5th (G), and build a dominant there instead \u2014 G major (G\u2013B\u2013D). That B natural IS the key's 7th scale degree, raised a half-step specifically so it can lean into C. Raising it like this, right where the pull actually matters, is literally what \u201charmonic minor\u201d means in practice \u2014 not a whole different scale to memorize. Try changing block 3 (v) to V/ on i \u2014 and compare it to the plain minor v you started with.",
+        intro: "i\u2013iv\u2013v\u2013i here is built entirely from natural minor's own notes \u2014 including v, which comes out MINOR (G\u2013B\u266D\u2013D), not a true dominant. That's because natural minor's 7th scale degree (B\u266D) sits a WHOLE STEP below tonic, not a half-step \u2014 no leading tone, so v doesn't pull home the way a major V does. The fix uses a tool you already know: find your target's root (i = C), count up a perfect 5th (G), and build a dominant there instead \u2014 G major (G\u2013B\u2013D). That B natural IS the key's 7th scale degree, raised a half-step specifically so it can lean into C. Raising it like this, right where the pull actually matters, is literally what \u201charmonic minor\u201d means in practice \u2014 not a whole different scale to memorize. Try changing block 3 (v) to Applied → Dominant → i \u2014 and compare it to the plain minor v you started with.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u8-relative-major", title: "Tonicizing the Relative Major (V7/\u266DIII)",
         masterMode: 5,
-        intro: "How it's built: in natural minor, \u266DVII (B\u266D\u2013D\u2013F) is ALREADY a major triad \u2014 natural minor's own 7th scale degree sits a whole step below tonic, which happens to land a major triad right there. Add a minor 7th (A\u266D) and it becomes B\u266D7 \u2014 exactly V7/\u266DIII, the secondary dominant pulling toward your relative major (E\u266D). i\u2013iv sets up home before block 3 (\u266DVII) arrives. Try changing it to V/ on \u266DIII \u2014 AND setting its Shape to \u201c7\u201d \u2014 to hear that pull, then feel it land on block 4's \u266DIII before block 5 brings you back home. Tonicizing the relative major like this is one of the most common moves in minor-key music, from classical to pop.",
+        intro: "How it's built: in natural minor, \u266DVII (B\u266D\u2013D\u2013F) is ALREADY a major triad \u2014 natural minor's own 7th scale degree sits a whole step below tonic, which happens to land a major triad right there. Add a minor 7th (A\u266D) and it becomes B\u266D7 \u2014 exactly V7/\u266DIII, the secondary dominant pulling toward your relative major (E\u266D). i\u2013iv sets up home before block 3 (\u266DVII) arrives. Try changing it to Applied → Dominant → \u266DIII \u2014 AND setting its Shape to \u201c7\u201d \u2014 to hear that pull, then feel it land on block 4's \u266DIII before block 5 brings you back home. Tonicizing the relative major like this is one of the most common moves in minor-key music, from classical to pop.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:6}), learnBlock({degreeIndex:2}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u8-diminished-two", title: "The Diminished Two",
         masterMode: 5,
-        intro: "In major keys, ii is minor. In natural minor, ii is DIMINISHED instead \u2014 built from natural minor's own notes, D\u2013F\u2013A\u266D, a minor third plus a diminished fifth rather than major's plain minor triad. i\u2013ii°\u2013v\u2013i: notice ii° already sounds correctly unsettled on its own \u2014 it's v that still needs the fix from earlier in this unit. Try changing block 3 (v) to V/ on i \u2014 to complete a genuine ii°\u2013V\u2013i cadence, the minor-key cousin of the major ii\u2013V\u2013I you already know.",
+        intro: "In major keys, ii is minor. In natural minor, ii is DIMINISHED instead \u2014 built from natural minor's own notes, D\u2013F\u2013A\u266D, a minor third plus a diminished fifth rather than major's plain minor triad. i\u2013ii°\u2013v\u2013i: notice ii° already sounds correctly unsettled on its own \u2014 it's v that still needs the fix from earlier in this unit. Try changing block 3 (v) to Applied → Dominant → i \u2014 to complete a genuine ii°\u2013V\u2013i cadence, the minor-key cousin of the major ii\u2013V\u2013I you already know.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:1}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u8-v-of-iv-minor", title: "Tonicizing the Four (V7/iv)",
         masterMode: 5,
-        intro: "Same construction as before: iv's root is F. Up a perfect 5th from F is C \u2014 the home tonic itself, just like V7/IV did in a major key. Build a dominant 7th there: C7 (C\u2013E\u2013G\u2013B\u266D). i\u2013v opens this one, home clearly established. Try changing block 3 (i) to V/ on iv \u2014 to build that C7 yourself, then hear it resolve into block 4's iv before block 5 returns home. Even the home tonic itself can become someone else's dominant.",
+        intro: "Same construction as before: iv's root is F. Up a perfect 5th from F is C \u2014 the home tonic itself, just like V7/IV did in a major key. Build a dominant 7th there: C7 (C\u2013E\u2013G\u2013B\u266D). i\u2013v opens this one, home clearly established. Try changing block 3 (i) to Applied → Dominant → iv \u2014 to build that C7 yourself, then hear it resolve into block 4's iv before block 5 returns home. Even the home tonic itself can become someone else's dominant.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:4}), learnBlock({degreeIndex:0, extensionIndex:2}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u8-v-of-flat6", title: "Tonicizing the Flat Six (V7/\u266DVI)",
         masterMode: 5,
-        intro: "Same construction again: \u266DVI's root is A\u266D. Up a perfect 5th from A\u266D is E\u266D. Build a dominant 7th there: E\u266D7 (E\u266D\u2013G\u2013B\u266D\u2013D\u266D). Two bars of i open this one, home unmistakable before block 3 (iv) arrives. Try changing it to V/ on \u266DVI \u2014 to build that E\u266D7 yourself, then feel it land on block 4's \u266DVI before block 5 brings you back. Tonicizing \u266DVI like this is common right before a big cinematic or anthemic lift.",
+        intro: "Same construction again: \u266DVI's root is A\u266D. Up a perfect 5th from A\u266D is E\u266D. Build a dominant 7th there: E\u266D7 (E\u266D\u2013G\u2013B\u266D\u2013D\u266D). Two bars of i open this one, home unmistakable before block 3 (iv) arrives. Try changing it to Applied → Dominant → \u266DVI \u2014 to build that E\u266D7 yourself, then feel it land on block 4's \u266DVI before block 5 brings you back. Tonicizing \u266DVI like this is common right before a big cinematic or anthemic lift.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3, extensionIndex:2}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:0})]; }
       },
       {
         id: "u8-three-minors", title: "The Three Minors (and the Gap Between Them)",
         masterMode: 5,
-        intro: "Natural minor's own \u266DVII (B\u266D\u2013D\u2013F) sits a smooth whole step below \u266DVI (A\u266D\u2013C\u2013E\u266D) \u2014 easy, stepwise motion. But raise the 7th degree to get a genuine leading tone (harmonic minor's whole reason for existing), and that same spot becomes a diminished chord built on B natural instead \u2014 now a THIRD above \u266DVI, not a step. That stretched gap between the 6th and 7th degrees (A\u266D to B) is harmonic minor's famous \u201caugmented 2nd,\u201d the source of its distinctive, exotic color. (Melodic minor's classical fix was to ALSO raise the 6th, smoothing that same gap back into a single step when moving melodically \u2014 though that note doesn't carry into the harmony the way the raised 7th does.) Try changing block 4 (\u266DVII) to vii\u00B0/ on i \u2014 and feel that bass leap for yourself, right where the smooth \u266DVII used to be.",
+        intro: "Natural minor's own \u266DVII (B\u266D\u2013D\u2013F) sits a smooth whole step below \u266DVI (A\u266D\u2013C\u2013E\u266D) \u2014 easy, stepwise motion. But raise the 7th degree to get a genuine leading tone (harmonic minor's whole reason for existing), and that same spot becomes a diminished chord built on B natural instead \u2014 now a THIRD above \u266DVI, not a step. That stretched gap between the 6th and 7th degrees (A\u266D to B) is harmonic minor's famous \u201caugmented 2nd,\u201d the source of its distinctive, exotic color. (Melodic minor's classical fix was to ALSO raise the 6th, smoothing that same gap back into a single step when moving melodically \u2014 though that note doesn't carry into the harmony the way the raised 7th does.) Try changing block 4 (\u266DVII) to Applied → Leading tone → i \u2014 and feel that bass leap for yourself, right where the smooth \u266DVII used to be.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:5}), learnBlock({degreeIndex:6}), learnBlock({degreeIndex:0})]; }
       },
       {
@@ -5964,7 +6074,7 @@ var CURRICULUM = [
       {
         id: "u9-andalusian", title: "The Andalusian Cadence",
         masterMode: 5,
-        intro: "i\u2013\u266DVII\u2013\u266DVI\u2013V \u2014 a descending bass line (C\u2013B\u266D\u2013A\u266D\u2013G here) found throughout flamenco, classical music, and rock, often called the Andalusian cadence. The first three chords come straight from natural minor's own notes. The last one doesn't: a plain v here would be minor and weak \u2014 you built that exact fix already, back in \u201cThe Weak Five.\u201d The authentic cadence needs that same raised leading tone to pull convincingly back home, which is exactly how this final block is built: V/ on i. Try changing its Chord field back to Diatonic to hear the weak version instead \u2014 the same difference that makes or breaks this cadence in flamenco.",
+        intro: "i\u2013\u266DVII\u2013\u266DVI\u2013V \u2014 a descending bass line (C\u2013B\u266D\u2013A\u266D\u2013G here) found throughout flamenco, classical music, and rock, often called the Andalusian cadence. The first three chords come straight from natural minor's own notes. The last one doesn't: a plain v here would be minor and weak \u2014 you built that exact fix already, back in \u201cThe Weak Five.\u201d The authentic cadence needs that same raised leading tone to pull convincingly back home, which is exactly how this final block is built: Applied → Dominant → i. Try changing its Chord field back to Diatonic to hear the weak version instead \u2014 the same difference that makes or breaks this cadence in flamenco.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:6}), learnBlock({degreeIndex:5}), learnBlock({chordSource:"applied", appliedTargetIndex:0, appliedFunction:"dominant"})]; }
       },
       {
@@ -6013,7 +6123,7 @@ var CURRICULUM = [
       {
         id: "u9-minor-two-five-one", title: "The Minor ii\u00b0\u2013V\u2013i",
         masterMode: 5,
-        intro: "ii\u00b0\u2013V\u2013i \u2014 minor's own version of the most common cadence in jazz. Block 1 is already the real thing: natural minor's own ii is genuinely diminished (as you found in \u201cThe Diminished Two\u201d), no alteration needed. Block 2 needs the fix from \u201cThe Weak Five\u201d \u2014 V/ on i \u2014 since a plain, unaltered v wouldn't pull home with any real force. Together they're the minor-key backbone behind countless jazz standards written in minor keys.",
+        intro: "ii\u00b0\u2013V\u2013i \u2014 minor's own version of the most common cadence in jazz. Block 1 is already the real thing: natural minor's own ii is genuinely diminished (as you found in \u201cThe Diminished Two\u201d), no alteration needed. Block 2 needs the fix from \u201cThe Weak Five\u201d \u2014 Applied → Dominant → i \u2014 since a plain, unaltered v wouldn't pull home with any real force. Together they're the minor-key backbone behind countless jazz standards written in minor keys.",
         blocks: function () { return [learnBlock({degreeIndex:1}), learnBlock({chordSource:"applied", appliedTargetIndex:0, appliedFunction:"dominant"}), learnBlock({degreeIndex:0})]; }
       },
       {
@@ -6035,13 +6145,13 @@ var CURRICULUM = [
       },
       {
         id: "u10-borrow-under-melody", title: "Borrowing Under a Melody",
-        intro: "Twinkle, Twinkle, Little Star, harmonized the usual way: I and IV, then V to I. A borrowed chord can slip under a melody as long as the borrowed note isn't the one being sung. Block 5 is IV (F\u2013A\u2013C) under F\u2013F. Under Alter, set Borrow from to Aeolian to get iv (F\u2013A\u266D\u2013C): the melody's F is still in the chord, and the darker A\u266D colors the line without fighting it. Now try the same on block 3, where the melody sings A\u2013A: iv's A\u266D sits a half step from the melody's A, and you'll hear the two rub.",
+        intro: "Twinkle, Twinkle, Little Star, harmonized the usual way: I and IV, then V to I. A borrowed chord can slip under a melody as long as the borrowed note isn't the one being sung. Block 5 is IV (F\u2013A\u2013C) under F\u2013F. Under Alter, set Borrow to Aeolian to get iv (F\u2013A\u266D\u2013C): the melody's F is still in the chord, and the darker A\u266D colors the line without fighting it. Now try the same on block 3, where the melody sings A\u2013A: iv's A\u266D sits a half step from the melody's A, and you'll hear the two rub.",
         melody: [[0,4,0],[4,4,0],[8,4,7],[12,4,7],[16,4,9],[20,4,9],[24,8,7],[32,4,5],[36,4,5],[40,4,4],[44,4,4],[48,4,2],[52,4,2],[56,8,0]],
         blocks: function () { return [learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:4, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3})]; }
       },
       {
         id: "u10-v7-of-iv", title: "Pointing at the Next Chord (V7/IV)",
-        intro: "A secondary dominant can replace a chord when the melody note fits it, and it pulls toward whatever comes next. In Twinkle, block 4 holds the melody's long G before block 5's IV. Change block 4 to V/ on IV. That builds C7 (C\u2013E\u2013G\u2013B\u266D): the G is still in the chord, and the B\u266D now leans down into the A of the F chord that follows. Same tune, but the line suddenly has somewhere to go.",
+        intro: "A secondary dominant can replace a chord when the melody note fits it, and it pulls toward whatever comes next. In Twinkle, block 4 holds the melody's long G before block 5's IV. Change block 4 to Applied → Dominant → IV. That builds C7 (C\u2013E\u2013G\u2013B\u266D): the G is still in the chord, and the B\u266D now leans down into the A of the F chord that follows. Same tune, but the line suddenly has somewhere to go.",
         melody: [[0,4,0],[4,4,0],[8,4,7],[12,4,7],[16,4,9],[20,4,9],[24,8,7],[32,4,5],[36,4,5],[40,4,4],[44,4,4],[48,4,2],[52,4,2],[56,8,0]],
         blocks: function () { return [learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3, extensionIndex:2}), learnBlock({degreeIndex:3, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3}), learnBlock({degreeIndex:4, durationIndex:3}), learnBlock({degreeIndex:0, durationIndex:3})]; }
       },
@@ -6058,7 +6168,7 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u11-line-cliche", title: "The Line Cliché",
-        intro: "A line cliché holds one chord still while a single voice inside it creeps by half steps. Here C major is held for four bars before IV. Make its 5th climb: on block 2, open Alter and set 5th to ♯5 (C–E–G♯; G♯ isn't in the key, so the block now reads I+); set block 3's Shape to 6 (C–E–G–A, the key's own 6th); and change block 4 to V/ on IV (C–E–G–B♭; it already has its 7th). The top voice now walks G, G♯, A, B♭ and settles on A in the F chord, while C and E never move.",
+        intro: "A line cliché holds one chord still while a single voice inside it creeps by half steps. Here C major is held for four bars before IV. Make its 5th climb: on block 2, open Alter and set 5th to ♯5 (C–E–G♯; G♯ isn't in the key, so the block now reads I+); set block 3's Shape to 6 (C–E–G–A, the key's own 6th); and change block 4 to Applied → Dominant → IV (C–E–G–B♭; it already has its 7th). The top voice now walks G, G♯, A, B♭ and settles on A in the F chord, while C and E never move.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0}), learnBlock({degreeIndex:0, extensionIndex:2, octave:-1}), learnBlock({degreeIndex:3})]; },
         goal: function (b) {
           if (lessonHas(b[1], [0, 4, 8]) && lessonHas(b[2], [0, 4, 7, 9]) && lessonHas(b[3], [0, 4, 7, 10]))
@@ -6078,7 +6188,7 @@ var CURRICULUM = [
       },
       {
         id: "u11-chromatic-mediants", title: "Chromatic Mediants",
-        intro: "A chromatic mediant is a major chord a third away from home that borrows nothing from the key: it just keeps one note and slides the others by half steps. Change block 2 to Free and pick Root III (E); a free chord starts major. E major (E–G♯–B) shares only E with C major, and the G♯ is a note the key doesn't have: an instant jolt of scale and wonder, the stuff of film scores. Then try Free A major (A–C♯–E), and compare ♭VI (degree vi, borrowed from Aeolian under Alter: A♭–C–E♭), a mediant borrowed from C minor that keeps C instead.",
+        intro: "A chromatic mediant is a major chord a third away from home that borrows nothing from the key: it just keeps one note and slides the others by half steps. On block 2, open the Free tab and tap III (E); a free chord starts major. E major (E–G♯–B) shares only E with C major, and the G♯ is a note the key doesn't have: an instant jolt of scale and wonder, the stuff of film scores. Then try Free A major (A–C♯–E), and compare ♭VI (degree vi, borrowed from Aeolian under Alter: A♭–C–E♭), a mediant borrowed from C minor that keeps C instead.",
         blocks: function () { return [learnBlock({degreeIndex:0}), learnBlock({degreeIndex:2}), learnBlock({degreeIndex:3}), learnBlock({degreeIndex:0})]; },
         goal: function (b) {
           var majorThirdAway = {4: "E major (III)", 9: "A major (VI)", 8: "A♭ major (♭VI)", 3: "E♭ major (♭III)"};
@@ -6092,7 +6202,7 @@ var CURRICULUM = [
       },
       {
         id: "u11-half-diminished", title: "Half-Diminished (♭5 on a Minor 7th)",
-        intro: "ii7 in C is Dm7 (D–F–A–C). Under Alter, set block 2's Borrow from to Aeolian (the list shows \u201cAeolian \u2192 Dm7b5\u201d) and it becomes Dm7♭5 (D–F–A♭–C), the half-diminished chord: C minor's own ii, borrowed into C major. Its A♭ falls a half step to G in V7, so the ii–V into Cmaj7 suddenly sounds darker and more urgent before landing in major.",
+        intro: "ii7 in C is Dm7 (D–F–A–C). Under Alter, set block 2's Borrow to Aeolian (the list shows \u201cAeolian \u2192 Dm7b5\u201d) and it becomes Dm7♭5 (D–F–A♭–C), the half-diminished chord: C minor's own ii, borrowed into C major. Its A♭ falls a half step to G in V7, so the ii–V into Cmaj7 suddenly sounds darker and more urgent before landing in major.",
         blocks: function () { return [learnBlock({degreeIndex:0, extensionIndex:2}), learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4, extensionIndex:2}), learnBlock({degreeIndex:0, extensionIndex:2})]; },
         goal: function (b) {
           if (lessonHas(b[1], [2, 5, 8, 0])) return {name: "Half-diminished ii (iiø7)", reveal: "D–F–A♭–C, borrowed from C minor. The A♭ slips down to G in the next chord."};
@@ -6148,7 +6258,7 @@ var CURRICULUM = [
     lessons: [
       {
         id: "u13-inversions", title: "Smooth Moves with Inversions",
-        intro: "In root position, every chord jumps to its own root. Inversions let chords move by the smallest steps instead. The bass part is off here so you hear the chords' own lowest notes. On block 2, tap Position \u25B2 until 5 is in the bass (C–F–A), and on block 3 until 3 is (B–D–G). Now the lowest notes go C–C–B–C, and the voices move by steps or small skips instead of jumping: the same chords, sounding like one connected line.",
+        intro: "In root position, every chord jumps to its own root. Inversions let chords move by the smallest steps instead. The bass part is off here so you hear the chords' own lowest notes. On block 2, tap Inversion \u25B2 until 5 is in the bass (C–F–A), and on block 3 until 3 is (B–D–G). Now the lowest notes go C–C–B–C, and the voices move by steps or small skips instead of jumping: the same chords, sounding like one connected line.",
         blocks: function () { return [learnBlock({degreeIndex:0, bassToneIndex:-1}), learnBlock({degreeIndex:3, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:4, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:0, bassToneIndex:-1})]; },
         goal: function (b) {
           if (lessonLowest(b[1]) % 12 === 0 && lessonLowest(b[2]) % 12 === 11) return {name: "Smooth voice leading", reveal: "IV over C and V over B: the lowest notes go C–C–B–C, and no voice moves more than a third."};
@@ -6157,7 +6267,7 @@ var CURRICULUM = [
       },
       {
         id: "u13-walking-bass", title: "A Bass Line That Walks Down",
-        intro: "Inversions can turn the chords' lowest notes into a melody of their own. The bass part is off here. On block 2, tap Position \u25B2 until 3 is in the bass (G major over B), and on block 4 until 5 is (C major over G). The lowest notes now walk straight down the scale: C–B–A–G–F, one of the most used bass lines in pop and ballads.",
+        intro: "Inversions can turn the chords' lowest notes into a melody of their own. The bass part is off here. On block 2, tap Inversion \u25B2 until 3 is in the bass (G major over B), and on block 4 until 5 is (C major over G). The lowest notes now walk straight down the scale: C–B–A–G–F, one of the most used bass lines in pop and ballads.",
         blocks: function () { return [learnBlock({degreeIndex:0, bassToneIndex:-1}), learnBlock({degreeIndex:4, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:5, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:0, octave:-1, bassToneIndex:-1}), learnBlock({degreeIndex:3, octave:-1, bassToneIndex:-1})]; },
         goal: function (b) {
           var low = b.slice(0, 5).map(lessonLowest);
@@ -6169,7 +6279,7 @@ var CURRICULUM = [
       },
       {
         id: "u13-drop2", title: "Drop 2: Opening Up a Chord",
-        intro: "A close voicing packs a chord's notes as tightly as possible. Drop 2 takes the second-highest note down an octave, spreading the chord out the way a guitarist or a horn section would play it. Set Drop to Drop 2 on all three chords of this ii–V–I and compare: same notes, more air.",
+        intro: "A close voicing packs a chord's notes as tightly as possible. Drop 2 takes the second-highest note down an octave, spreading the chord out the way a guitarist or a horn section would play it. Set Spread to Drop 2 on all three chords of this ii–V–I and compare: same notes, more air.",
         blocks: function () { return [learnBlock({degreeIndex:1, extensionIndex:2}), learnBlock({degreeIndex:4, extensionIndex:2}), learnBlock({degreeIndex:0, extensionIndex:2})]; },
         goal: function (b) {
           if (b.filter(function (x) { return x.dropIndex > 0; }).length >= 2) return {name: "Drop voicings", reveal: "the second-highest note goes down an octave, spreading the chord over more than an octave without changing its notes."};
