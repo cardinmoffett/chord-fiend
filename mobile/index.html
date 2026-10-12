@@ -2099,7 +2099,11 @@ var songStartSlotIndex = null; // which arrangement slot whole-song Play begins 
 
 // pinned: during section playback, a block the person tapped stays selected instead of
 // the selection following the playhead. Tapping empty timeline space unpins it.
-var playback = { active:false, startIndex:0, timer:null, pinned:false };
+var playback = { active:false, startIndex:0, endIndex:null, timer:null, pinned:false };
+// Where a pass stops: the end of the selection being looped, or the end of the blocks.
+function playbackEndIndex() {
+  return playback.endIndex === null ? playbackBlocks.length : Math.min(playback.endIndex, playbackBlocks.length);
+}
 
 // ---------- Projects ----------
 // A project is a whole song (sections, arrangement, and all its musical /
@@ -3371,7 +3375,7 @@ function scheduleMelodyPass(startIndex, baseTime, secondsPerBeat) {
   if (!isMelodyLesson()) return;
   ensureMelodySynth();
   var fromBeat = cumulativeBeatsBeforeIndex(startIndex);
-  var endBeat = cumulativeBeatsBeforeIndex(playbackBlocks.length);
+  var endBeat = cumulativeBeatsBeforeIndex(playbackEndIndex());
   sandbox.melody.forEach(function (n) {
     var beat = n[0] / 4;
     if (beat < fromBeat || beat >= endBeat) return;
@@ -4913,7 +4917,7 @@ function scheduleOnePass(startIndex, baseTime) {
   scheduleMelodyPass(startIndex, baseTime, secondsPerBeat);
   var cursorSeconds = 0;
 
-  for (var i = startIndex; i < playbackBlocks.length; i++) {
+  for (var i = startIndex; i < playbackEndIndex(); i++) {
     var blockDurBeats = getDurationBeats(playbackBlocks[i]);
     var blockDurSeconds = blockDurBeats * secondsPerBeat;
     (function (blockIndex, atOffset, durSeconds, durBeats) {
@@ -4979,12 +4983,15 @@ function beginTransportPlayback(startIdx) {
   requestAnimationFrame(playheadFrame);
 }
 
+// With a copy selection showing, Play loops just the selected blocks.
 function startPlayback() {
   ensureAudioReady(function () {
     playbackMode = "section";
     playback.pinned = false;
     playbackBlocks = editingBlocks;
-    beginTransportPlayback(state.currentIndex);
+    var r = selectionRange();
+    playback.endIndex = r ? r.to + 1 : null;
+    beginTransportPlayback(r ? r.from : state.currentIndex);
   });
 }
 
@@ -5020,6 +5027,7 @@ function startSongPlayback() {
   ensureAudioReady(function () {
     playbackMode = "song";
     playbackBlocks = seq.blocks;
+    playback.endIndex = null; // the whole song, never a selection
     songBlockToSlotIndex = seq.blockToSlot;
     beginTransportPlayback(seq.startBlockIndex);
   });
