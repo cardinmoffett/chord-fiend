@@ -499,7 +499,7 @@
     box-shadow: inset 0 0 0 3px var(--accent), 0 0 10px rgba(255,180,84,0.55);
     z-index: 1;
   }
-  /* A copy/paste selection: a long press marks the anchor, a second tap the other end. */
+  /* A copy/paste selection: a double tap marks the anchor, a second tap the other end. */
   .seg.in-range { box-shadow: inset 0 0 0 3px #3b82f6, 0 0 8px rgba(59,130,246,0.45); z-index: 2; }
   .seg.applied-chord {
     box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55);
@@ -2945,18 +2945,19 @@ function backgroundForBlock(block) {
   return "linear-gradient(180deg, " + top + ", " + bottom + ")";
 }
 
-// COPY AND PASTE. A long press on a block marks the selection's anchor; the next tap on
+// COPY AND PASTE. A double tap on a block marks the selection's anchor; the next tap on
 // another block sets the other end. Any tap after that -- on a block or on empty
 // timeline -- clears it, and so does Copy. Copy takes the selection (or, with none, the
-// current block: no long press needed); Paste inserts copies after the selection (or the
+// current block: no double tap needed); Paste inserts copies after the selection (or the
 // current block). Delete and the nudge arrows act on the selection too.
 var blockSelection = null; // {anchor, end}; end is null until the second tap
 var blockClipboard = [];   // copies of the last blocks copied (this session)
-var LONG_PRESS_MS = 450;
+var DOUBLE_TAP_MS = 320;
+var lastBlockTap = {index: -1, time: 0};
 var CLIP_ICONS = {
   copy: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5.5" y="5.5" width="8" height="8.5" rx="1.5"/><path d="M3.5 10.5h-.5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"/></svg>',
-  // Paste: an arrow dropping into a tray -- "put it here".
-  paste: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.75v7.5M5 6.5 8 9.5 11 6.5"/><path d="M2.25 9.5v3.25a1 1 0 0 0 1 1h9.5a1 1 0 0 0 1-1V9.5"/></svg>'
+  // Paste: a block, a cursor after it and a plus -- "insert after this".
+  paste: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="4.5" height="8" rx="1"/><path d="M8 2.5v11"/><path d="M11.5 6v4M9.5 8h4"/></svg>'
 };
 function selectionRange() {
   if (!blockSelection) return null;
@@ -3055,7 +3056,6 @@ function buildSegElement(seg, widthCss, boundary) {
   }
 
   var held = false;
-  var longPressTimer = null;
   el.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     // While playing, a tap only selects the block for editing: no sound, and the
@@ -3080,17 +3080,20 @@ function buildSegElement(seg, widthCss, boundary) {
       renderEditor();
       return;
     }
-    if (blockSelection) { blockSelection = null; showSelection(); }
-    stopPlayback();
-    // A long press (held without the touch turning into a scroll) marks the anchor.
-    clearTimeout(longPressTimer);
-    longPressTimer = setTimeout(function () {
-      if (!held) return;
+    // A double tap marks the anchor (holding still just plays the chord). The first tap
+    // has already selected and sounded the block; the second only marks it.
+    var now = Date.now();
+    if (!blockSelection && lastBlockTap.index === seg.blockIndex && now - lastBlockTap.time < DOUBLE_TAP_MS) {
+      lastBlockTap = {index: -1, time: 0};
       blockSelection = {anchor: seg.blockIndex, end: null};
       showSelection();
       renderEditor();
       if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
-    }, LONG_PRESS_MS);
+      return;
+    }
+    lastBlockTap = {index: seg.blockIndex, time: now};
+    if (blockSelection) { blockSelection = null; showSelection(); }
+    stopPlayback();
     el.setPointerCapture(e.pointerId); // keeps pointerup/cancel targeted at THIS segment even if
       // the finger drifts elsewhere during the hold (segments allow pan-y for scrolling, so a
       // touch that turns into a scroll can otherwise hand its remaining events to a different
@@ -3115,7 +3118,6 @@ function buildSegElement(seg, widthCss, boundary) {
     }
   });
   var release = function () {
-    clearTimeout(longPressTimer);
     if (held) {
       releaseHeld();
       try { bassSynth.triggerRelease(); } catch (e) {}
