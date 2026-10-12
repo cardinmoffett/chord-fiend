@@ -603,7 +603,7 @@
     font: inherit; color: #1b1b22; cursor: pointer; min-width: 0;
   }
   .pad b { font-size: 16px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
-  .pad small { font-size: 10px; font-weight: 600; opacity: 0.7; white-space: nowrap; overflow: hidden; max-width: 100%; }
+  .pad small { font-size: 10px; font-weight: 600; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 4px); }
   .pad em { font-style: normal; font-size: 9px; font-weight: 700; opacity: 0.7; line-height: 1.1; }
   .pad.on { border-color: var(--text); }
   .pad.out { background: var(--bg-elevated); color: var(--text-dim); border-color: var(--line); }
@@ -628,8 +628,12 @@
   /* Alter shows only in the expanded drawer; setEditorPanelHeight reveals it. */
   .alter-section { overflow: hidden; max-height: 0; display: flex; flex-direction: column; gap: 8px; }
   .alter-caption { font-size: 12px; font-weight: 700; color: var(--text-dim); padding-top: 2px; }
-  /* Alter's rows pair up: Borrow beside 5th, 3rd beside 7th, 9th beside 11th. */
-  .alter-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 8px; align-items: end; }
+  .editor-grid.expanded .editor-row.length { display: none; }
+  /* Alter's rows: Borrow beside 5th, 3rd beside 7th, then 9th, 11th and 13th together. */
+  .alter-rows { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 8px; align-items: end; }
+  .alter-rows > .field { grid-column: span 3; }
+  .alter-rows > .field.ext { grid-column: span 2; }
+  .alter-rows .field.ext .toggle-row button { padding: 5px 0; font-size: 11px; }
   .alter-rows .field { min-width: 0; }
   .alter-rows .field.disabled { opacity: 0.38; }
   .alter-rows .toggle-row button { flex: 1; padding: 5px 2px; }
@@ -3573,12 +3577,23 @@ function editorExpandedHeightPx() {
 // the content, so they fit each tab.
 var alterRowsEl = null; // the Alter section; set by appendAlterGroup, null when the block has none
 var editorGridEl = null; // the editor's content; set by renderEditor
+// The expanded drawer hides Length (it's for altering), so the two stops differ by the
+// Length row as well as the Alter section.
+var lengthRowEl = null;   // set by renderEditor
+var lengthRowPx = 0;      // Length's height plus the gap after it, measured while it shows
+var EDITOR_GAP = 10;      // .editor-grid's gap
+function lengthHidden() { return !!(editorGridEl && editorGridEl.classList && editorGridEl.classList.contains("expanded")); }
+// withAlter false: the collapsed content (Length showing, no Alter).
+// withAlter true: the expanded content (no Length, all of Alter).
 function editorContentPx(withAlter) {
   var editorEl = document.getElementById("editor");
   if (!editorGridEl || !editorGridEl.getBoundingClientRect) return NaN;
   var cs = window.getComputedStyle(editorEl);
   var h = editorGridEl.getBoundingClientRect().height + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-  if (alterRowsEl) h += (withAlter ? alterRowsEl.scrollHeight : 0) - alterRowsEl.offsetHeight;
+  if (lengthRowEl && !lengthHidden()) lengthRowPx = lengthRowEl.getBoundingClientRect().height + EDITOR_GAP;
+  if (alterRowsEl) h -= alterRowsEl.offsetHeight;
+  if (lengthHidden()) h += lengthRowPx;
+  if (withAlter) h += (alterRowsEl ? alterRowsEl.scrollHeight : 0) - lengthRowPx;
   return Math.round(h);
 }
 function editorCollapsedHeightPx() { return Math.min(editorContentPx(false), editorExpandedCeilingPx()); }
@@ -3586,7 +3601,9 @@ function editorCollapsedHeightPx() { return Math.min(editorContentPx(false), edi
 // block buttons: none when collapsed, all of it when expanded, part of it mid-drag.
 function setEditorPanelHeight(px) {
   if (alterRowsEl) {
-    var base = editorContentPx(false);
+    // What's already shown above and below Alter: the collapsed content, less Length
+    // once the drawer has opened and hidden it.
+    var base = editorContentPx(false) - (lengthHidden() ? lengthRowPx : 0);
     alterRowsEl.style.maxHeight = (editorExpanded && px >= editorExpandedHeightPx()) ? "none" : Math.max(0, px - base) + "px";
   }
   document.getElementById("editor").style.height = px + "px";
@@ -3707,6 +3724,8 @@ document.getElementById("timeline").addEventListener("scroll", function () {
     else if (!editorExpanded && finalDy > threshold) editorExpanded = true;
     // otherwise: not a decisive enough drag -- springs back to the starting state
     if (wasExpanded && !editorExpanded) editorEl.scrollTop = 0; // a closed drawer starts back at the top
+    // Open, the drawer is for altering: Length steps aside. Closed, it comes back.
+    if (editorGridEl && editorGridEl.classList) editorGridEl.classList.toggle("expanded", editorExpanded);
     logAudio("[DRAWER] finalDy=" + finalDy + " threshold=" + threshold.toFixed(1) + " wasExpanded=" + wasExpanded + " nowExpanded=" + editorExpanded);
 
     // Expanding pushes the workspace's scroll position up to keep the
@@ -3896,7 +3915,7 @@ function chordPads(block, chord, isApplied, isFree) {
       var cand = Object.assign({}, plain, {chordSource: "diatonic", degreeIndex: d});
       if (!selected) cand.blockModeIndex = 0;
       var lbl = blockLabel(cand, root, mode);
-      wrap.appendChild(chordPad(null, lbl.degree.replace(/^([♭♯]*[IVXivx]+[°+]?).*$/, "$1"), lbl.name, cand, selected, rootChange(block, function () { block.degreeIndex = d; })));
+      wrap.appendChild(chordPad(null, lbl.degree.replace(/^([♭♯]*[IVXivx]+[°ø+]?).*$/, "$1"), lbl.name, cand, selected, rootChange(block, function () { block.degreeIndex = d; })));
     })(d);
   }
   return wrap;
@@ -3962,6 +3981,7 @@ function appendAlterGroup(parent, block) {
       var home = field.children[1].children[values.indexOf(row.keyValue)];
       if (home) home.classList.add("home");
     }
+    if (row.field === "ninth" || row.field === "eleventh" || row.field === "thirteenth") field.classList.add("ext");
     fields[row.field] = field;
   });
   {
@@ -3981,7 +4001,7 @@ function appendAlterGroup(parent, block) {
     else if (block.blockModeIndex) borrow.classList.add("altered");
     fields.borrow = borrow;
   }
-  // Paired rows: Borrow beside 5th, 3rd beside 7th, 9th beside 11th, then 13th.
+  // Rows: Borrow beside 5th, 3rd beside 7th, then 9th, 11th and 13th on one row.
   ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"].forEach(function (k) {
     if (fields[k]) grid.appendChild(fields[k]);
   });
@@ -4002,6 +4022,7 @@ function renderEditor() {
   editor.innerHTML = "";
   alterRowsEl = null;
   editorGridEl = null;
+  lengthRowEl = null;
   if (!editingBlocks.length) return;
   var block = editingBlocks[state.currentIndex];
   var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
@@ -4069,6 +4090,7 @@ function renderEditor() {
   // (a feel, or a multiplier that ties copies together or splits the note).
   var parts = lengthParts(block);
   var lengthRow = row("length");
+  lengthRowEl = lengthRow;
   var bases = document.createElement("div");
   bases.className = "toggle-row note-values";
   LENGTH_BASES.forEach(function (base) {
@@ -4158,6 +4180,7 @@ function renderEditor() {
   grid.appendChild(bar);
   editor.appendChild(grid);
   editorGridEl = grid;
+  if (editorExpanded) grid.classList.add("expanded"); // the open drawer hides Length
   // The content just changed (a tab can add or drop a row of pads), so fit the drawer.
   setEditorPanelHeight(editorExpanded ? editorExpandedHeightPx() : editorCollapsedHeightPx());
 
