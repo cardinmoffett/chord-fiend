@@ -125,7 +125,7 @@ export function Inspector({
       const cand: Block = { ...plain, chordSource: "diatonic", degreeIndex: d, blockModeIndex: on ? block.blockModeIndex : 0 };
       const lbl = engineBlockLabel(cand, root, mode);
       // A degree change keeps the borrowed mode.
-      return { main: lbl.degree.replace(/^([\u266D\u266F]*[IVXivx]+[\u00B0+]?).*$/, "$1"), sub: lbl.name, color: blockColor(cand), on, pick: () => rootChange({ degreeIndex: d, blockModeIndex: block.blockModeIndex }) };
+      return { main: lbl.degree.replace(/^([\u266D\u266F]*[IVXivx]+[\u00B0\u00F8+]?).*$/, "$1"), sub: lbl.name, color: blockColor(cand), on, pick: () => rootChange({ degreeIndex: d, blockModeIndex: block.blockModeIndex }) };
     });
   }
 
