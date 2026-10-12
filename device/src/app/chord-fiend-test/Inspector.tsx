@@ -43,6 +43,11 @@ const CLEAR_ALTER: Partial<Block> = {
   aug: 0, flat5: 0, susIndex: 0,
 };
 const SPREAD_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
+/** A free pad's color: grey, with a little of the degree's hue for steps in the key. */
+function freePadColor(degreeColor: string | null): string {
+  const hue = degreeColor ? Number((degreeColor.match(/hsl\((\d+)/) || [])[1] || 220) : 220;
+  return `hsl(${hue} ${degreeColor ? 24 : 6}% 72%)`;
+}
 
 /**
  * The editor for the selected block, laid out like the phone app's drawer: tabs (where the
@@ -109,7 +114,8 @@ export function Inspector({
       return {
         main: stepNumeral(step),
         sub: engineBlockLabel(cand, root, mode).name,
-        color: degree >= 0 ? blockColor({ ...plain, chordSource: "diatonic", degreeIndex: degree, blockModeIndex: 0 }) : undefined,
+        // All greyish (none is the key's own chord); key steps keep a little of their color.
+        color: freePadColor(degree >= 0 ? blockColor({ ...plain, chordSource: "diatonic", degreeIndex: degree, blockModeIndex: 0 }) : null),
         on: (block.freeRoot ?? 0) === step,
         pick: () => rootChange({ freeRoot: step }),
       };

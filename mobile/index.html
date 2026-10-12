@@ -3873,16 +3873,24 @@ function lengthModSelect(current, onPick) {
 }
 // One chord pad: the numeral large, the chord's name small (and the applied function on
 // top), colored like the block it would make.
-function chordPad(top, main, sub, colorBlock, selected, onTap) {
+function chordPad(top, main, sub, colorBlock, selected, onTap, tintOnly) {
   var pad = document.createElement("button");
   pad.className = "pad" + (selected ? " on" : "");
-  if (colorBlock) pad.style.background = backgroundForBlock(colorBlock);
+  if (tintOnly) pad.style.background = freePadBackground(colorBlock);
+  else if (colorBlock) pad.style.background = backgroundForBlock(colorBlock);
   else pad.className += " out";
   if (top) { var t = document.createElement("em"); t.textContent = top; pad.appendChild(t); }
   var m = document.createElement("b"); m.textContent = main; pad.appendChild(m);
   var n = document.createElement("small"); n.textContent = sub; pad.appendChild(n);
   pad.addEventListener("click", onTap);
   return pad;
+}
+// Free pads are all greyish, since none of them is the key's own chord; the steps that are
+// in the key take a little of their degree's color, so the scale still shows.
+function freePadBackground(colorBlock) {
+  var hue = colorBlock ? blockHSL(colorBlock).hue : 220;
+  var sat = colorBlock ? 24 : 6;
+  return "linear-gradient(180deg, hsl(" + hue + "," + sat + "%,82%), hsl(" + hue + "," + sat + "%,72%))";
 }
 // The pads for the current tab. Diatonic: the key's seven chords (the selected one shows
 // what the block really is, borrowed mode included). Applied: the seven targets for the
@@ -3900,7 +3908,7 @@ function chordPads(block, chord, isApplied, isFree) {
       var degree = scale.indexOf(step);
       var colorBlock = degree >= 0 ? Object.assign({}, plain, {chordSource: "diatonic", degreeIndex: degree, blockModeIndex: 0}) : null;
       var lbl = blockLabel(cand, root, mode);
-      wrap.appendChild(chordPad(null, stepNumeral(step), lbl.name, colorBlock, (block.freeRoot || 0) === step, rootChange(block, function () { block.freeRoot = step; })));
+      wrap.appendChild(chordPad(null, stepNumeral(step), lbl.name, colorBlock, (block.freeRoot || 0) === step, rootChange(block, function () { block.freeRoot = step; }), true));
     })(step);
   } else if (isApplied) {
     var targets = degreeLabels(MASTER_MODE_NAMES[mode]);
