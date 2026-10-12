@@ -42,8 +42,8 @@ Revised 2026-10-10, twice:
   | 13th | 13 | ♭13 · 13 | `thirteenth` |
 
 - Several rows can be altered at once: G13(♭9,♯11).
-- sus2 hides the 9th row and sus4 the 11th (same notes).
-- **Applied chords** keep their function's 3rd and 7th: no 7th row, and the 3rd row is sus2 · 3 · sus4.
+- Every row is always shown, so editors keep a fixed layout; rows for tones the chord lacks, and the 9th under sus2 or the 11th under sus4 (same notes), are greyed out.
+- **Applied chords** take every row too (since 2026-10-12), the leading-tone chord included: V7/ii with a ♭3 reads v7/ii, and a ♭7 on vii°7/V makes it half-diminished.
 - Unset means "what the source gives". **Editors show the chord's real values,** so a V7 shows 3, 5, ♭7. Choosing the key's own value clears the change.
 - **Changing the root or kind** (category, degree, mode, function, target, free root) **clears Alter.** The usual flow is: try a degree, alter it, move on. Inversion, drop and octave keep it.
 - **Changing Shape** keeps only the alterations for tones the new shape still has.

@@ -134,7 +134,8 @@ export function Inspector({
     const c = buildChord({ ...plain, blockModeIndex: i }, root, mode);
     return (i === 0 ? "Key" : m) + " \u2192 " + getChordSymbol(c, root).replace(/ \(.*\)$/, "");
   });
-  const alterOrder = tab === "diatonic" ? ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"] : ["third", "fifth", "seventh", "ninth", "eleventh", "thirteenth"];
+  // A fixed layout: every Alter row is always shown; the ones that don't apply are greyed out.
+  const alterOrder = ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"];
 
   return (
     // A disabled fieldset disables every control inside it, buttons and menus alike.
@@ -205,16 +206,17 @@ export function Inspector({
           {alterOrder.map((key) => {
             if (key === "borrow") {
               return (
-                <Field key="borrow" label="Borrow" altered={!!block.blockModeIndex}>
-                  <Select value={block.blockModeIndex} options={borrowLabels} onChange={(v) => rootChange({ blockModeIndex: v })} />
+                <Field key="borrow" label="Borrow" altered={tab === "diatonic" && !!block.blockModeIndex} disabled={tab !== "diatonic"}>
+                  <Select value={tab === "diatonic" ? block.blockModeIndex : 0} options={borrowLabels} disabled={tab !== "diatonic"} onChange={(v) => rootChange({ blockModeIndex: v })} />
                 </Field>
               );
             }
             const row = rows.find((r) => r.field === key);
             if (!row) return null;
             return (
-              <Field key={row.field} label={row.label} altered={row.value !== row.keyValue}>
+              <Field key={row.field} label={row.label} altered={!row.disabled && row.value !== row.keyValue} disabled={row.disabled}>
                 <Segmented
+                  disabled={row.disabled}
                   options={row.choices.map((c) => c.label)}
                   value={row.choices.findIndex((c) => c.value === row.value)}
                   home={row.choices.findIndex((c) => c.value === row.keyValue)}
@@ -244,9 +246,9 @@ export function Inspector({
   );
 }
 
-function Field({ label, wide, altered, children }: { label: string; wide?: boolean; altered?: boolean; children: React.ReactNode }) {
+function Field({ label, wide, altered, disabled, children }: { label: string; wide?: boolean; altered?: boolean; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <div className={"field" + (wide ? " wide" : "") + (altered ? " altered" : "")}>
+    <div className={"field" + (wide ? " wide" : "") + (altered ? " altered" : "") + (disabled ? " disabled" : "")}>
       <span className="field-label">{label}</span>
       {children}
     </div>

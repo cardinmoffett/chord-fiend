@@ -593,11 +593,13 @@
     font: inherit; font-size: 12px; font-weight: 700; color: var(--text-dim);
   }
   .fn-row button.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .pad-area { display: flex; flex-direction: column; gap: 6px; height: 104px; }
+  .pad-area .pads { flex: 1; grid-auto-rows: 1fr; }
   .pads { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
   .pads.free { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .pad {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 48px; padding: 4px 0; border: 2px solid transparent; border-radius: 9px;
+    min-height: 40px; padding: 4px 0; border: 2px solid transparent; border-radius: 9px;
     font: inherit; color: #1b1b22; cursor: pointer; min-width: 0;
   }
   .pad b { font-size: 16px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
@@ -629,6 +631,7 @@
   /* Alter's rows pair up: Borrow beside 5th, 3rd beside 7th, 9th beside 11th. */
   .alter-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 8px; align-items: end; }
   .alter-rows .field { min-width: 0; }
+  .alter-rows .field.disabled { opacity: 0.38; }
   .alter-rows .toggle-row button { flex: 1; padding: 5px 2px; }
   .editor-grid .block-actions { margin-left: 0; justify-content: flex-end; }
   .editor-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -1388,19 +1391,18 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
 
     if (fn === "leadingTone") {
       chordRootOffset = targetRootOffset - 1; // a half-step below the target
-      offsets = DIMINISHED7_INTERVALS.slice(); // always this exact tetrad
-      effectiveSus = "none"; effectiveAug = false; effectiveIs6 = false; // not meaningful on a fixed dim7
+      offsets = DIMINISHED7_INTERVALS.slice(); // a fully diminished 7th; Shape doesn't apply
+      effectiveAug = false; effectiveIs6 = false;
       effectiveFlat5 = false; // already has one
       addNine = false;
+      // Alter still works on it, like any chord (a vii\u00F87/V with a \u266D7, a sus4).
+      if (susName === "sus2") offsets[1] = 2;
+      else if (susName === "sus4") offsets[1] = 5;
     } else {
       chordRootOffset = targetRootOffset + (fn === "tritoneSub" ? 1 : 7);
-      if (is6) {
-        offsets = DOMINANT_INTERVALS.slice(0, 3).concat([9]); // triad + a plain major 6th
-      } else {
-        offsets = DOMINANT_INTERVALS.slice(0, toneCount);
-        if (susName === "sus2") offsets[1] = 2; // fixed major 2nd -- not scale-derived, dominant quality is fixed
-        else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
-      }
+      offsets = is6 ? DOMINANT_INTERVALS.slice(0, 3).concat([9]) : DOMINANT_INTERVALS.slice(0, toneCount); // a 6 chord: triad + a major 6th
+      if (susName === "sus2") offsets[1] = 2; // fixed major 2nd
+      else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
       if (addNine) offsets.push(DOMINANT_INTERVALS[4]);
     }
   } else {
@@ -1422,26 +1424,27 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     if (addNine) offsets.push(14);
   }
 
-  // ALTER: every chord but the fixed leading-tone dim7 can step off what its source
-  // gives, one tone at a time. Each starts at "what the key gives" (unset), and the
-  // block's label shows any change, so the chord keeps its number (ii with a major 3rd
-  // and a flat 7th reads II7). An applied chord keeps its function's 3rd and 7th.
-  var hasSeventh = !is6 && !addNine && offsets.length >= 4;
-  var ninthSlot = addNine ? offsets.length - 1 : (!is6 && offsets.length >= 5 ? 4 : -1);
-  var eleventhSlot = !is6 && !addNine && offsets.length >= 6 ? 5 : -1;
-  var thirteenthSlot = !is6 && !addNine && offsets.length >= 7 ? 6 : -1;
-  if (!(isApplied && fn === "leadingTone")) {
-    if (!isApplied && effectiveSus === "none" && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
+  // ALTER: every chord, applied ones included, can step off what its source gives, one
+  // tone at a time. Each starts at "what the source gives" (unset), and the block's
+  // label shows any change, so the chord keeps its number (ii with a major 3rd and a
+  // flat 7th reads II7; V7/ii with a minor 3rd reads v7/ii).
+  effectiveSus = SUS_NAMES[block.susIndex] || "none";
+  var hasSeventh = !effectiveIs6 && !addNine && offsets.length >= 4;
+  var ninthSlot = addNine ? offsets.length - 1 : (!effectiveIs6 && offsets.length >= 5 ? 4 : -1);
+  var eleventhSlot = !effectiveIs6 && !addNine && offsets.length >= 6 ? 5 : -1;
+  var thirteenthSlot = !effectiveIs6 && !addNine && offsets.length >= 7 ? 6 : -1;
+  {
+    if (effectiveSus === "none" && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
     if (FIFTHS[block.fifth] !== undefined) {
       // An explicit 5th (\u266D5, 5 or \u266F5) -- the only way to give vii\u00B0 a perfect 5th.
       offsets[2] = FIFTHS[block.fifth];
       effectiveAug = offsets[2] === 8;
       effectiveFlat5 = offsets[2] === 6;
-    } else if (!(isApplied && is6)) { // (an applied 6 chord ignores the older aug, as the original app did)
+    } else if (!(isApplied && (is6 || fn === "leadingTone"))) { // (the older aug isn't used on an applied 6 chord or the leading-tone chord, as in the original app)
       if (block.aug) offsets[2] = 8;
       else if (effectiveFlat5) offsets[2] = 6;
     }
-    if (!isApplied && hasSeventh && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
+    if (hasSeventh && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
     // sus2 is already the 9th's note and sus4 the 11th's, so those rows step aside.
     if (ninthSlot >= 0 && effectiveSus !== "sus2" && NINTHS[block.ninth] !== undefined) {
       offsets[ninthSlot] = NINTHS[block.ninth];
@@ -1868,23 +1871,16 @@ var ALTER_ROW_SPECS = {
   thirteenth: {label: "13th", choices: [["b13", "\u266D13"], ["13", "13"]]}
 };
 function alterRows(block, masterRootIndex, masterModeIndex) {
-  var isApplied = block.chordSource === "applied";
-  if (isApplied && block.appliedFunction === "leadingTone") return [];
+  // Every row is always returned, in the same order, so editors keep a fixed layout; a
+  // row for a tone the chord doesn't have (or one a sus already covers) is `disabled`.
   var chord = buildChord(block, masterRootIndex, masterModeIndex);
   var keyChord = buildChord(withoutAlter(block), masterRootIndex, masterModeIndex);
-  var keys = ALTER_FIELDS.filter(function (f) {
-    if (chord.alter[f] === null && f !== "third") return false;
-    if (f === "third" && isApplied && chord.is6) return false;
-    if (f === "seventh" && isApplied) return false;
-    if (f === "ninth" && chord.sus === "sus2") return false;
-    if (f === "eleventh" && chord.sus === "sus4") return false;
-    return true;
-  });
-  return keys.map(function (f) {
+  return ALTER_FIELDS.map(function (f) {
     var spec = ALTER_ROW_SPECS[f];
-    var choices = spec.choices.filter(function (c) { return !(f === "third" && isApplied && c[0] === "minor"); });
-    return {field: f, label: spec.label, value: chord.alter[f], keyValue: keyChord.alter[f],
-            choices: choices.map(function (c) { return {value: c[0], label: c[1]}; })};
+    var disabled = chord.alter[f] === null ||
+      (f === "ninth" && chord.sus === "sus2") || (f === "eleventh" && chord.sus === "sus4");
+    return {field: f, label: spec.label, value: disabled ? null : chord.alter[f], keyValue: keyChord.alter[f], disabled: disabled,
+            choices: spec.choices.map(function (c) { return {value: c[0], label: c[1]}; })};
   });
 }
 // The block change for picking `value` in an Alter row: the key's own value clears the
@@ -3562,7 +3558,7 @@ var programmaticScrollGuard = false;
 // value outright left visibly dead space below the last field whenever the
 // content was shorter than 60% of the screen -- which it normally is.
 function editorExpandedCeilingPx() {
-  return Math.round(Math.min(window.innerHeight * 0.6, 560));
+  return Math.round(Math.min(window.innerHeight * 0.75, 680)); // room for every Alter row on a normal phone
 }
 // scrollHeight reports the content's real height regardless of the
 // element's own current (possibly clipped) height, so this is accurate
@@ -3934,7 +3930,8 @@ function rootChange(block, apply) {
 function appendAlterGroup(parent, block) {
   var rows = alterRows(block, state.masterRootIndex, state.masterModeIndex);
   var canBorrow = block.chordSource !== "applied" && block.chordSource !== "free";
-  if (!rows.length && !canBorrow) return;
+  // The layout never changes: Borrow and every tone row are always there, and the ones
+  // that don't apply to this chord are greyed out rather than hidden.
   // ALTER lives only in the expanded drawer: it sits between the main controls and the
   // block buttons, and the drawer's height reveals it (see setEditorPanelHeight), so a
   // drag opens it gradually. Collapsed, it takes no room at all.
@@ -3942,7 +3939,7 @@ function appendAlterGroup(parent, block) {
   section.className = "alter-section";
   var caption = document.createElement("div");
   caption.className = "alter-caption";
-  caption.textContent = canBorrow ? "Alter \u00B7 Borrow" : "Alter";
+  caption.textContent = "Alter \u00B7 Borrow";
   section.appendChild(caption);
   var grid = document.createElement("div");
   grid.className = "alter-rows";
@@ -3957,15 +3954,18 @@ function appendAlterGroup(parent, block) {
       Object.keys(change).forEach(function (k) { if (change[k] === undefined) delete block[k]; else block[k] = change[k]; });
       refresh(); previewCurrentBlock();
     });
-    if (row.value !== row.keyValue) {
+    if (row.disabled) {
+      field.classList.add("disabled");
+      Array.prototype.forEach.call(field.children[1].children, function (b) { b.disabled = true; });
+    } else if (row.value !== row.keyValue) {
       field.classList.add("altered");
       var home = field.children[1].children[values.indexOf(row.keyValue)];
       if (home) home.classList.add("home");
     }
     fields[row.field] = field;
   });
-  if (canBorrow) {
-    // BORROW: the same degree in another mode. The open menu lists results ("Dorian \u2192
+  {
+    // BORROW: the same degree in another mode (Diatonic chords only; greyed otherwise). The open menu lists results ("Dorian \u2192
     // F7"); closed it shows just the mode, to fit half a row. A new mode is a new chord,
     // so it clears the tone alterations.
     var full = modeOptionLabels(block);
@@ -3977,11 +3977,12 @@ function appendAlterGroup(parent, block) {
     sel.addEventListener("focus", showFull);
     sel.addEventListener("mousedown", showFull);
     sel.addEventListener("blur", showShort);
-    if (block.blockModeIndex) borrow.classList.add("altered");
+    if (!canBorrow) { borrow.classList.add("disabled"); sel.disabled = true; sel.value = 0; }
+    else if (block.blockModeIndex) borrow.classList.add("altered");
     fields.borrow = borrow;
   }
   // Paired rows: Borrow beside 5th, 3rd beside 7th, 9th beside 11th, then 13th.
-  (canBorrow ? ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"] : ["third", "fifth", "seventh", "ninth", "eleventh", "thirteenth"]).forEach(function (k) {
+  ["borrow", "fifth", "third", "seventh", "ninth", "eleventh", "thirteenth"].forEach(function (k) {
     if (fields[k]) grid.appendChild(fields[k]);
   });
 }
@@ -4044,7 +4045,12 @@ function renderEditor() {
   });
   grid.appendChild(tabs);
 
-  // 2. PADS, colored like the blocks they make.
+  // 2. PADS, colored like the blocks they make, in an area of fixed height on every tab
+  // (Applied adds its function row, Free has two rows of pads), so switching tabs never
+  // resizes the drawer.
+  var padArea = document.createElement("div");
+  padArea.className = "pad-area";
+  grid.appendChild(padArea);
   if (isApplied) {
     var fnRow = document.createElement("div");
     fnRow.className = "fn-row";
@@ -4055,9 +4061,9 @@ function renderEditor() {
       f.addEventListener("click", rootChange(block, function () { block.appliedFunction = fn; }));
       fnRow.appendChild(f);
     });
-    grid.appendChild(fnRow);
+    padArea.appendChild(fnRow);
   }
-  grid.appendChild(chordPads(block, chord, isApplied, isFree));
+  padArea.appendChild(chordPads(block, chord, isApplied, isFree));
 
   // 3. LENGTH: a base note in one tap (quarter, half, whole) and one modifier menu
   // (a feel, or a multiplier that ties copies together or splits the note).

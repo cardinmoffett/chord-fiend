@@ -282,3 +282,4 @@ fieldset.inspector.locked { opacity: 0.55; }
 .cf .pad.out { background: transparent; border-color: var(--line); color: var(--dim); }
 .cf .pad.out.on { border-color: var(--text); }
 .alter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; }
+.field.disabled { opacity: 0.4; }

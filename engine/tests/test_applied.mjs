@@ -55,9 +55,11 @@ var augDom = api.buildChord(applied({appliedTargetIndex:0, appliedFunction:"domi
 check('aug on an applied dominant raises the 5th to +8', augDom.offsets[2] === 8);
 
 console.log('=== leading-tone ignores extension/sus/aug entirely (always the fixed tetrad) ===');
-var ltWithExtras = api.buildChord(applied({appliedTargetIndex:4, appliedFunction:"leadingTone", susIndex:2, aug:true, extensionIndex:5}), 0, 0);
-check('leading-tone chord is unaffected by sus/aug/extension settings', JSON.stringify(ltWithExtras.offsets)===JSON.stringify([0,3,6,9]));
+var ltWithExtras = api.buildChord(applied({appliedTargetIndex:4, appliedFunction:"leadingTone", aug:true, extensionIndex:5}), 0, 0);
+check('leading-tone chord is unaffected by the older aug and by Shape', JSON.stringify(ltWithExtras.offsets)===JSON.stringify([0,3,6,9]));
 check('...and reports them as off/none in the returned chord object', ltWithExtras.sus==='none' && ltWithExtras.aug===false);
+var ltSus = api.buildChord(applied({appliedTargetIndex:4, appliedFunction:"leadingTone", susIndex:2}), 0, 0);
+check('Alter works on it too: sus4 gives F# B C Eb (a perfect 4th over F#)', JSON.stringify(ltSus.offsets)===JSON.stringify([0,5,6,9]));
 
 console.log('=== bass chord-tone-slot system composes naturally with applied chords ===');
 check('slot 0 (root) of an applied dominant IS its own (applied) root', api.chordTonePitch(v7ii, 0) === v7ii.chordRootPitch);

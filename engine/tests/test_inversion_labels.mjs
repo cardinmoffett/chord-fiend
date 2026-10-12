@@ -76,7 +76,7 @@ known('applied dominant, augmented', blk({chordSource: 'applied', appliedTargetI
 known('applied dominant, 6th', blk({chordSource: 'applied', appliedTargetIndex: 4, appliedFunction: 'dominant', extensionIndex: 1}), MODE.Ionian, ['1', '3', '5', '6']);
 known('tritone substitution', blk({chordSource: 'applied', appliedTargetIndex: 0, appliedFunction: 'tritoneSub', extensionIndex: 2}), MODE.Ionian, ['1', '3', '5', F + '7']);
 known('leading-tone chord is a true dim7: 1 b3 b5 bb7', blk({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone'}), MODE.Ionian, ['1', F + '3', F + '5', F + F + '7']);
-known('leading-tone chord ignores sus/aug/extension settings', blk({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone', susIndex: 2, aug: 1, extensionIndex: 5}), MODE.Ionian, ['1', F + '3', F + '5', F + F + '7']);
+known('leading-tone chord ignores the older aug and Shape', blk({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone', aug: 1, extensionIndex: 5}), MODE.Ionian, ['1', F + '3', F + '5', F + F + '7']);
 report('hand-checked chords');
 
 // ----------------------------------------------------------------------

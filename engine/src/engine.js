@@ -213,19 +213,18 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
 
     if (fn === "leadingTone") {
       chordRootOffset = targetRootOffset - 1; // a half-step below the target
-      offsets = DIMINISHED7_INTERVALS.slice(); // always this exact tetrad
-      effectiveSus = "none"; effectiveAug = false; effectiveIs6 = false; // not meaningful on a fixed dim7
+      offsets = DIMINISHED7_INTERVALS.slice(); // a fully diminished 7th; Shape doesn't apply
+      effectiveAug = false; effectiveIs6 = false;
       effectiveFlat5 = false; // already has one
       addNine = false;
+      // Alter still works on it, like any chord (a vii\u00F87/V with a \u266D7, a sus4).
+      if (susName === "sus2") offsets[1] = 2;
+      else if (susName === "sus4") offsets[1] = 5;
     } else {
       chordRootOffset = targetRootOffset + (fn === "tritoneSub" ? 1 : 7);
-      if (is6) {
-        offsets = DOMINANT_INTERVALS.slice(0, 3).concat([9]); // triad + a plain major 6th
-      } else {
-        offsets = DOMINANT_INTERVALS.slice(0, toneCount);
-        if (susName === "sus2") offsets[1] = 2; // fixed major 2nd -- not scale-derived, dominant quality is fixed
-        else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
-      }
+      offsets = is6 ? DOMINANT_INTERVALS.slice(0, 3).concat([9]) : DOMINANT_INTERVALS.slice(0, toneCount); // a 6 chord: triad + a major 6th
+      if (susName === "sus2") offsets[1] = 2; // fixed major 2nd
+      else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
       if (addNine) offsets.push(DOMINANT_INTERVALS[4]);
     }
   } else {
@@ -247,26 +246,27 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     if (addNine) offsets.push(14);
   }
 
-  // ALTER: every chord but the fixed leading-tone dim7 can step off what its source
-  // gives, one tone at a time. Each starts at "what the key gives" (unset), and the
-  // block's label shows any change, so the chord keeps its number (ii with a major 3rd
-  // and a flat 7th reads II7). An applied chord keeps its function's 3rd and 7th.
-  var hasSeventh = !is6 && !addNine && offsets.length >= 4;
-  var ninthSlot = addNine ? offsets.length - 1 : (!is6 && offsets.length >= 5 ? 4 : -1);
-  var eleventhSlot = !is6 && !addNine && offsets.length >= 6 ? 5 : -1;
-  var thirteenthSlot = !is6 && !addNine && offsets.length >= 7 ? 6 : -1;
-  if (!(isApplied && fn === "leadingTone")) {
-    if (!isApplied && effectiveSus === "none" && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
+  // ALTER: every chord, applied ones included, can step off what its source gives, one
+  // tone at a time. Each starts at "what the source gives" (unset), and the block's
+  // label shows any change, so the chord keeps its number (ii with a major 3rd and a
+  // flat 7th reads II7; V7/ii with a minor 3rd reads v7/ii).
+  effectiveSus = SUS_NAMES[block.susIndex] || "none";
+  var hasSeventh = !effectiveIs6 && !addNine && offsets.length >= 4;
+  var ninthSlot = addNine ? offsets.length - 1 : (!effectiveIs6 && offsets.length >= 5 ? 4 : -1);
+  var eleventhSlot = !effectiveIs6 && !addNine && offsets.length >= 6 ? 5 : -1;
+  var thirteenthSlot = !effectiveIs6 && !addNine && offsets.length >= 7 ? 6 : -1;
+  {
+    if (effectiveSus === "none" && THIRDS[block.third] !== undefined) offsets[1] = THIRDS[block.third];
     if (FIFTHS[block.fifth] !== undefined) {
       // An explicit 5th (\u266D5, 5 or \u266F5) -- the only way to give vii\u00B0 a perfect 5th.
       offsets[2] = FIFTHS[block.fifth];
       effectiveAug = offsets[2] === 8;
       effectiveFlat5 = offsets[2] === 6;
-    } else if (!(isApplied && is6)) { // (an applied 6 chord ignores the older aug, as the original app did)
+    } else if (!(isApplied && (is6 || fn === "leadingTone"))) { // (the older aug isn't used on an applied 6 chord or the leading-tone chord, as in the original app)
       if (block.aug) offsets[2] = 8;
       else if (effectiveFlat5) offsets[2] = 6;
     }
-    if (!isApplied && hasSeventh && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
+    if (hasSeventh && SEVENTHS[block.seventh] !== undefined) offsets[3] = SEVENTHS[block.seventh];
     // sus2 is already the 9th's note and sus4 the 11th's, so those rows step aside.
     if (ninthSlot >= 0 && effectiveSus !== "sus2" && NINTHS[block.ninth] !== undefined) {
       offsets[ninthSlot] = NINTHS[block.ninth];
@@ -693,23 +693,16 @@ var ALTER_ROW_SPECS = {
   thirteenth: {label: "13th", choices: [["b13", "\u266D13"], ["13", "13"]]}
 };
 function alterRows(block, masterRootIndex, masterModeIndex) {
-  var isApplied = block.chordSource === "applied";
-  if (isApplied && block.appliedFunction === "leadingTone") return [];
+  // Every row is always returned, in the same order, so editors keep a fixed layout; a
+  // row for a tone the chord doesn't have (or one a sus already covers) is `disabled`.
   var chord = buildChord(block, masterRootIndex, masterModeIndex);
   var keyChord = buildChord(withoutAlter(block), masterRootIndex, masterModeIndex);
-  var keys = ALTER_FIELDS.filter(function (f) {
-    if (chord.alter[f] === null && f !== "third") return false;
-    if (f === "third" && isApplied && chord.is6) return false;
-    if (f === "seventh" && isApplied) return false;
-    if (f === "ninth" && chord.sus === "sus2") return false;
-    if (f === "eleventh" && chord.sus === "sus4") return false;
-    return true;
-  });
-  return keys.map(function (f) {
+  return ALTER_FIELDS.map(function (f) {
     var spec = ALTER_ROW_SPECS[f];
-    var choices = spec.choices.filter(function (c) { return !(f === "third" && isApplied && c[0] === "minor"); });
-    return {field: f, label: spec.label, value: chord.alter[f], keyValue: keyChord.alter[f],
-            choices: choices.map(function (c) { return {value: c[0], label: c[1]}; })};
+    var disabled = chord.alter[f] === null ||
+      (f === "ninth" && chord.sus === "sus2") || (f === "eleventh" && chord.sus === "sus4");
+    return {field: f, label: spec.label, value: disabled ? null : chord.alter[f], keyValue: keyChord.alter[f], disabled: disabled,
+            choices: spec.choices.map(function (c) { return {value: c[0], label: c[1]}; })};
   });
 }
 // The block change for picking `value` in an Alter row: the key's own value clears the
