@@ -107,7 +107,7 @@ same('some blocks differ on purpose: fixed sus and 6 (' + changed + '), named ex
 report('deliberate differences are the expected kinds');
 
 console.log('\n=== applied chords: every key, home mode, target, function, extension, sus and aug ===');
-combo = 0;
+combo = 0; var appliedSus = 0;
 for (root = 0; root < 12; root++) {
   state.masterRootIndex = root;
   for (mm = 0; mm < engine.MASTER_MODE_NAMES.length; mm++) {
@@ -121,6 +121,9 @@ for (root = 0; root < 12; root++) {
               var b = blk({chordSource: 'applied', appliedTargetIndex: tgt, appliedFunction: fn, extensionIndex: ext, susIndex: sus, aug: aug,
                 inversion: combo % 8, dropIndex: combo % 4, octave: (combo % 5) - 2});
               var a1 = orig.buildChord(b, root, mm), e1 = engine.buildChord(b, root, mm);
+              // Deliberate change: sus now applies to every applied chord (the app ignored it
+              // on the leading-tone chord and on applied 6 chords).
+              if (sus > 0 && (fn === 'leadingTone' || ext === 1)) { appliedSus++; continue; }
               same('buildChord ' + JSON.stringify(b) + ' root ' + root + ' mode ' + mm, a1, appShape(e1));
               sameName('getChordSymbol ' + JSON.stringify(b), orig.getChordSymbol(a1), engine.getChordSymbol(e1, root));
               same('appliedFunctionLabel ' + JSON.stringify(b) + ' mode ' + mm, orig.appliedFunctionLabel(b), engine.appliedFunctionLabel(b, mm));

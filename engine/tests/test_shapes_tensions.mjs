@@ -79,8 +79,9 @@ console.log('=== sus and the 9th / 11th ===');
 check('sus2 ignores the 9th setting (it already is the 9th\'s note)', rootOrder(chord({degreeIndex: 4, extensionIndex: SHAPE['9'], susIndex: 1, ninth: 'b9'})), pcs('G A D F A'));
 check('sus4 ignores the 11th setting', rootOrder(chord({degreeIndex: 4, extensionIndex: SHAPE['11'], susIndex: 2, eleventh: '#11'})), pcs('G C D F A C'));
 
-console.log('=== applied chords keep their function\'s 3rd and 7th ===');
-check('V7/ii with a minor 3rd and a major 7th set is still A C# E G', rootOrder(chord(Object.assign({third: 'minor', seventh: 'maj', extensionIndex: SHAPE['7']}, {chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'dominant'}))), pcs('A C# E G'));
+console.log('=== applied chords take Alter too ===');
+check('applied chords alter like any other: V7/ii with a minor 3rd and a major 7th is A C E G#, v(maj7)/ii', [rootOrder(chord({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'dominant', extensionIndex: SHAPE['7'], third: 'minor', seventh: 'maj'})), label({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'dominant', extensionIndex: SHAPE['7'], third: 'minor', seventh: 'maj'}).degree], [pcs('A C E G#'), 'v(maj7)/ii']);
+check('the leading-tone chord takes a b7: vii half-diminished 7 of V is F# A C E', rootOrder(chord({chordSource: 'applied', appliedTargetIndex: 4, appliedFunction: 'leadingTone', seventh: 'min'})), pcs('F# A C E'));
 check('...but its 5th alters: V7#5/ii is A C# E# G', rootOrder(chord({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'dominant', extensionIndex: SHAPE['7'], fifth: '#5'})), pcs('A C# F G'));
 
 console.log('=== free chords start as a major triad with a flat 7th ===');
@@ -89,7 +90,7 @@ check('free V7: G B D F, V7', [rootOrder(chord({chordSource: 'free', freeRoot: 7
 check('free 6 chord: C E G A', rootOrder(chord({chordSource: 'free', freeRoot: 0, extensionIndex: SHAPE['6']})), pcs('C E G A'));
 
 console.log('=== the rows an editor shows ===');
-function rows(o) { return alterRows(blk(o), 0, 0).map(function (r) { return r.field; }); }
+function rows(o) { return alterRows(blk(o), 0, 0).filter(function (r) { return !r.disabled; }).map(function (r) { return r.field; }); }
 function row(o, f) { return alterRows(blk(o), 0, 0).filter(function (r) { return r.field === f; })[0]; }
 check('a triad: 3rd and 5th', rows({}), ['third', 'fifth']);
 check('add9: 3rd, 5th, 9th', rows({extensionIndex: SHAPE.add9}), ['third', 'fifth', 'ninth']);
@@ -97,8 +98,9 @@ check('a 6 chord: 3rd and 5th (no 6th row)', rows({extensionIndex: SHAPE['6']}),
 check('13: every row', rows({extensionIndex: SHAPE['13']}), ['third', 'fifth', 'seventh', 'ninth', 'eleventh', 'thirteenth']);
 check('sus2 hides the 9th', rows({extensionIndex: SHAPE['13'], susIndex: 1}), ['third', 'fifth', 'seventh', 'eleventh', 'thirteenth']);
 check('sus4 hides the 11th', rows({extensionIndex: SHAPE['13'], susIndex: 2}), ['third', 'fifth', 'seventh', 'ninth', 'thirteenth']);
-check('applied: no 7th row, and its 3rd row is sus2 / 3 / sus4', [rows({chordSource: 'applied', appliedTargetIndex: 1, extensionIndex: SHAPE['9']}), row({chordSource: 'applied', appliedTargetIndex: 1}, 'third').choices.map(function (c) { return c.value; })], [['third', 'fifth', 'ninth'], ['sus2', 'major', 'sus4']]);
-check('the leading-tone dim7 has no rows', rows({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone'}), []);
+check('applied: the same rows as any chord, b3 included', [rows({chordSource: 'applied', appliedTargetIndex: 1, extensionIndex: SHAPE['9']}), row({chordSource: 'applied', appliedTargetIndex: 1}, 'third').choices.map(function (c) { return c.value; })], [['third', 'fifth', 'seventh', 'ninth'], ['sus2', 'minor', 'major', 'sus4']]);
+check('every row is always returned, in order, so editors keep their layout', alterRows(blk({}), 0, 0).map(function (r) { return r.field + (r.disabled ? '-' : '+'); }), ['third+', 'fifth+', 'seventh-', 'ninth-', 'eleventh-', 'thirteenth-']);
+check('the leading-tone dim7 has 3rd, 5th and 7th rows', rows({chordSource: 'applied', appliedTargetIndex: 1, appliedFunction: 'leadingTone'}), ['third', 'fifth', 'seventh']);
 check('V7 reads 3, 5, b7 (the key\'s own values)', ['third', 'fifth', 'seventh'].map(function (f) { var r = row({degreeIndex: 4, extensionIndex: SHAPE['7']}, f); return [r.value, r.keyValue]; }), [['major', 'major'], ['5', '5'], ['min', 'min']]);
 check('the 7th row is spelled bb7, b7, 7', row({extensionIndex: SHAPE['7']}, 'seventh').choices.map(function (c) { return c.label; }), [F + F + '7', F + '7', '7']);
 check('iii9: the 9th row reads b9, the key\'s', [row({degreeIndex: 2, extensionIndex: SHAPE['9']}, 'ninth').value, row({degreeIndex: 2, extensionIndex: SHAPE['9']}, 'ninth').keyValue], ['b9', 'b9']);

@@ -43,6 +43,8 @@ export interface AlterRow {
   /** The chord's current value, and the value with no alteration (the key's). */
   value: string | null;
   keyValue: string | null;
+  /** True when the chord has no such tone (or a sus already covers it): shown greyed out. */
+  disabled: boolean;
   choices: { value: string; label: string }[];
 }
 
@@ -130,7 +132,7 @@ export function blockLabel(block: Block, masterRootIndex: number, masterModeInde
 
 /** The Alter fields, in row order. */
 export const ALTER_FIELDS: AlterField[];
-/** The Alter rows an editor shows for a block (only tones the chord has; none on the leading-tone dim7). */
+/** Every Alter row, always in the same order; rows for tones the chord doesn't have are `disabled`. */
 export function alterRows(block: Block, masterRootIndex: number, masterModeIndex: number): AlterRow[];
 /** The block change for picking a value in an Alter row; the key's own value clears (undefined). */
 export function alterChange(block: Block, field: AlterField, value: string, masterRootIndex: number, masterModeIndex: number): Partial<Block>;
