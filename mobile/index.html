@@ -501,6 +501,13 @@
   }
   /* A copy/paste selection: a double tap marks the anchor, a second tap the other end. */
   .seg.in-range { box-shadow: inset 0 0 0 3px #3b82f6, 0 0 8px rgba(59,130,246,0.45); z-index: 2; }
+  .seg-badges {
+    position: absolute; top: 3px; right: 4px; display: flex; gap: 2px; pointer-events: none;
+  }
+  .seg-badges span {
+    font-size: 10px; line-height: 1; font-weight: 700; padding: 2px 3px; border-radius: 4px;
+    background: rgba(0,0,0,0.16); color: rgba(0,0,0,0.62);
+  }
   .seg.applied-chord {
     box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55);
   }
@@ -3000,6 +3007,16 @@ function pasteBlocks() {
   refresh();
 }
 
+// What a block's badges say: applied, borrowed from another mode, free, altered.
+function blockBadges(b) {
+  var out = [];
+  if (b.chordSource === "applied") out.push({icon: "\u2192", name: "Applied"});
+  else if (b.chordSource === "free") out.push({icon: "\u25C7", name: "Free"});
+  else if (b.blockModeIndex) out.push({icon: "\u21C4", name: "Borrowed from " + BLOCK_MODE_NAMES[b.blockModeIndex]});
+  if (ALTER_FIELDS.some(function (f) { return b[f] !== undefined; }) || b.aug || b.flat5 || b.susIndex) out.push({icon: "\u2731", name: "Altered"});
+  return out;
+}
+
 // One chord block on the timeline (or one piece of it, where a block wraps across
 // rows): its look, its label, and tap-to-hear / tap-to-select. widthCss sets its width;
 // boundary draws the divider where a different block follows.
@@ -3031,18 +3048,22 @@ function buildSegElement(seg, widthCss, boundary) {
     var invOpacity = Math.min(0.18 + block.inversion * 0.11, 0.8);
     el.style.borderBottom = "3px solid rgba(255,255,255," + invOpacity + ")";
   }
-  // Hue is now driven by degree, not mode -- so borrowed-mode blocks get
-  // a distinct marker on a different channel instead, keeping that
-  // information visible without competing for color.
-  if (block.blockModeIndex !== 0 && seg.isFirst) {
-    el.style.borderTop = "3px solid var(--accent)";
+  // At-a-glance badges (top right, on the block's first piece): how the chord was made,
+  // since Alter is hidden in the collapsed editor. Applied \u2192, borrowed \u21C4, free \u25C7,
+  // altered \u2731.
+  if (seg.isFirst) {
+    var badges = blockBadges(block);
+    if (badges.length) {
+      var bw = document.createElement("div");
+      bw.className = "seg-badges";
+      badges.forEach(function (bd) {
+        var sp = document.createElement("span");
+        sp.textContent = bd.icon; sp.title = bd.name;
+        bw.appendChild(sp);
+      });
+      el.appendChild(bw);
+    }
   }
-  // An applied chord's color already points at its TARGET (see
-  // blockHSL) -- this ring is what actually flags "this is a functional
-  // chord, not a plain diatonic one". A CSS class rather than an inline
-  // style, so it layers correctly with .selected's own box-shadow
-  // instead of silently overriding it.
-  if (block.chordSource === "applied") el.classList.add("applied-chord");
 
   if (seg.isFirst) {
     // The chord's job in the key (numeral and formula) leads; its name sits under it.
