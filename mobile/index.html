@@ -2157,7 +2157,9 @@ var songStartSlotIndex = null; // which arrangement slot whole-song Play begins 
 
 // pinned: during section playback, a block the person tapped stays selected instead of
 // the selection following the playhead. Tapping empty timeline space unpins it.
-var playback = { active:false, startIndex:0, endIndex:null, timer:null, pinned:false };
+// startIndex is where the first pass starts (the selected block); loopIndex is where every
+// later pass starts: the top of the section (or song), or the start of a looped selection.
+var playback = { active:false, startIndex:0, loopIndex:0, endIndex:null, timer:null, pinned:false };
 // Where a pass stops: the end of the selection being looped, or the end of the blocks.
 function playbackEndIndex() {
   return playback.endIndex === null ? playbackBlocks.length : Math.min(playback.endIndex, playbackBlocks.length);
@@ -4999,7 +5001,7 @@ var songCurrentSlotIndex = null;
 
 // Schedules exactly one pass through the sequence (from startIndex, offset
 // by baseTime on the Transport's own clock), then schedules ANOTHER call to
-// itself -- looping back to playback.startIndex -- right as this pass ends,
+// itself -- looping back to playback.loopIndex -- right as this pass ends,
 // instead of stopping. This keeps going until stopPlayback() actually
 // cancels the Transport, which is what breaks the chain.
 function updatePlaybackUI(blockIndex) {
@@ -5112,11 +5114,11 @@ function scheduleOnePass(startIndex, baseTime) {
   var passEndTime = baseTime + cursorSeconds;
   var lookaheadBuffer = 0.15;
   Tone.Transport.scheduleOnce(function () {
-    scheduleOnePass(playback.startIndex, passEndTime);
+    scheduleOnePass(playback.loopIndex, passEndTime);
   }, Math.max(baseTime, passEndTime - lookaheadBuffer));
 }
 
-function beginTransportPlayback(startIdx) {
+function beginTransportPlayback(startIdx, loopIdx) {
   var tempo = state.tempo || 100;
   Tone.Transport.bpm.value = tempo;
   Tone.Transport.stop();
@@ -5130,6 +5132,7 @@ function beginTransportPlayback(startIdx) {
 
   playback.active = true;
   playback.startIndex = startIdx;
+  playback.loopIndex = loopIdx || 0;
   var btn = activePlayButton();
   btn.textContent = "■ Stop";
   btn.classList.add("playing");
@@ -5140,7 +5143,8 @@ function beginTransportPlayback(startIdx) {
   requestAnimationFrame(playheadFrame);
 }
 
-// With a copy selection showing, Play loops just the selected blocks.
+// Play starts at the selected block and then loops the whole section. With a copy
+// selection showing, it loops just the selected blocks.
 function startPlayback() {
   ensureAudioReady(function () {
     playbackMode = "section";
@@ -5148,7 +5152,7 @@ function startPlayback() {
     playbackBlocks = editingBlocks;
     var r = selectionRange();
     playback.endIndex = r ? r.to + 1 : null;
-    beginTransportPlayback(r ? r.from : state.currentIndex);
+    beginTransportPlayback(r ? r.from : state.currentIndex, r ? r.from : 0);
   });
 }
 
@@ -5186,7 +5190,7 @@ function startSongPlayback() {
     playbackBlocks = seq.blocks;
     playback.endIndex = null; // the whole song, never a selection
     songBlockToSlotIndex = seq.blockToSlot;
-    beginTransportPlayback(seq.startBlockIndex);
+    beginTransportPlayback(seq.startBlockIndex, 0); // then the whole song, from the top
   });
 }
 
