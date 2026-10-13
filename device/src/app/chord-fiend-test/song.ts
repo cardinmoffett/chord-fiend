@@ -1,4 +1,5 @@
 import {
+  appliedColorDegrees,
   blockLabel as engineBlockLabel,
   defaultBlock,
   getDurationBeats,
@@ -251,10 +252,17 @@ export function sectionColor(sectionId: number): { css: string; live: number } {
 const DEGREE_HUES = [42, 205, 155, 28, 348, 265, 322];
 const EXTENSION_SATURATION = [46, 54, 62, 70, 78, 86];
 
+function blendHues(a: number, b: number): number {
+  const d = ((b - a + 540) % 360) - 180; // the short way round the color wheel
+  return Math.round((a + d / 2 + 360) % 360);
+}
+
 export function blockColor(b: Block): string {
   if (b.chordSource === "free") return `hsl(220 8% ${b.aug ? 40 : 46}%)`;
   const applied = b.chordSource === "applied";
-  const hue = DEGREE_HUES[(applied ? b.appliedTargetIndex : b.degreeIndex) || 0];
+  // A mediant sits between two degrees (\u266DIII between ii and iii) and blends their hues.
+  const near = (applied ? appliedColorDegrees(b) : [b.degreeIndex || 0]).map((d) => DEGREE_HUES[d]);
+  const hue = near.length > 1 ? blendHues(near[0], near[1]) : near[0];
   const sat = EXTENSION_SATURATION[b.extensionIndex] ?? 46;
   let light = 53;
   if (b.aug) light -= 6;

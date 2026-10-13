@@ -1,5 +1,7 @@
 import {
   APPLIED_FUNCTIONS,
+  MEDIANTS,
+  mediantNumeral,
   BLOCK_MODE_NAMES,
   EXTENSION_NAMES,
   LENGTH_BASES,
@@ -31,8 +33,13 @@ const TABS = [
   { value: "applied", label: "Applied" },
   { value: "free", label: "Free" },
 ] as const;
-const FUNCTION_NAMES: Record<string, string> = { dominant: "Dominant", tritoneSub: "Tritone sub", leadingTone: "Leading tone" };
-const FUNCTION_PREFIX: Record<string, string> = { dominant: "V/", tritoneSub: "subV/", leadingTone: "vii\u00B0/" };
+const FUNCTION_NAMES: Record<string, string> = {
+  dominant: "Dominant", supertonic: "Applied ii", tritoneSub: "Tritone sub", backdoor: "Backdoor",
+  leadingTone: "Leading tone", commonTone: "Common-tone dim", mediant: "Mediants",
+};
+const FUNCTION_PREFIX: Record<string, string> = {
+  dominant: "V/", supertonic: "ii/", tritoneSub: "subV/", backdoor: "\u266DVII/", leadingTone: "vii\u00B0/", commonTone: "ct\u00B0/",
+};
 /** The Length menu: feels, then multipliers that tie copies together, then splits. */
 const LENGTH_MENU: LengthMod[] = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
 const NOTE_LABELS: Record<string, string> = { quarter: "\u2669", half: "\u{1D15E}", whole: "\u{1D15D}", double: "\u{1D15C}" };
@@ -82,7 +89,9 @@ export function Inspector({
   const mode = song.modeIndex;
   const chord = buildChord(block, root, mode);
   const tab = block.chordSource;
-  const isLeadingTone = tab === "applied" && block.appliedFunction === "leadingTone";
+  // The leading-tone and common-tone chords are always a dim7, so Shape doesn't apply.
+  const isLeadingTone = tab === "applied" && (block.appliedFunction === "leadingTone" || block.appliedFunction === "commonTone");
+  const isMediant = tab === "applied" && block.appliedFunction === "mediant";
   const rows = alterRows(block, root, mode);
   const rootChange = (change: Partial<Block>) => onChange({ ...change, ...CLEAR_ALTER });
   const up = positionStep(block, chord, 1);
@@ -97,8 +106,11 @@ export function Inspector({
     if (next === tab) return;
     const change: Partial<Block> = { chordSource: next, blockModeIndex: 0 };
     if (next === "free") change.freeRoot = (((chord.chordRootPitch - root) % 12) + 12) % 12;
-    else if (next === "applied" && tab === "diatonic") change.appliedTargetIndex = block.degreeIndex;
-    else if (next === "diatonic" && tab === "applied") change.degreeIndex = block.appliedTargetIndex;
+    else if (next === "applied" && tab === "diatonic") {
+      // A degree becomes a target, so arrive on a function that has one.
+      change.appliedTargetIndex = block.degreeIndex;
+      if (block.appliedFunction === "mediant") change.appliedFunction = "dominant";
+    } else if (next === "diatonic" && tab === "applied") change.degreeIndex = isMediant ? chord.chordDegreeIndex : block.appliedTargetIndex;
     rootChange(change);
   };
 
@@ -119,6 +131,12 @@ export function Inspector({
         on: (block.freeRoot ?? 0) === step,
         pick: () => rootChange({ freeRoot: step }),
       };
+    });
+  } else if (isMediant) {
+    // Mediants aren't aimed at a target: one pad per chromatic mediant of the key.
+    pads = MEDIANTS.map((_, i) => {
+      const cand: Block = { ...plain, chordSource: "applied", appliedFunction: "mediant", appliedTargetIndex: i, blockModeIndex: 0 };
+      return { main: mediantNumeral(cand), sub: nameOf(cand), color: blockColor(cand), on: block.appliedTargetIndex === i, pick: () => rootChange({ appliedTargetIndex: i }) };
     });
   } else if (tab === "applied") {
     pads = degreeLabels(MASTER_MODE_NAMES[mode]).map((target, i) => {
@@ -149,13 +167,16 @@ export function Inspector({
       <div className="drawer-stack">
         <Segmented options={TABS.map((t) => t.label)} value={TABS.findIndex((t) => t.value === tab)} onChange={(i) => switchTab(TABS[i].value)} />
         {tab === "applied" && (
-          <Segmented
+          <IndexDropdown
             options={APPLIED_FUNCTIONS.map((f) => FUNCTION_NAMES[f])}
             value={Math.max(0, APPLIED_FUNCTIONS.indexOf(block.appliedFunction))}
-            onChange={(i) => rootChange({ appliedFunction: APPLIED_FUNCTIONS[i] as Block["appliedFunction"] })}
+            onChange={(i) => {
+              const fn = APPLIED_FUNCTIONS[i] as Block["appliedFunction"];
+              rootChange({ appliedFunction: fn, appliedTargetIndex: Math.min(block.appliedTargetIndex, fn === "mediant" ? MEDIANTS.length - 1 : 6) });
+            }}
           />
         )}
-        <div className={tab === "free" ? "pads free" : "pads"}>
+        <div className={tab === "free" ? "pads free" : isMediant ? "pads six" : "pads"}>
           {pads.map((p, i) => (
             <button key={i} type="button" className={(p.on ? "pad on" : "pad") + (p.color ? "" : " out")} style={p.color ? { background: p.color } : undefined} onClick={p.pick}>
               {p.top && <em>{p.top}</em>}

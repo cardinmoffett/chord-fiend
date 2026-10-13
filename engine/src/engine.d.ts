@@ -27,7 +27,7 @@ export interface Block {
   bassToneIndex: number;
   chordSource: "diatonic" | "applied" | "free";
   appliedTargetIndex: number;
-  appliedFunction: "dominant" | "tritoneSub" | "leadingTone";
+  appliedFunction: "dominant" | "supertonic" | "tritoneSub" | "backdoor" | "leadingTone" | "commonTone" | "mediant";
   /** Lowers the 5th a semitone. An engine addition; missing means off. */
   flat5?: number | boolean;
   /** Length multiplier (x2, x3, x4 tie copies; 0.5, 0.25 split). Missing means 1. */
@@ -97,7 +97,10 @@ export const DURATION_MODIFIER_NAMES: string[];
 export const ROMAN_BASE: string[];
 export const APPLIED_FUNCTIONS: string[];
 export const APPLIED_FUNCTION_LABELS: Record<string, string>;
+export const MEDIANTS: { step: number; minor: boolean; near: number[] }[];
 export const DOMINANT_INTERVALS: number[];
+export const MAJOR7_INTERVALS: number[];
+export const MINOR7_INTERVALS: number[];
 export const DIMINISHED7_INTERVALS: number[];
 export const CHORD_DEGREE_REFERENCE: Record<number, number>;
 export const STACKED_THIRD_ROLES: number[];
@@ -118,6 +121,8 @@ export function defaultBlock(): Block;
 export function chordToneLabel(offset: number, role: number): string;
 export function chordToneRoles(toneCount: number, sus: string, is6: boolean): number[];
 export function appliedFunctionLabel(block: Block, masterModeIndex: number): string;
+export function appliedColorDegrees(block: Block): number[];
+export function mediantNumeral(block: Block): string;
 export function bassSlotForVoice(voice: string): number;
 export function activeBeatPattern(beatKey: string, customBeatPatterns?: Record<string, BeatPattern> | null): BeatPattern;
 export function beatPatternLabel(beatKey: string): string;

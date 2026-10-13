@@ -25,7 +25,7 @@ Revised 2026-10-10, twice:
 |---|---|---|
 | **Diatonic** | A degree of the key's scale | The scale's own tones (Shape, Sus) |
 | **Borrowed** (diatonic plus a Mode) | Same degree, another mode's scale | That mode's tones. Chosen under Alter as "Borrow", listed by result ("Dorian → F7"). |
-| **Applied** | A function: dominant of, tritone sub of, leading-tone into a target | The function's formula |
+| **Applied** | A function aimed at a target: dominant (V7), applied ii (ii7), tritone sub (subV7), backdoor (♭VII7), leading-tone (vii°7), common-tone dim (ct°7, on the target's root); or a chromatic mediant of the key (♭III, III, ♭VI, VI major; ♭iii, ♭vi minor), not aimed at a target | The function's formula (mediants: maj7 or m7 stack) |
 | **Free** | A step from the key's root (`freeRoot`, 0-11), shown as a numeral: ♭II, III, ♯IV… | A major triad, with a ♭7 when the shape has one. Alter shapes it from there (no Quality menu). |
 
 **Alter**, revised 2026-10-10 (third pass). Available on every category except the fixed leading-tone dim7:
