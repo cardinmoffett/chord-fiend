@@ -593,6 +593,8 @@
     font: inherit; font-size: 12px; font-weight: 700; color: var(--text-dim);
   }
   .fn-row button.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .fn-row select { flex: 1; width: 100%; }
+  .pads.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .pad-area { display: flex; flex-direction: column; gap: 6px; height: 104px; }
   .pad-area .pads { flex: 1; grid-auto-rows: 1fr; }
   .pads { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
@@ -1366,6 +1368,7 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
   var isApplied = block.chordSource === "applied";
   var isFree = block.chordSource === "free";
   var fn = isApplied ? (block.appliedFunction || "dominant") : null;
+  var dim7Fn = fn === "leadingTone" || fn === "commonTone"; // a fixed dim7, whatever Shape says
   var degreeIndex, chordRootOffset, offsets;
   var tensions = []; // extension tones the block altered off the natural 9, 11, 13
   var effectiveSus = susName, effectiveAug = !!block.aug, effectiveIs6 = is6;
@@ -1393,8 +1396,21 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
     var targetRootOffset = targetExtended[targetIndex];
     degreeIndex = targetIndex; // reused below for pitch base + display
 
-    if (fn === "leadingTone") {
-      chordRootOffset = targetRootOffset - 1; // a half-step below the target
+    if (fn === "mediant") {
+      // A chromatic mediant isn't aimed at a target: its root is a step from the key's
+      // root (\u266DIII, III, \u266DVI, VI), major or minor, for color rather than resolution.
+      var med = MEDIANTS[Math.min(targetIndex, MEDIANTS.length - 1)];
+      var medIntervals = med.minor ? MINOR7_INTERVALS : MAJOR7_INTERVALS;
+      chordRootOffset = med.step;
+      degreeIndex = med.near[med.near.length - 1];
+      offsets = is6 ? medIntervals.slice(0, 3).concat([9]) : medIntervals.slice(0, toneCount);
+      if (susName === "sus2") offsets[1] = 2;
+      else if (susName === "sus4") offsets[1] = 5;
+      if (addNine) offsets.push(14);
+    } else if (dim7Fn) {
+      // Leading tone: a half-step below the target. Common-tone: on the target's own root,
+      // so it shares that note with the chord it decorates (C\u00B07 \u2192 C).
+      chordRootOffset = targetRootOffset - (fn === "leadingTone" ? 1 : 0);
       offsets = DIMINISHED7_INTERVALS.slice(); // a fully diminished 7th; Shape doesn't apply
       effectiveAug = false; effectiveIs6 = false;
       effectiveFlat5 = false; // already has one
@@ -1403,11 +1419,14 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
       if (susName === "sus2") offsets[1] = 2;
       else if (susName === "sus4") offsets[1] = 5;
     } else {
-      chordRootOffset = targetRootOffset + (fn === "tritoneSub" ? 1 : 7);
-      offsets = is6 ? DOMINANT_INTERVALS.slice(0, 3).concat([9]) : DOMINANT_INTERVALS.slice(0, toneCount); // a 6 chord: triad + a major 6th
+      // Dominant: a 5th above the target. Tritone sub: a half-step above. Backdoor: a whole
+      // step below (\u266DVII7). All dominant 7ths. Applied ii: a whole step above, minor 7th.
+      chordRootOffset = targetRootOffset + ({tritoneSub: 1, backdoor: 10, supertonic: 2}[fn] || 7);
+      var stack = fn === "supertonic" ? MINOR7_INTERVALS : DOMINANT_INTERVALS;
+      offsets = is6 ? stack.slice(0, 3).concat([9]) : stack.slice(0, toneCount); // a 6 chord: triad + a major 6th
       if (susName === "sus2") offsets[1] = 2; // fixed major 2nd
       else if (susName === "sus4") offsets[1] = 5; // fixed perfect 4th
-      if (addNine) offsets.push(DOMINANT_INTERVALS[4]);
+      if (addNine) offsets.push(14);
     }
   } else {
     var degree = DEGREE_NAMES[block.degreeIndex];
@@ -1444,7 +1463,7 @@ function buildChord(block, masterRootIndex, masterModeIndex) {
       offsets[2] = FIFTHS[block.fifth];
       effectiveAug = offsets[2] === 8;
       effectiveFlat5 = offsets[2] === 6;
-    } else if (!(isApplied && (is6 || fn === "leadingTone"))) { // (the older aug isn't used on an applied 6 chord or the leading-tone chord, as in the original app)
+    } else if (!(isApplied && (is6 || dim7Fn))) { // (the older aug isn't used on an applied 6 chord or the leading-tone chord, as in the original app)
       if (block.aug) offsets[2] = 8;
       else if (effectiveFlat5) offsets[2] = 6;
     }
@@ -1541,11 +1560,11 @@ function getChordSymbol(chord, masterRootIndex) {
   // with flats regardless of the surrounding key, since the whole function
   // of the chord is named and recognized by its flat-side spelling (Db7, Gb7),
   // so that overrides the general rule here.
-  var preferFlats = chord.isApplied && chord.appliedFunction === "tritoneSub"
+  var preferFlats = chord.isApplied && (chord.appliedFunction === "tritoneSub" || chord.appliedFunction === "backdoor")
     ? true
     : keyPrefersFlats(masterRootIndex, MASTER_MODE_NAMES.indexOf(chord.resolvedMode));
-  // A free chord is spelled the way its step is numbered: \u266DIII is E\u266D, \u266FIV is F\u266F.
-  if (chord.isFree) {
+  // A free chord (or a mediant) is spelled the way its step is numbered: \u266DIII is E\u266D, \u266FIV is F\u266F.
+  if (chord.isFree || (chord.isApplied && chord.appliedFunction === "mediant")) {
     var stepAcc = stepNumeral(chord.chordRootPitch - masterRootIndex, isDiminishedTriad(chord)).charAt(0);
     if (stepAcc === "\u266D") preferFlats = true;
     else if (stepAcc === "\u266F") preferFlats = false;
@@ -1659,9 +1678,23 @@ function defaultBlock() {
 //   - Leading-tone into <target>: a fixed, fully-diminished 7th a half-step
 //     BELOW the target -- doubles as the classic chromatic passing chord
 //     between two diatonic chords a whole step apart.
-var APPLIED_FUNCTIONS = ["dominant", "tritoneSub", "leadingTone"];
-var APPLIED_FUNCTION_LABELS = {dominant: "Dominant of", tritoneSub: "Tritone sub of", leadingTone: "Leading-tone into"};
+//   - Applied ii of <target>: the minor 7th a whole step above the target -- the
+//     first half of a ii-V into it.
+//   - Backdoor to <target>: the dominant 7th a whole step BELOW the target (\u266DVII7).
+//   - Common-tone dim into <target>: a diminished 7th on the target's own root, so the
+//     two share that note.
+//   - Mediant: not aimed at a target. appliedTargetIndex picks one of MEDIANTS, a major
+//     or minor chord a 3rd from the key's root, used for color.
+var APPLIED_FUNCTIONS = ["dominant", "supertonic", "tritoneSub", "backdoor", "leadingTone", "commonTone", "mediant"];
+var APPLIED_FUNCTION_LABELS = {dominant: "Dominant of", supertonic: "ii of", tritoneSub: "Tritone sub of", backdoor: "Backdoor to",
+  leadingTone: "Leading-tone into", commonTone: "Common-tone dim into", mediant: "Mediant"};
+// The chromatic mediants: a step above the key's root, major or minor, and the degree(s)
+// it sits next to (the color it takes).
+var MEDIANTS = [{step: 3, minor: false, near: [1, 2]}, {step: 4, minor: false, near: [2]}, {step: 8, minor: false, near: [4, 5]},
+  {step: 9, minor: false, near: [5]}, {step: 3, minor: true, near: [1, 2]}, {step: 8, minor: true, near: [4, 5]}];
 var DOMINANT_INTERVALS = [0, 4, 7, 10, 14, 17, 21]; // root, 3rd, 5th, b7, 9th, 11th, 13th
+var MAJOR7_INTERVALS = [0, 4, 7, 11, 14, 17, 21];
+var MINOR7_INTERVALS = [0, 3, 7, 10, 14, 17, 21];
 var DIMINISHED7_INTERVALS = [0, 3, 6, 9]; // root, m3, dim5, dim7 -- always this exact tetrad
 
 // ---- Chord-degree names (1, 3, 5, 7, 9...) --------------------------------
@@ -1690,6 +1723,17 @@ function chordToneRoles(toneCount, sus, is6) {
   return roles;
 }
 
+function mediantNumeral(block) {
+  var med = MEDIANTS[Math.min(block.appliedTargetIndex || 0, MEDIANTS.length - 1)];
+  var n = stepNumeral(med.step);
+  return med.minor ? n.toLowerCase() : n;
+}
+// The degrees whose color an applied chord takes: its target, or for a mediant the
+// degree(s) it sits beside (the app blends two hues).
+function appliedColorDegrees(block) {
+  if (block.appliedFunction === "mediant") return MEDIANTS[Math.min(block.appliedTargetIndex || 0, MEDIANTS.length - 1)].near;
+  return [block.appliedTargetIndex || 0];
+}
 function appliedFunctionLabel(block, masterModeIndex) {
   // An applied chord's target is always a position in the HOME key's own
   // diatonic scale (never the block's own borrowed mode, since this block
@@ -1699,6 +1743,7 @@ function appliedFunctionLabel(block, masterModeIndex) {
   // uppercase "Dominant of I", same mismatch degreeLabels already solves
   // for the plain Degree field elsewhere.
   var homeMode = MASTER_MODE_NAMES[masterModeIndex];
+  if (block.appliedFunction === "mediant") return "Mediant " + mediantNumeral(block);
   return APPLIED_FUNCTION_LABELS[block.appliedFunction] + " " + degreeLabels(homeMode)[block.appliedTargetIndex];
 }
 
@@ -1995,10 +2040,15 @@ function blockLabel(block, masterRootIndex, masterModeIndex) {
   var degree;
   if (block.chordSource === "applied") {
     var target = degreeLabels(MASTER_MODE_NAMES[masterModeIndex])[block.appliedTargetIndex] || "?";
-    var lt = block.appliedFunction === "leadingTone";
-    var sfx = numeralSuffix(chord, lt ? "7" : ext);
-    var fnBase = {dominant: "V", tritoneSub: "subV", leadingTone: "VII"}[block.appliedFunction] || "V";
-    degree = caseNumeral(fnBase, sfx.lower) + sfx.text + "/" + target;
+    var fn = block.appliedFunction;
+    var dim7 = fn === "leadingTone" || fn === "commonTone";
+    var sfx = numeralSuffix(chord, dim7 ? "7" : ext);
+    if (fn === "mediant") {
+      degree = caseNumeral(stepNumeral(MEDIANTS[Math.min(block.appliedTargetIndex || 0, MEDIANTS.length - 1)].step), sfx.lower) + sfx.text;
+    } else {
+      var fnBase = {dominant: "V", supertonic: "II", tritoneSub: "subV", backdoor: "\u266DVII", leadingTone: "VII", commonTone: "ct"}[fn] || "V";
+      degree = caseNumeral(fnBase, sfx.lower) + sfx.text + "/" + target;
+    }
   } else if (block.chordSource === "free") {
     var fs = numeralSuffix(chord, ext);
     degree = caseNumeral(stepNumeral(block.freeRoot || 0, isDiminishedTriad(chord)), fs.lower) + fs.text;
@@ -2942,6 +2992,10 @@ MASTER_MODE_NAMES.forEach(function (n, i) {
   masterModeSelect.appendChild(o);
 });
 
+function blendHues(a, b) {
+  var d = ((b - a + 540) % 360) - 180; // the short way round the color wheel
+  return Math.round((a + d / 2 + 360) % 360);
+}
 function blockHSL(block) {
   var palette = PALETTES[state.palette] || PALETTES.sunset;
   // A free chord has no degree in the key, so no degree hue: a neutral grey, as in the device.
@@ -2951,7 +3005,12 @@ function blockHSL(block) {
   // visible at a glance (the border marker in renderTimeline is what flags
   // it as an applied chord specifically, not this color choice).
   var isApplied = block.chordSource === "applied";
-  var hue = palette.hues[isApplied ? block.appliedTargetIndex : block.degreeIndex];
+  var hue = palette.hues[block.degreeIndex];
+  if (isApplied) {
+    // A mediant sits between two degrees (\u266DIII between ii and iii) and blends their hues.
+    var near = appliedColorDegrees(block).map(function (d) { return palette.hues[d]; });
+    hue = near.length > 1 ? blendHues(near[0], near[1]) : near[0];
+  }
   var extName = EXTENSION_NAMES[block.extensionIndex];
   var sat = Math.max(10, Math.min(96, (EXTENSION_SATURATION[extName] || 46) + palette.satBoost));
   var light = 53;
@@ -3852,8 +3911,9 @@ document.addEventListener("touchmove", function (e) {
   e.preventDefault();
 }, {passive: false});
 
-var APPLIED_FUNCTION_NAMES = {dominant: "Dominant", tritoneSub: "Tritone sub", leadingTone: "Leading tone"};
-var APPLIED_FUNCTION_PREFIX = {dominant: "V/", tritoneSub: "subV/", leadingTone: "vii°/"};
+var APPLIED_FUNCTION_NAMES = {dominant: "Dominant", supertonic: "Applied ii", tritoneSub: "Tritone sub", backdoor: "Backdoor",
+  leadingTone: "Leading tone", commonTone: "Common-tone dim", mediant: "Mediants"};
+var APPLIED_FUNCTION_PREFIX = {dominant: "V/", supertonic: "ii/", tritoneSub: "subV/", backdoor: "\u266DVII/", leadingTone: "vii°/", commonTone: "ct°/"};
 var SPREAD_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4"];
 // Note icons for the Length buttons, drawn rather than typed: the music-symbol characters
 // for half and whole notes don't show reliably on iPhone.
@@ -3923,6 +3983,13 @@ function chordPads(block, chord, isApplied, isFree) {
       var lbl = blockLabel(cand, root, mode);
       wrap.appendChild(chordPad(null, stepNumeral(step), lbl.name, colorBlock, (block.freeRoot || 0) === step, rootChange(block, function () { block.freeRoot = step; }), true));
     })(step);
+  } else if (isApplied && block.appliedFunction === "mediant") {
+    // Mediants aren't aimed at a target: six pads, one per chromatic mediant of the key.
+    wrap.className = "pads six";
+    MEDIANTS.forEach(function (m, i) {
+      var cand = Object.assign({}, plain, {chordSource: "applied", appliedFunction: "mediant", appliedTargetIndex: i, blockModeIndex: 0});
+      wrap.appendChild(chordPad(null, mediantNumeral(cand), nameOf(cand), cand, block.appliedTargetIndex === i, rootChange(block, function () { block.appliedTargetIndex = i; })));
+    });
   } else if (isApplied) {
     var targets = degreeLabels(MASTER_MODE_NAMES[mode]);
     targets.forEach(function (target, i) {
@@ -4078,8 +4145,9 @@ function renderEditor() {
       if (i === tab) return;
       if (i === 2) block.freeRoot = ((chord.chordRootPitch - state.masterRootIndex) % 12 + 12) % 12;
       else if (i === 1 && tab === 0) block.appliedTargetIndex = block.degreeIndex;
-      else if (i === 0 && tab === 1) block.degreeIndex = block.appliedTargetIndex;
-      if (i === 1 && APPLIED_FUNCTIONS.indexOf(block.appliedFunction) < 0) block.appliedFunction = "dominant";
+      else if (i === 0 && tab === 1) block.degreeIndex = block.appliedFunction === "mediant" ? chord.chordDegreeIndex : block.appliedTargetIndex;
+      // A degree becomes a target, so arriving from Diatonic picks a function that has one.
+      if (i === 1 && (APPLIED_FUNCTIONS.indexOf(block.appliedFunction) < 0 || (tab === 0 && block.appliedFunction === "mediant"))) block.appliedFunction = "dominant";
       block.chordSource = ["diatonic", "applied", "free"][i];
       block.blockModeIndex = 0;
     }));
@@ -4094,15 +4162,16 @@ function renderEditor() {
   padArea.className = "pad-area";
   grid.appendChild(padArea);
   if (isApplied) {
+    // The function is a menu (seven of them won't fit as buttons); the pads below are
+    // its targets, or for Mediants the six mediants of the key.
     var fnRow = document.createElement("div");
     fnRow.className = "fn-row";
-    APPLIED_FUNCTIONS.forEach(function (fn) {
-      var f = document.createElement("button");
-      f.textContent = APPLIED_FUNCTION_NAMES[fn];
-      if (fn === block.appliedFunction) f.className = "on";
-      f.addEventListener("click", rootChange(block, function () { block.appliedFunction = fn; }));
-      fnRow.appendChild(f);
-    });
+    fnRow.appendChild(makeSelect(APPLIED_FUNCTIONS.map(function (fn) { return APPLIED_FUNCTION_NAMES[fn]; }),
+      Math.max(0, APPLIED_FUNCTIONS.indexOf(block.appliedFunction)),
+      rootChange(block, function (v) {
+        block.appliedFunction = APPLIED_FUNCTIONS[v];
+        block.appliedTargetIndex = Math.min(block.appliedTargetIndex || 0, block.appliedFunction === "mediant" ? MEDIANTS.length - 1 : 6);
+      })));
     padArea.appendChild(fnRow);
   }
   padArea.appendChild(chordPads(block, chord, isApplied, isFree));

@@ -66,10 +66,14 @@ var additions = names.filter(function (n) { return orig[n] === undefined; });
 // app's six must still come first, unchanged, so saved extensionIndex values keep their meaning.
 names.forEach(function (n) {
   if (typeof engine[n] === 'function' || additions.indexOf(n) >= 0) return;
+  // The app's three applied functions still come first in order; four were added after
+  // (checked in test_applied_more).
+  if (n === 'APPLIED_FUNCTIONS') { same(n + ' (the app\'s three, in order)', orig[n], engine[n].filter(function (f) { return orig[n].indexOf(f) >= 0; })); return; }
+  if (n === 'APPLIED_FUNCTION_LABELS') { Object.keys(orig[n]).forEach(function (k) { same(n + '.' + k, orig[n][k], engine[n][k]); }); return; }
   if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
   same(n, orig[n], engine[n]);
 });
-same('the only additions are blockLabel, shapes, Alter, Position, Length and step numerals', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'blockLabel', 'lengthChange', 'lengthParts', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
+same('the only additions are blockLabel, shapes, Alter, Position, Length, step numerals and the newer applied chords', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'MAJOR7_INTERVALS', 'MEDIANTS', 'MINOR7_INTERVALS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'appliedColorDegrees', 'blockLabel', 'lengthChange', 'lengthParts', 'mediantNumeral', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
@@ -113,7 +117,7 @@ for (root = 0; root < 12; root++) {
   for (mm = 0; mm < engine.MASTER_MODE_NAMES.length; mm++) {
     state.masterModeIndex = mm;
     for (var tgt = 0; tgt < 7; tgt++)
-      engine.APPLIED_FUNCTIONS.forEach(function (fn) {
+      ['dominant', 'tritoneSub', 'leadingTone'].forEach(function (fn) { // the original app's three
         for (var ext = 0; ext < orig.EXTENSION_NAMES.length; ext++)
           for (var sus = 0; sus < 3; sus++)
             for (var aug = 0; aug < 2; aug++) {

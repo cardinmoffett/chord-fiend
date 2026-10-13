@@ -274,6 +274,7 @@ fieldset.inspector.locked { opacity: 0.55; }
 .drawer-stack > .segmented button { flex: 1; }
 .pads { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .pads.free { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.pads.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .cf .pad { display: flex; flex-direction: column; align-items: center; padding: 4px 0; min-height: 44px; border: 2px solid transparent; border-radius: 8px; color: #1b1b1d; min-width: 0; }
 .cf .pad b { font-size: 15px; line-height: 1.1; white-space: nowrap; }
 .cf .pad small { font-size: 10px; opacity: 0.75; white-space: nowrap; overflow: hidden; max-width: 100%; }
