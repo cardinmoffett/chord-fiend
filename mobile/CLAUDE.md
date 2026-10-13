@@ -18,7 +18,8 @@ Run these from `mobile/`.
 - `index.html` is the whole app: CSS, markup, then one `<script>`. The script uses `var` and function declarations throughout; match that style. Search by name, not line number:
   - The chord engine sits at the top of the script between the `SHARED ENGINE START` and `SHARED ENGINE END` markers. It is generated from `../engine/src/engine.js`: never edit it here. Change the engine there, run `npm run sync-engine`, and run the engine's tests too (`sh ../engine/run_tests.sh`), because the Ableton device uses the same engine.
   - `STORE_KEY`, `save`, `probeStorage`: persistence (about 1365-1430)
-  - `SYNTH_BUILDERS`: the instruments (about 1606)
+  - `SYNTH_BUILDERS`: the chord instruments; Electric Piano is the default and the fallback for a saved instrument that no longer exists (Soft, Airy, Glass and Piano-like were removed 2026-10-13 as unusable)
+  - `BASS_BUILDERS`: the bass sounds (Round, the original; Sub; Electric (fingered); Upright; Synth), each with a level `trim`; chosen in Settings → Bass sound (`state.bassInstrument`), swapped live by `rebuildBassSynth`
   - `scheduleBassForBlock`, `playDrumStepAt`: drums and bass playback
   - `renderTimeline`, `snapEditorPanel`: the block timeline and the bottom editor drawer
   - `openSettings`, `applyStateToAudio`: settings and audio setup
