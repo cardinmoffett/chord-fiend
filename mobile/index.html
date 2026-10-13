@@ -2579,6 +2579,8 @@ var synth = null;
 var heldFreqs = [];
 var masterReverb = null;
 var masterHighpass = null;
+// The low end's own cleanup on the way to the limiter: one cut for the bass, one for drums.
+var bassHighpass = null, lowEndHighpass = null;
 var masterSaturation = null;
 var masterChorus = null;
 var masterDelay = null;
@@ -2643,6 +2645,7 @@ function ensureEffectsChain() {
     masterSaturation = new Tone.Gain();
     masterSaturation.connect(masterLimiter);
     masterHighpass = masterSaturation;
+    lowEndHighpass = bassHighpass = masterLimiter;
   }
 }
 
@@ -2669,6 +2672,15 @@ function buildEffectsChain() {
     masterDelay.connect(masterReverb.input);
     masterReverb.connect(masterLimiter);
     masterLimiter.toDestination();
+    // Bass and drums skip the chord effects but not the limiter. The bass's lowest notes
+    // (C2 is 65 Hz) carried nearly all the mix's energy and overdrove headphones: a gentle
+    // cut at 90 Hz takes the boom down while its harmonics, which are what small speakers
+    // and headphones really play, still carry the note. Drums only lose the sub rumble
+    // below 45 Hz, so the kick keeps its thump.
+    bassHighpass = new Tone.Filter({type: "highpass", frequency: 90, rolloff: -12});
+    bassHighpass.connect(masterLimiter);
+    lowEndHighpass = new Tone.Filter({type: "highpass", frequency: 45, rolloff: -24});
+    lowEndHighpass.connect(masterLimiter);
   }
 }
 
@@ -2750,11 +2762,16 @@ var BASS_BUILDERS = {
 };
 var bassSynth = null;
 function bassSound() { return BASS_BUILDERS[state.bassInstrument] || BASS_BUILDERS.round; }
+// The bass sat about 10 dB above the chords and its peaks nearly reached full scale, which
+// overdrove headphones. BASS_HEADROOM lowers every bass sound together, so the Bass volume
+// slider's 0 dB and each sound's own trim keep their meaning.
+var BASS_HEADROOM = -6;
+function bassLevel() { return state.bassVolume + bassSound().trim + BASS_HEADROOM; }
 function ensureBassSynth() {
   if (!bassSynth) {
     bassSynth = bassSound().build();
-    bassSynth.volume.value = state.bassVolume + bassSound().trim;
-    bassSynth.connect(masterLimiter);
+    bassSynth.volume.value = bassLevel();
+    bassSynth.connect(bassHighpass || masterLimiter);
   }
 }
 // A new bass sound: drop the old voice and build the chosen one.
@@ -2819,24 +2836,26 @@ function sequenceStop() {
 /* ---------- Drum beat ---------- */
 
 var kickSynth = null, snareSynth = null, hihatSynth = null;
+// Drums go through their low cut and the limiter too (they used to go straight out, so a
+// kick on top of a loud chord could clip).
 function ensureDrumSynths() {
   if (!kickSynth) {
     kickSynth = new Tone.MembraneSynth({
       pitchDecay: 0.05, octaves: 6,
       envelope: {attack: 0.001, decay: 0.35, sustain: 0}
-    }).toDestination();
+    }).connect(lowEndHighpass || Tone.Destination);
     kickSynth.volume.value = -6;
 
     snareSynth = new Tone.NoiseSynth({
       noise: {type: "white"},
       envelope: {attack: 0.001, decay: 0.15, sustain: 0}
-    }).toDestination();
+    }).connect(lowEndHighpass || Tone.Destination);
     snareSynth.volume.value = -12;
 
     hihatSynth = new Tone.MetalSynth({
       envelope: {attack: 0.001, decay: 0.06, release: 0.01},
       harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.2
-    }).toDestination();
+    }).connect(lowEndHighpass || Tone.Destination);
     hihatSynth.volume.value = -22;
   }
 }
@@ -4771,7 +4790,7 @@ function syncBassVolumeControl() {
 bassVolumeSlider.addEventListener("input", function () {
   state.bassVolume = parseInt(bassVolumeSlider.value, 10);
   bassVolumeLabel.textContent = bassVolumeText(state.bassVolume);
-  if (bassSynth) bassSynth.volume.value = state.bassVolume + bassSound().trim; // live, so it's audible mid-playback
+  if (bassSynth) bassSynth.volume.value = bassLevel(); // live, so it's audible mid-playback
   save();
 });
 
@@ -5663,7 +5682,7 @@ function updateProjectNameButton() {
 function applyStateToAudio() {
   if (!toneReady) return;
   rebuildSynth();
-  if (bassSynth) bassSynth.volume.value = state.bassVolume + bassSound().trim;
+  if (bassSynth) bassSynth.volume.value = bassLevel();
   if (masterReverb) {
     masterReverb.wet.value = state.reverbWet;
     if (masterReverb.decay !== state.reverbDecay) masterReverb.decay = state.reverbDecay;
