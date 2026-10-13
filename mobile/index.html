@@ -1072,10 +1072,6 @@
     <div class="settings-row">
       <label>Instrument</label>
       <select id="instrumentSelect">
-        <option value="soft">Soft (Triangle)</option>
-        <option value="airy">Airy</option>
-        <option value="glass">Glass</option>
-        <option value="piano">Piano-like</option>
         <option value="rich">Rich (unison + filter movement)</option>
         <option value="slowpad">Slow Pad</option>
         <option value="pluck2">Analog Pluck</option>
@@ -1113,6 +1109,10 @@
         <button data-val="0">Off</button>
         <button data-val="1">On</button>
       </div>
+    </div>
+    <div class="settings-row">
+      <label>Bass sound</label>
+      <select id="bassSoundSelect"></select>
     </div>
     <div class="settings-row">
       <label id="bassVolumeLabel">Bass volume</label>
@@ -2051,7 +2051,7 @@ function freshState() {
   masterRootIndex: 0,
   masterModeIndex: 0,
   tempo: 100,
-  instrument: "soft",
+  instrument: "epiano",
   melodyInstrument: "epiano", // the melody lane's voice (Reharmonization lessons); any SYNTH_BUILDERS key
   melodyVolume: 0, // dB, on top of the melody voice's own level (-18 to +12)
   palette: "sunset",
@@ -2064,6 +2064,7 @@ function freshState() {
   bassEnabled: true,
   bassWrapLow: 28, // E1 -- the wrap window is exactly one octave starting here.
   bassVolume: -3, // dB, applied to the dedicated bass voice -- -3 is what it was hard-coded to before this was adjustable
+  bassInstrument: "round", // a BASS_BUILDERS key
   reverbWet: 0.75,
   reverbDecay: 5, // "Cavernous" -- must be the canonical number so it round-trips through the dropdown's string values
   delayWet: 0.12,
@@ -2354,38 +2355,6 @@ function logAudio() {
 // clarity. A shared high-pass filter (below) also cuts low rumble that
 // compounds when multiple notes sound together.
 var SYNTH_BUILDERS = {
-  soft: function () {
-    return new Tone.PolySynth(Tone.Synth, {
-      oscillator: {type: "triangle"},
-      envelope: {attack: 0.02, decay: 0.25, sustain: 0.7, release: 0.6}
-    });
-  },
-  airy: function () {
-    // Real airiness comes from upper-harmonic presence, not the absence of
-    // harmonics -- a light detune spread + high-pass gives shimmer without bulk.
-    // Volume pulled back to compensate for 2 oscillators per note (8 total
-    // for a 4-note chord), which was clipping without this headroom.
-    var s = new Tone.PolySynth(Tone.Synth, {
-      oscillator: {type: "fatsine", count: 2, spread: 15},
-      envelope: {attack: 0.18, decay: 0.3, sustain: 0.65, release: 1.1}
-    });
-    s.volume.value = -7;
-    return s;
-  },
-  glass: function () {
-    return new Tone.PolySynth(Tone.Synth, {
-      oscillator: {type: "triangle8"}, // triangle with more of its (still mild) upper partials present
-      envelope: {attack: 0.01, decay: 0.4, sustain: 0.4, release: 0.8}
-    });
-  },
-  piano: function () {
-    // Long but finite decay -- fast strike, then a genuine multi-second fade
-    // toward near-silence even while held, rather than sustaining flat forever.
-    return new Tone.PolySynth(Tone.Synth, {
-      oscillator: {type: "triangle"},
-      envelope: {attack: 0.004, decay: 2.8, sustain: 0.05, release: 0.4}
-    });
-  },
   rich: function () {
     // Real unison (3 detuned oscillators per note) + a filter with its OWN
     // envelope (opens/closes over the note's sustain, giving movement
@@ -2659,10 +2628,10 @@ var INSTRUMENT_TRIM_MIN = -18;
 var INSTRUMENT_TRIM_MAX = 12;
 var synthBaseVolume = 0;
 
-// An unknown/legacy instrument name plays as "soft" (see rebuildSynth), so
-// its trim has to be filed under "soft" too -- not under a name that never sounds.
+// An unknown or removed instrument name plays as "epiano" (see rebuildSynth), so its
+// trim has to be filed under "epiano" too -- not under a name that never sounds.
 function resolvedInstrumentName() {
-  return SYNTH_BUILDERS[state.instrument] ? state.instrument : "soft";
+  return SYNTH_BUILDERS[state.instrument] ? state.instrument : "epiano";
 }
 function instrumentTrim(name) {
   var t = projectsStore.instrumentTrims[name];
@@ -2686,16 +2655,60 @@ function rebuildSynth() {
 // (which exists specifically to cut low content, exactly what bass needs)
 // and the reverb (bass usually reads clearer tight/dry). Still runs through
 // the limiter for clip protection.
+// BASS SOUNDS, chosen in Settings (state.bassInstrument). Each is one monophonic voice
+// with the same triggerAttack / triggerRelease / triggerAttackRelease calls, and a level
+// trim so they sit at about the same loudness under the Bass volume slider.
+var BASS_BUILDERS = {
+  round: {label: "Round", build: function () {
+    // The original: a plain triangle, soft and even.
+    return new Tone.Synth({oscillator: {type: "triangle"}, envelope: {attack: 0.008, decay: 0.15, sustain: 0.8, release: 0.15}});
+  }, trim: 0},
+  sub: {label: "Sub", build: function () {
+    // A pure sine with a touch of attack: felt more than heard, the modern pop and hip-hop low end.
+    return new Tone.Synth({oscillator: {type: "sine"}, envelope: {attack: 0.015, decay: 0.2, sustain: 0.9, release: 0.2}});
+  }, trim: 2},
+  electric: {label: "Electric (fingered)", build: function () {
+    // A square through a lowpass that snaps open on each note and settles: the pluck and
+    // growl of a fingered electric bass.
+    return new Tone.MonoSynth({
+      oscillator: {type: "square"},
+      envelope: {attack: 0.005, decay: 0.35, sustain: 0.55, release: 0.12},
+      filter: {type: "lowpass", Q: 1.5, rolloff: -24},
+      filterEnvelope: {attack: 0.004, decay: 0.22, sustain: 0.25, release: 0.2, baseFrequency: 110, octaves: 2.6, exponent: 2}
+    });
+  }, trim: -4},
+  upright: {label: "Upright", build: function () {
+    // FM with a short, woody decay: the thump of an acoustic upright, which fades even while held.
+    return new Tone.FMSynth({
+      harmonicity: 1, modulationIndex: 2.2,
+      oscillator: {type: "sine"}, modulation: {type: "triangle"},
+      envelope: {attack: 0.006, decay: 0.9, sustain: 0.18, release: 0.25},
+      modulationEnvelope: {attack: 0.004, decay: 0.25, sustain: 0.1, release: 0.2}
+    });
+  }, trim: 1},
+  synth: {label: "Synth", build: function () {
+    // A sawtooth with a resonant filter sweep: the classic analog synth bass.
+    return new Tone.MonoSynth({
+      oscillator: {type: "sawtooth"},
+      envelope: {attack: 0.004, decay: 0.3, sustain: 0.6, release: 0.15},
+      filter: {type: "lowpass", Q: 4, rolloff: -24},
+      filterEnvelope: {attack: 0.004, decay: 0.18, sustain: 0.2, release: 0.15, baseFrequency: 90, octaves: 3.2, exponent: 2}
+    });
+  }, trim: -7}
+};
 var bassSynth = null;
+function bassSound() { return BASS_BUILDERS[state.bassInstrument] || BASS_BUILDERS.round; }
 function ensureBassSynth() {
   if (!bassSynth) {
-    bassSynth = new Tone.Synth({
-      oscillator: {type: "triangle"},
-      envelope: {attack: 0.008, decay: 0.15, sustain: 0.8, release: 0.15}
-    });
-    bassSynth.volume.value = state.bassVolume;
+    bassSynth = bassSound().build();
+    bassSynth.volume.value = state.bassVolume + bassSound().trim;
     bassSynth.connect(masterLimiter);
   }
+}
+// A new bass sound: drop the old voice and build the chosen one.
+function rebuildBassSynth() {
+  if (bassSynth) { try { bassSynth.triggerRelease(); bassSynth.dispose(); } catch (e) {} bassSynth = null; }
+  if (toneReady) ensureBassSynth();
 }
 
 // Tone.js requires its own explicit start() inside a user gesture, same
@@ -4654,6 +4667,22 @@ bassEnabledToggle.querySelectorAll("button").forEach(function (b) {
   });
 });
 
+var bassSoundSelect = document.getElementById("bassSoundSelect");
+Object.keys(BASS_BUILDERS).forEach(function (k) {
+  var o = document.createElement("option"); o.value = k; o.textContent = BASS_BUILDERS[k].label;
+  bassSoundSelect.appendChild(o);
+});
+bassSoundSelect.addEventListener("change", function () {
+  state.bassInstrument = bassSoundSelect.value;
+  save();
+  rebuildBassSynth();
+  // Hear the new sound once: the current block's bass note.
+  if (!playback.active && toneReady && editingBlocks && editingBlocks[state.currentIndex]) {
+    var b = editingBlocks[state.currentIndex], c = buildChord(b, state.masterRootIndex, state.masterModeIndex);
+    var bp = computeBassPitchForBlock(b, c, activeBeatPattern(state.drumBeat, state.customBeatPatterns), state.bassWrapLow);
+    if (bp !== null) bassSynth.triggerAttackRelease(midiToFreq(bp), 0.6);
+  }
+});
 var bassVolumeSlider = document.getElementById("bassVolumeSlider");
 var bassVolumeLabel = document.getElementById("bassVolumeLabel");
 // A slider position alone doesn't say how loud anything is, so the label
@@ -4664,13 +4693,14 @@ function dbText(db) {
 function bassVolumeText(db) { return "Bass volume (" + dbText(db) + ")"; }
 function instrumentVolumeText(db) { return "Instrument volume (" + dbText(db) + ")"; }
 function syncBassVolumeControl() {
+  bassSoundSelect.value = BASS_BUILDERS[state.bassInstrument] ? state.bassInstrument : "round";
   bassVolumeSlider.value = state.bassVolume;
   bassVolumeLabel.textContent = bassVolumeText(state.bassVolume);
 }
 bassVolumeSlider.addEventListener("input", function () {
   state.bassVolume = parseInt(bassVolumeSlider.value, 10);
   bassVolumeLabel.textContent = bassVolumeText(state.bassVolume);
-  if (bassSynth) bassSynth.volume.value = state.bassVolume; // live, so it's audible mid-playback
+  if (bassSynth) bassSynth.volume.value = state.bassVolume + bassSound().trim; // live, so it's audible mid-playback
   save();
 });
 
@@ -4736,7 +4766,7 @@ function openSettings() {
   rootSelect.value = state.masterRootIndex;
   masterModeSelect.value = state.masterModeIndex;
   showTempo(state.tempo);
-  instrumentSelect.value = state.instrument;
+  instrumentSelect.value = resolvedInstrumentName(); // a removed instrument shows as the one that plays
   melodyInstrumentSelect.value = SYNTH_BUILDERS[state.melodyInstrument] ? state.melodyInstrument : "epiano";
   melodyVolumeSlider.value = state.melodyVolume || 0;
   melodyVolumeLabel.textContent = "Melody volume (" + dbText(state.melodyVolume || 0) + ")";
@@ -5560,7 +5590,7 @@ function updateProjectNameButton() {
 function applyStateToAudio() {
   if (!toneReady) return;
   rebuildSynth();
-  if (bassSynth) bassSynth.volume.value = state.bassVolume;
+  if (bassSynth) bassSynth.volume.value = state.bassVolume + bassSound().trim;
   if (masterReverb) {
     masterReverb.wet.value = state.reverbWet;
     if (masterReverb.decay !== state.reverbDecay) masterReverb.decay = state.reverbDecay;
