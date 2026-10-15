@@ -11,7 +11,7 @@ var doc = { getElementById:function(){return fakeEl();}, createElement:function(
 var store = {};
 var ls = {getItem:function(k){return k in store ? store[k] : null;}, setItem:function(k,v){store[k]=String(v);}, removeItem:function(k){delete store[k];}};
 var ToneMock = { start:function(){return {then:function(){return{catch:function(){}};}};}, Transport:{scheduleOnce:function(fn,t){fn(t);return 1;},scheduleRepeat:function(){return 1;},clear:function(){},bpm:{value:100},seconds:0,start:function(){},stop:function(){},cancel:function(){}}, Draw:{schedule:function(fn){fn();}} };
-var api = new Function('document','localStorage','Tone', code + '\nreturn {buildChord:buildChord, defaultBlock:defaultBlock, noteRole:noteRole, lessonFunction:lessonFunction, installLessonPack:installLessonPack, openLesson:openLesson, sandbox:function(){return sandbox;}, laneMeter:laneMeter, lessonMelodyFit:lessonMelodyFit, melodyFitsEverywhere:melodyFitsEverywhere, describeMelodyFit:describeMelodyFit, state:function(){return state;}};')(doc, ls, ToneMock);
+var api = new Function('document','localStorage','Tone', code + '\nreturn {buildChord:buildChord, defaultBlock:defaultBlock, noteRole:noteRole, lessonFunction:lessonFunction, installLessonPack:installLessonPack, openLesson:openLesson, sandbox:function(){return sandbox;}, laneMeter:laneMeter, lessonMelodyFit:lessonMelodyFit, melodyFitsEverywhere:melodyFitsEverywhere, describeMelodyFit:describeMelodyFit, state:function(){return state;}, setBeatsPerBar:setBeatsPerBar, getDurationBeats:getDurationBeats, barBlock:barBlock, closeLesson:function(){editingRef=null;}};')(doc, ls, ToneMock);
 
 
 var ok = true;
@@ -63,5 +63,16 @@ check('over IV (F A C) instead, the G and its neighbours still fit (G is the 9 o
 var withV7 = api.sandbox().blocks.slice(); withV7[1] = blk({degreeIndex: 4, extensionIndex: 2, durationIndex: 3, durationModifier: 1});
 check('over G7, the melody\'s C is the natural 11: it clashes', !api.melodyFitsEverywhere(withV7));
 check('the text names a tension as one', /A \(13\) is a tension/.test(api.describeMelodyFit(1)));
+
+console.log('=== the song\'s time signature ===');
+api.closeLesson();
+var st = api.state();
+st.sections = [{id: 1, name: 'S', blocks: [blk({durationIndex: 2}), blk({durationIndex: 3}), blk({durationIndex: 2})]}];
+api.setBeatsPerBar(3);
+same('3/4: bar-long whole notes become dotted halves (3 beats); a half note stays', st.sections[0].blocks.map(api.getDurationBeats), [3, 2, 3]);
+same('a new block is a bar long in 3/4', api.getDurationBeats(api.barBlock()), 3);
+api.setBeatsPerBar(4);
+same('back to 4/4: they are whole notes again', st.sections[0].blocks.map(api.getDurationBeats), [4, 2, 4]);
+same('the setting is saved with the song', st.beatsPerBar, 4);
 
 console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');
