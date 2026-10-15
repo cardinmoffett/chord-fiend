@@ -1139,6 +1139,17 @@
       <select id="bassWrapLowSelect"></select>
     </div>
 
+    <div class="settings-section">Strum</div>
+    <div class="settings-row">
+      <label id="strumLabel">Strum</label>
+      <select id="strumSelect">
+        <option value="off">Off</option>
+        <option value="fast">Fast</option>
+        <option value="medium">Medium</option>
+        <option value="slow">Slow</option>
+      </select>
+    </div>
+
     <div class="settings-section">Arpeggiator</div>
     <div class="settings-row">
       <label>Arpeggiator</label>
@@ -2156,6 +2167,7 @@ function freshState() {
   palette: "sunset",
   drumBeat: "rock", // one of BUILTIN_BEAT_PATTERNS' keys, or "off"
   customBeatPatterns: {}, // per-project overrides written by the rhythm editor
+  strum: "off", // off | fast | medium | slow: each chord's notes start one after another, lowest first
   arpEnabled: false,
   arpPattern: "up", // up | down | updown | random
   arpRate: 5, // index into DURATION_NAMES -- default 1/8
@@ -2850,6 +2862,17 @@ function ensureAudioReady(callback) {
   });
 }
 
+// STRUM: one strum per chord, lowest note first, each note this many seconds after the
+// one below it. It's off while the arpeggiator is on (that already spreads the notes).
+var STRUM_GAPS = {off: 0, fast: 0.018, medium: 0.04, slow: 0.08};
+function strumGap() { return state.arpEnabled ? 0 : (STRUM_GAPS[state.strum] || 0); }
+function strummed(freqs) { return freqs.slice().sort(function (a, b) { return a - b; }); }
+function attackChord(freqs, time) {
+  var gap = strumGap();
+  if (!gap) { synth.triggerAttack(freqs, time); return; }
+  strummed(freqs).forEach(function (f, i) { synth.triggerAttack(f, time + i * gap); });
+}
+
 function holdPitches(pitches) {
   if (heldFreqs.length) {
     // A previous hold's release was somehow missed -- a defensive backstop
@@ -2862,7 +2885,8 @@ function holdPitches(pitches) {
   ensureAudioReady(function () {
     heldFreqs = pitches.map(midiToFreq);
     logAudio("holdPitches triggerAttack", heldFreqs);
-    synth.triggerAttack(heldFreqs);
+    if (strumGap()) attackChord(heldFreqs, Tone.now());
+    else synth.triggerAttack(heldFreqs);
   });
 }
 function releaseHeld() {
@@ -2874,7 +2898,10 @@ function releaseHeld() {
 function playPitchesTimed(pitches, durationSeconds) {
   ensureAudioReady(function () {
     logAudio("playPitchesTimed triggerAttackRelease", pitches, durationSeconds);
-    synth.triggerAttackRelease(pitches.map(midiToFreq), durationSeconds);
+    var gap = strumGap();
+    if (!gap) { synth.triggerAttackRelease(pitches.map(midiToFreq), durationSeconds); return; }
+    var now = Tone.now();
+    strummed(pitches.map(midiToFreq)).forEach(function (f, i) { synth.triggerAttackRelease(f, durationSeconds, now + i * gap); });
   });
 }
 function sequenceStop() {
@@ -4793,8 +4820,22 @@ arpEnabledToggle.querySelectorAll("button").forEach(function (b) {
   b.addEventListener("click", function () {
     state.arpEnabled = b.dataset.val === "1";
     syncArpEnabledToggle();
+    syncStrumSelect();
     save();
   });
+});
+
+// Strum is greyed out while the arpeggiator is on; its choice is kept for when it's off.
+var strumSelect = document.getElementById("strumSelect");
+function syncStrumSelect() {
+  strumSelect.value = STRUM_GAPS[state.strum] !== undefined ? state.strum : "off";
+  strumSelect.disabled = !!state.arpEnabled;
+  document.getElementById("strumLabel").textContent = state.arpEnabled ? "Strum (off with arpeggiator)" : "Strum";
+}
+strumSelect.addEventListener("change", function () {
+  state.strum = strumSelect.value;
+  save();
+  previewCurrentBlock();
 });
 
 var arpPatternSelect = document.getElementById("arpPatternSelect");
@@ -4946,6 +4987,7 @@ function openSettings() {
   fillDrumBeatSelect();
   syncRhythmEditBtn();
   syncArpEnabledToggle();
+  syncStrumSelect();
   arpPatternSelect.value = state.arpPattern;
   arpRateSelect.value = state.arpRate;
   arpOctavesSelect.value = state.arpOctaves;
@@ -5193,7 +5235,7 @@ function scheduleBlockNotes(blockIndex, atOffset, durSeconds, durBeats, baseTime
       // (common when consecutive chords share a note) can leave that voice's
       // envelope stuck -- a 1ms gap (inaudible) gives it an unambiguous order.
       synth.releaseAll(time);
-      synth.triggerAttack(freqs, time + 0.001);
+      attackChord(freqs, time + 0.001);
       Tone.Draw.schedule(function () { updatePlaybackUI(blockIndex); }, time);
     }, baseTime + atOffset);
   }
