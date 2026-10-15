@@ -804,6 +804,15 @@
   .learn-lesson-row[disabled] {
     opacity: 0.4;
   }
+  .learn-pack-title {
+    font-weight: 800;
+    font-size: 15px;
+    margin: 22px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .learn-pack-row { color: var(--text-dim); text-align: center; }
+  .learn-pack-error { color: #c0392b; font-size: 12px; }
 
   .rhythm-editor-header {
     display: flex;
@@ -1010,6 +1019,7 @@
     <div class="spacer"></div>
   </header>
   <main id="learnHomeBody" class="learn-home-body"></main>
+  <input type="file" id="lessonPackInput" accept=".js,.txt,.json,text/plain,application/javascript" hidden>
 </div>
 
 <div class="settings-backdrop" id="debugLogBackdrop">
@@ -6641,6 +6651,91 @@ function markLessonComplete(lessonId) {
   save();
 }
 
+// LESSON PACKS: extra Learn units in a file the person imports on their own phone (a
+// private course built from a book they own, say). The file never ships with the app:
+// it's kept in this device's storage only (PACK_STORE_KEY) and added to CURRICULUM after
+// the built-in units. A pack is a JavaScript object literal,
+//   {id: "jazz", title: "...", units: [{id, title, lessons: [{id, title, intro, blocks, goal, melody, masterRoot, masterMode}]}]}
+// evaluated with the lesson helpers in scope (learnBlock, lessonChord, lessonPcs, lessonHas,
+// lessonLowest and the engine functions below), so its goals work like built-in ones.
+// Lesson ids are prefixed with the pack id, so a pack can't clash with built-in progress.
+var PACK_STORE_KEY = "chordFiendLessonPacks";
+var BUILTIN_UNIT_COUNT = CURRICULUM.length;
+var lessonPackErrors = {};
+function lessonPackHelpers() {
+  return {learnBlock: learnBlock, lessonChord: lessonChord, lessonPcs: lessonPcs, lessonHas: lessonHas, lessonLowest: lessonLowest,
+    buildChord: buildChord, blockLabel: blockLabel, getChordSymbol: getChordSymbol, defaultBlock: defaultBlock,
+    MEDIANTS: MEDIANTS, APPLIED_FUNCTIONS: APPLIED_FUNCTIONS, SHAPE_ORDER: SHAPE_ORDER, EXTENSION_NAMES: EXTENSION_NAMES};
+}
+function readLessonPack(text) {
+  var helpers = lessonPackHelpers(), names = Object.keys(helpers);
+  var pack = new Function(names.join(","), "return (" + text + "\n);").apply(null, names.map(function (k) { return helpers[k]; }));
+  if (!pack || typeof pack.id !== "string" || !pack.id || typeof pack.title !== "string" || !Array.isArray(pack.units) || !pack.units.length) {
+    throw new Error("a lesson pack needs an id, a title and a list of units");
+  }
+  pack.units.forEach(function (unit, u) {
+    if (!unit.title || !Array.isArray(unit.lessons)) throw new Error("unit " + (u + 1) + " needs a title and lessons");
+    unit.id = pack.id + "-" + (unit.id || "unit" + (u + 1));
+    unit.lessons.forEach(function (l, i) {
+      if (!l.title || typeof l.blocks !== "function") throw new Error(unit.title + ", lesson " + (i + 1) + " needs a title and blocks()");
+      l.id = pack.id + "-" + (l.id || unit.id + "-" + (i + 1));
+      l.blocks(); // fails now, at import, rather than when the lesson is opened
+    });
+  });
+  return pack;
+}
+function storedLessonPacks() {
+  try { return JSON.parse(localStorage.getItem(PACK_STORE_KEY) || "[]") || []; } catch (e) { return []; }
+}
+function storeLessonPacks(list) {
+  try { localStorage.setItem(PACK_STORE_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
+}
+// Rebuilds CURRICULUM: the built-in units, then every stored pack's units.
+function applyLessonPacks() {
+  CURRICULUM.length = BUILTIN_UNIT_COUNT;
+  lessonPackErrors = {};
+  storedLessonPacks().forEach(function (stored) {
+    try {
+      var pack = readLessonPack(stored.text);
+      pack.units.forEach(function (unit, i) { unit.packId = pack.id; unit.packTitle = i === 0 ? pack.title : null; CURRICULUM.push(unit); });
+    } catch (e) { lessonPackErrors[stored.id] = {title: stored.title, message: String(e && e.message || e)}; }
+  });
+}
+// Adds a pack (or replaces one with the same id, so a new version keeps its progress).
+function installLessonPack(text) {
+  var pack = readLessonPack(text);
+  var list = storedLessonPacks().filter(function (p) { return p.id !== pack.id; });
+  list.push({id: pack.id, title: pack.title, text: text});
+  if (!storeLessonPacks(list)) throw new Error("this phone's storage is full or blocked");
+  applyLessonPacks();
+  return pack;
+}
+function removeLessonPack(id) {
+  storeLessonPacks(storedLessonPacks().filter(function (p) { return p.id !== id; }));
+  applyLessonPacks();
+}
+function packRow(text, onTap) {
+  var row = document.createElement("button");
+  row.className = "pill learn-lesson-row learn-pack-row";
+  row.textContent = text;
+  row.addEventListener("click", onTap);
+  return row;
+}
+document.getElementById("lessonPackInput").addEventListener("change", function () {
+  var input = this, file = input.files && input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    try {
+      var pack = installLessonPack(String(reader.result));
+      alert("Added \u201C" + pack.title + "\u201D: " + pack.units.length + " units.");
+    } catch (e) { alert("That file isn't a lesson pack the app can read: " + (e && e.message || e)); }
+    input.value = "";
+    renderLearnHomeBody();
+  };
+  reader.readAsText(file);
+});
+
 function switchToLearnHome() {
   if (playback.active) stopPlayback();
   if (currentView === "song") {
@@ -6663,7 +6758,13 @@ function switchToLearnHome() {
 function renderLearnHomeBody() {
   var body = document.getElementById("learnHomeBody");
   body.innerHTML = "";
-  CURRICULUM.forEach(function (unit) {
+  CURRICULUM.forEach(function (unit, u) {
+    if (unit.packTitle) {
+      var ph = document.createElement("div");
+      ph.className = "learn-pack-title";
+      ph.textContent = unit.packTitle;
+      body.appendChild(ph);
+    }
     var h = document.createElement("div");
     h.className = "learn-unit-title";
     h.textContent = unit.title;
@@ -6684,7 +6785,22 @@ function renderLearnHomeBody() {
       row.addEventListener("click", function () { openLesson(lesson.id); });
       body.appendChild(row);
     });
+    // After a pack's last unit: a way to take it off this phone.
+    var next = CURRICULUM[u + 1];
+    if (unit.packId && (!next || next.packId !== unit.packId)) {
+      body.appendChild(packRow("Remove \u201C" + storedLessonPacks().filter(function (p) { return p.id === unit.packId; }).map(function (p) { return p.title; })[0] + "\u201D", function () {
+        if (confirm("Remove this lesson pack from this phone? Your progress in it is kept if you add it again.")) { removeLessonPack(unit.packId); renderLearnHomeBody(); }
+      }));
+    }
   });
+  Object.keys(lessonPackErrors).forEach(function (id) {
+    var err = document.createElement("div");
+    err.className = "learn-pack-error";
+    err.textContent = "\u201C" + lessonPackErrors[id].title + "\u201D couldn't load: " + lessonPackErrors[id].message;
+    body.appendChild(err);
+    body.appendChild(packRow("Remove it", function () { removeLessonPack(id); renderLearnHomeBody(); }));
+  });
+  body.appendChild(packRow("+ Add lesson pack from a file", function () { document.getElementById("lessonPackInput").click(); }));
 }
 
 // Loads a lesson's starting example into the sandbox and switches to the
@@ -6694,13 +6810,13 @@ function openLesson(lessonId) {
   var lesson = findLesson(lessonId);
   if (!lesson) return;
   if (playback.active) stopPlayback();
-  // Every lesson plays in C, but its HOME MODE is its own (Ionian unless a
+  // Built-in lessons play in C (a pack lesson may set masterRoot), but its HOME MODE is its own (Ionian unless a
   // lesson specifies otherwise) -- a minor-key lesson needs Aeolian as home
   // so its diatonic degrees, and the "Thru" chords built from them, are
   // actually in C minor, not silently built from whatever mode the user's
   // real project happened to be left in (switchToLearnHome saved that
   // already; switchToSongView hands it back on the way out).
-  state.masterRootIndex = 0;
+  state.masterRootIndex = lesson.masterRoot || 0; // a pack lesson can be in the book's key (Bb for "Silent Night")
   state.masterModeIndex = lesson.masterMode !== undefined ? lesson.masterMode : 0;
   sandbox = {title: lesson.title, blocks: lesson.blocks(), lessonId: lessonId, melody: lesson.melody || null};
   editingRef = {kind: "scratch"};
@@ -6812,6 +6928,7 @@ document.getElementById("learnHomeBackBtn").addEventListener("click", switchToSo
 
 /* ---------- Init ---------- */
 
+applyLessonPacks();
 renderSongView();
 })();
 </script>
