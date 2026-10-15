@@ -1149,7 +1149,7 @@
     </div>
     <div class="settings-row">
       <label id="strumWidthLabel">Width</label>
-      <input type="range" id="strumWidthSlider" min="10" max="300" step="5">
+      <input type="range" id="strumWidthSlider" min="5" max="150" step="5">
     </div>
 
     <div class="settings-section">Arpeggiator</div>
@@ -2170,7 +2170,7 @@ function freshState() {
   drumBeat: "rock", // one of BUILTIN_BEAT_PATTERNS' keys, or "off"
   customBeatPatterns: {}, // per-project overrides written by the rhythm editor
   strum: "off", // "on" or "off": each chord's notes start one after another, lowest first
-  strumWidth: 80, // ms from the first note of a strum to the last
+  strumWidth: 30, // ms between one note of a strum and the next
   arpEnabled: false,
   arpPattern: "up", // up | down | updown | random
   arpRate: 5, // index into DURATION_NAMES -- default 1/8
@@ -2865,15 +2865,15 @@ function ensureAudioReady(callback) {
   });
 }
 
-// STRUM: one strum per chord, lowest note first. Width is the time from the first note to
-// the last (state.strumWidth, ms), shared evenly between the notes, so a strum takes the
-// same time whatever the chord's size. Off while the arpeggiator is on (that already
-// spreads the notes). Any saved value but "off" counts as on.
-var STRUM_WIDTH_MIN = 10, STRUM_WIDTH_MAX = 300;
+// STRUM: one strum per chord, lowest note first. Width is the time between one note and
+// the next (state.strumWidth, ms), so a bigger chord takes longer to strum, as on a
+// guitar. Off while the arpeggiator is on (that already spreads the notes). Any saved
+// value but "off" counts as on.
+var STRUM_WIDTH_MIN = 5, STRUM_WIDTH_MAX = 150;
 function strumOn() { return !state.arpEnabled && !!state.strum && state.strum !== "off"; }
-function strumWidthMs() { return Math.max(STRUM_WIDTH_MIN, Math.min(STRUM_WIDTH_MAX, state.strumWidth || 80)); }
+function strumWidthMs() { return Math.max(STRUM_WIDTH_MIN, Math.min(STRUM_WIDTH_MAX, state.strumWidth || 30)); }
 // Seconds between one note and the next, for a chord of n notes (0: all at once).
-function strumGap(n) { return strumOn() && n > 1 ? strumWidthMs() / 1000 / (n - 1) : 0; }
+function strumGap(n) { return strumOn() && n > 1 ? strumWidthMs() / 1000 : 0; }
 function strummed(freqs) { return freqs.slice().sort(function (a, b) { return a - b; }); }
 function attackChord(freqs, time) {
   var gap = strumGap(freqs.length);
