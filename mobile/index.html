@@ -1063,6 +1063,10 @@
       <select id="masterModeSelect"></select>
     </div>
     <div class="settings-row">
+      <label>Time</label>
+      <select id="meterSelect"><option value="4">4/4</option><option value="3">3/4</option></select>
+    </div>
+    <div class="settings-row">
       <label>Tempo</label>
       <!-- A dropdown in steps of 5: no typing on the phone. -->
       <select id="tempoSelect"></select>
@@ -2111,6 +2115,7 @@ function freshState() {
   masterRootIndex: 0,
   masterModeIndex: 0,
   tempo: 100,
+  beatsPerBar: 4, // the time signature: 4 (4/4) or 3 (3/4)
   instrument: "epiano",
   melodyInstrument: "epiano", // the melody lane's voice (Reharmonization lessons); any SYNTH_BUILDERS key
   melodyVolume: 0, // dB, on top of the melody voice's own level (-18 to +12)
@@ -2981,10 +2986,20 @@ function cumulativeBeatsBeforeIndex(idx) {
 
 var BEATS_PER_MEASURE = 4;
 var MEASURES_PER_ROW = 2;
-var BEATS_PER_ROW = BEATS_PER_MEASURE * MEASURES_PER_ROW;
+// The meter in force: a lesson's own (beatsPerBar, pickupBeats), or the song's time
+// signature from Settings (state.beatsPerBar: 4 or 3).
+function currentMeter() {
+  if (editingRef && editingRef.kind === "scratch" && sandbox && sandbox.lessonId) {
+    return {beats: sandbox.beatsPerBar || BEATS_PER_MEASURE, pickup: sandbox.pickupBeats || 0};
+  }
+  return {beats: state.beatsPerBar || BEATS_PER_MEASURE, pickup: 0};
+}
+// Two bars per timeline row: 8 beats in 4/4, 6 in 3/4.
+function beatsPerRow() { return currentMeter().beats * MEASURES_PER_ROW; }
 
 function computeRows() {
   var rows = [];
+  var BEATS_PER_ROW = beatsPerRow();
   var cursor = 0;
   editingBlocks.forEach(function (block, blockIndex) {
     var dur = getDurationBeats(block);
@@ -3286,11 +3301,9 @@ function isMelodyLesson() {
   return !!(editingRef && editingRef.kind === "scratch" && sandbox && sandbox.melody && sandbox.melody.length);
 }
 function melodyMidi(semis) { return 60 + state.masterRootIndex + semis; }
-// A melody lesson's meter: beats per bar (3 for a waltz) and the pickup before bar 1, in
-// beats. Bar 1 starts after the pickup; the pickup's beats get no bar number.
-function laneMeter() {
-  return {beats: (sandbox && sandbox.beatsPerBar) || BEATS_PER_MEASURE, pickup: (sandbox && sandbox.pickupBeats) || 0};
-}
+// The lane's meter (currentMeter): beats per bar (3 for a waltz) and the pickup before bar
+// 1, in beats. Bar 1 starts after the pickup; the pickup's beats get no bar number.
+function laneMeter() { return currentMeter(); }
 
 // Which degree (0-6) of the home key a pitch is, or -1 if it's outside the key.
 function homeDegreeOf(semis) {
@@ -3575,7 +3588,7 @@ function renderTimeline() {
     segWrap.className = "segments";
 
     rowSegs.forEach(function (seg, segIdx) {
-      var widthPct = (seg.segLen / BEATS_PER_ROW * 100) + "%";
+      var widthPct = (seg.segLen / beatsPerRow() * 100) + "%";
       var el = buildSegElement(seg, widthPct, seg.isLast && segIdx !== rowSegs.length - 1);
       segWrap.appendChild(el);
     });
@@ -4275,7 +4288,7 @@ function renderEditor() {
   resetBlockBtn.className = "icon"; resetBlockBtn.textContent = "↺"; resetBlockBtn.title = "Reset this block to defaults";
   resetBlockBtn.addEventListener("click", function () {
     if (isEditorLocked()) return;
-    editingBlocks[state.currentIndex] = defaultBlock();
+    editingBlocks[state.currentIndex] = barBlock();
     refresh();
   });
   actions.appendChild(resetBlockBtn);
@@ -4883,6 +4896,7 @@ function openSettings() {
   rootSelect.value = state.masterRootIndex;
   masterModeSelect.value = state.masterModeIndex;
   showTempo(state.tempo);
+  meterSelect.value = String(state.beatsPerBar || 4);
   instrumentSelect.value = resolvedInstrumentName(); // a removed instrument shows as the one that plays
   melodyInstrumentSelect.value = SYNTH_BUILDERS[state.melodyInstrument] ? state.melodyInstrument : "epiano";
   melodyVolumeSlider.value = state.melodyVolume || 0;
@@ -4937,6 +4951,37 @@ debugLogBtn.addEventListener("click", function () {
 settingsCloseBtn.addEventListener("click", closeSettings);
 settingsBackdrop.addEventListener("click", function (e) {
   if (e.target === settingsBackdrop) closeSettings();
+});
+// TIME SIGNATURE. Changing it keeps bar-long blocks a bar long: a whole note in 4/4
+// becomes a dotted half in 3/4 and back, in every section of the song. Other lengths
+// stay as they are. Drums in 3/4 keep a simple waltz (playOddMeterDrumStep), since the
+// rhythm patterns are 4/4.
+var meterSelect = document.getElementById("meterSelect");
+function blockIsOneBar(b, beats) {
+  return Math.abs(getDurationBeats(b) - beats) < 1e-9 && !b.durationMult;
+}
+// A new block one bar long in the time signature in force (a dotted half in 3/4).
+function barBlock() {
+  var b = defaultBlock();
+  if (currentMeter().beats === 3) { b.durationIndex = 3; b.durationModifier = 1; }
+  return b;
+}
+function setBeatsPerBar(beats) {
+  var old = state.beatsPerBar || 4;
+  if (beats === old) return;
+  (state.sections || []).forEach(function (section) {
+    (section.blocks || []).forEach(function (b) {
+      if (!blockIsOneBar(b, old)) return;
+      if (beats === 3) { b.durationIndex = 3; b.durationModifier = 1; } // dotted half
+      else { b.durationIndex = 2; b.durationModifier = 0; } // whole
+    });
+  });
+  state.beatsPerBar = beats;
+}
+meterSelect.addEventListener("change", function () {
+  setBeatsPerBar(parseInt(meterSelect.value, 10) === 3 ? 3 : 4);
+  save();
+  refresh();
 });
 // Tempo choices go in steps of 5. A saved tempo between steps (from before this
 // dropdown, say 112) gets its own option so the menu never shows blank.
@@ -5144,7 +5189,7 @@ function scheduleOnePass(startIndex, baseTime) {
   if (state.drumBeat && state.drumBeat !== "off") {
     if (clickTrackRepeatId !== null) { Tone.Transport.clear(clickTrackRepeatId); clickTrackRepeatId = null; }
     // A melody lesson in 3/4 or with a pickup keeps the drums on its own bar lines.
-    var meter = isMelodyLesson() ? laneMeter() : {beats: 4, pickup: 0};
+    var meter = currentMeter(); // the song's time signature, or a lesson's
     var cycle = meter.beats * 4;
     var stepCounter = ((Math.round((cumulativeBeatsBeforeIndex(startIndex) - meter.pickup) * 4) % cycle) + cycle) % cycle;
     clickTrackRepeatId = Tone.Transport.scheduleRepeat(function (time) {
@@ -5397,7 +5442,7 @@ function openSlotForEditing(id) {
 
 function createNewSection() {
   var id = state.nextSectionId++;
-  var section = {id: id, name: "Section " + id, blocks: [defaultBlock()]};
+  var section = {id: id, name: "Section " + id, blocks: [barBlock()]};
   state.sections.push(section);
   save();
   openSectionForEditing(id);
@@ -5900,7 +5945,7 @@ function insertSectionAfter(id) {
   var idx = state.sections.findIndex(function (s) { return s.id === id; });
   if (idx < 0) return;
   var id2 = state.nextSectionId++;
-  var section = {id: id2, name: "Section " + id2, blocks: [defaultBlock()]};
+  var section = {id: id2, name: "Section " + id2, blocks: [barBlock()]};
   state.sections.splice(idx + 1, 0, section);
   save();
   openSectionForEditing(id2);
