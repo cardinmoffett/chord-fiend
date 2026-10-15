@@ -6876,14 +6876,16 @@ function melodyOverBlock(blockIndex, blocks) {
   return sandbox.melody.filter(function (n) { return n[0] / 4 >= startBeat && n[0] / 4 < endBeat; }).map(function (n) {
     var pc = ((melodyMidi(n[2]) % 12) + 12) % 12;
     var role = noteRole(chord, blocks[blockIndex], pc);
-    return {semis: n[2], pc: pc, inChord: role.role === "chord", role: role.role, tension: role.name, startsChord: n[0] / 4 === startBeat};
+    return {semis: n[2], pc: pc, inChord: role.role === "chord", role: role.role, tension: role.name, startsChord: n[0] / 4 === startBeat,
+      start: n[0], len: n[1]}; // in 16ths, so a goal can weigh long notes over passing ones
   });
 }
 // The available tensions of each chord family, in half steps above the root (the usual
 // jazz rules): major 9 #11 13; dominant b9 9 #9 #11 b13 13; minor 9 11 13; half-diminished
-// 9 11 b13; diminished a whole step above any chord tone; sus4 dominant b9 9 b13 13.
-var TENSION_NAMES = {1: "\u266D9", 2: "9", 3: "\u266F9", 5: "11", 6: "\u266F11", 8: "\u266D13", 9: "13", 11: "maj7"};
-var TENSIONS_BY_FAMILY = {major: [2, 6, 9], dominant: [1, 2, 3, 6, 8, 9], minor: [2, 5, 9], halfDim: [2, 5, 8], dim: [2, 5, 8, 11], sus: [1, 2, 8, 9], aug: [2, 6]};
+// 9 11 b13; diminished a whole step above any chord tone; sus4 dominant b9 9 b13 13. A
+// dominant without its 7th (a plain V triad) also takes the b7: it's the chord's own 7th.
+var TENSION_NAMES = {1: "\u266D9", 2: "9", 3: "\u266F9", 5: "11", 6: "\u266F11", 8: "\u266D13", 9: "13", 10: "\u266D7", 11: "maj7"};
+var TENSIONS_BY_FAMILY = {major: [2, 6, 9], dominant: [1, 2, 3, 6, 8, 9, 10], minor: [2, 5, 9], halfDim: [2, 5, 8], dim: [2, 5, 8, 11], sus: [1, 2, 8, 9, 10], aug: [2, 6]};
 // The family a chord belongs to, for its tensions. A major triad with no 7th counts as a
 // dominant when it does a dominant's job (V, or an applied dominant).
 function chordFamily(chord, block) {

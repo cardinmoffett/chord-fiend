@@ -57,6 +57,7 @@ same('the lesson\'s meter reaches the lane (3 beats, 1-beat pickup)', api.laneMe
 var fit = api.lessonMelodyFit(api.sandbox().blocks);
 same('pickup G over C is a chord tone; bar 1 over C: A (13) is a tension', [fit[0].notes.map(function (n) { return n.role; }), fit[1].notes.map(function (n) { return n.role; })], [['chord'], ['tension', 'chord', 'chord']]);
 check('so the melody fits everywhere', api.melodyFitsEverywhere(api.sandbox().blocks));
+same('each note carries its start and length in 16ths', [fit[1].notes[0].start, fit[1].notes[0].len], [4, 4]);
 var withF = api.sandbox().blocks.slice(); withF[1] = blk({degreeIndex: 3, durationIndex: 3, durationModifier: 1});
 check('over IV (F A C) instead, the G and its neighbours still fit (G is the 9 of F)', api.melodyFitsEverywhere(withF));
 var withV7 = api.sandbox().blocks.slice(); withV7[1] = blk({degreeIndex: 4, extensionIndex: 2, durationIndex: 3, durationModifier: 1});
