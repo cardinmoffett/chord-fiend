@@ -21,7 +21,7 @@ Run these from `mobile/`.
   - `SYNTH_BUILDERS`: the chord instruments; Electric Piano is the default and the fallback for a saved instrument that no longer exists (Soft, Airy, Glass and Piano-like were removed 2026-10-13 as unusable)
   - `BASS_BUILDERS`: the bass sounds (Round, the original; Sub; Electric (fingered); Upright; Synth), each with a level `trim`; chosen in Settings → Bass sound (`state.bassInstrument`), swapped live by `rebuildBassSynth`
   - `scheduleBassForBlock`, `playDrumStepAt`: drums and bass playback
-  - `attackChord`, `strumGap`: Settings → Strum (`state.strum`: off / fast / medium / slow, `STRUM_GAPS` 18 / 40 / 80 ms between notes) plays each chord as one strum, lowest note first, in playback and in the tap and hold previews. It's off, and its menu greyed, while the arpeggiator is on
+  - `attackChord`, `strumGap`: Settings → Strum (`state.strum` "on"/"off") plays each chord as one strum, lowest note first, in playback and in the tap and hold previews. Width (`state.strumWidth`, 10–300 ms, default 80) is the time from the first note to the last, shared evenly between the notes. Strum is off, and greyed, while the arpeggiator is on; Width is greyed while strum is off
   - `buildEffectsChain`: chords go saturation → `masterHighpass` (160 Hz) → chorus → delay → reverb → `masterLimiter`; bass and drums skip the effects but go into the same limiter, so nothing reaches the output unlimited: the bass through `bassHighpass` (90 Hz, gentle; its low notes overdrove headphones) and 6 dB quieter (`BASS_HEADROOM` in `bassLevel()`), drums through `lowEndHighpass` (45 Hz, steep)
   - `renderTimeline`, `snapEditorPanel`: the block timeline and the bottom editor drawer
   - `openSettings`, `applyStateToAudio`: settings and audio setup
