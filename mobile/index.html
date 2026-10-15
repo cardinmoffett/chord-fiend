@@ -2888,6 +2888,15 @@ function playDrumStepAt(stepIndex, time) {
   if (patternHasHitAtStep(laneByVoice(pattern, "hihat"), step, 4)) hihatSynth.triggerAttackRelease("16n", time);
 }
 
+// The rhythm patterns are 4/4. In any other meter (a waltz lesson) the drums keep time
+// simply: kick on beat 1, hi-hat on the other beats.
+function playOddMeterDrumStep(step, time) {
+  ensureDrumSynths();
+  if (step % 4 !== 0) return;
+  if (step === 0) kickSynth.triggerAttackRelease("C1", 0.2, time);
+  else hihatSynth.triggerAttackRelease("16n", time);
+}
+
 // Shared by sequence playback, tap-hold preview, and setting-change preview,
 // so all three treat bass identically. Returns null if bass is Off for this
 // block. Applies tone selection (incl. Random), octave offset, and wraps
@@ -3277,6 +3286,11 @@ function isMelodyLesson() {
   return !!(editingRef && editingRef.kind === "scratch" && sandbox && sandbox.melody && sandbox.melody.length);
 }
 function melodyMidi(semis) { return 60 + state.masterRootIndex + semis; }
+// A melody lesson's meter: beats per bar (3 for a waltz) and the pickup before bar 1, in
+// beats. Bar 1 starts after the pickup; the pickup's beats get no bar number.
+function laneMeter() {
+  return {beats: (sandbox && sandbox.beatsPerBar) || BEATS_PER_MEASURE, pickup: (sandbox && sandbox.pickupBeats) || 0};
+}
 
 // Which degree (0-6) of the home key a pitch is, or -1 if it's outside the key.
 function homeDegreeOf(semis) {
@@ -3353,9 +3367,11 @@ function renderLane(keepScrollLeft) {
 
   var ruler = document.createElement("div");
   ruler.className = "beat-ruler";
+  var meter = laneMeter();
   for (var beat = 0; beat < Math.ceil(totalBeats); beat++) {
     var tick = document.createElement("div");
-    if (beat % BEATS_PER_MEASURE === 0) { tick.className = "bar"; tick.textContent = beat / BEATS_PER_MEASURE + 1; }
+    var inBar = beat - meter.pickup;
+    if (inBar >= 0 && inBar % meter.beats === 0) { tick.className = "bar"; tick.textContent = inBar / meter.beats + 1; }
     else tick.className = "beat";
     tick.style.left = (beat * BEAT_PX) + "px";
     ruler.appendChild(tick);
@@ -3380,8 +3396,9 @@ function renderLane(keepScrollLeft) {
   var grid = document.createElement("div");
   grid.className = "roll-grid";
   grid.style.backgroundImage =
-    "repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px " + (BEAT_PX * BEATS_PER_MEASURE) + "px)," +
+    "repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px " + (BEAT_PX * meter.beats) + "px)," +
     "repeating-linear-gradient(90deg, var(--line-soft) 0 1px, transparent 1px " + BEAT_PX + "px)";
+  grid.style.backgroundPosition = (meter.pickup * BEAT_PX) + "px 0, 0 0"; // bar lines start after the pickup
   roll.appendChild(grid);
   // Faint lines where each chord starts, so you can see which chord is under a note.
   segs.forEach(function (seg) {
@@ -5126,10 +5143,14 @@ function scheduleOnePass(startIndex, baseTime) {
   // 4 steps per quarter-note beat, checking the pattern at each step.
   if (state.drumBeat && state.drumBeat !== "off") {
     if (clickTrackRepeatId !== null) { Tone.Transport.clear(clickTrackRepeatId); clickTrackRepeatId = null; }
-    var stepCounter = Math.round(cumulativeBeatsBeforeIndex(startIndex) * 4) % 16;
+    // A melody lesson in 3/4 or with a pickup keeps the drums on its own bar lines.
+    var meter = isMelodyLesson() ? laneMeter() : {beats: 4, pickup: 0};
+    var cycle = meter.beats * 4;
+    var stepCounter = ((Math.round((cumulativeBeatsBeforeIndex(startIndex) - meter.pickup) * 4) % cycle) + cycle) % cycle;
     clickTrackRepeatId = Tone.Transport.scheduleRepeat(function (time) {
-      playDrumStepAt(stepCounter, time);
-      stepCounter = (stepCounter + 1) % 16;
+      if (meter.beats === 4) playDrumStepAt(stepCounter, time);
+      else playOddMeterDrumStep(stepCounter, time);
+      stepCounter = (stepCounter + 1) % cycle;
     }, secondsPerBeat / 4, baseTime);
   }
 
@@ -6665,7 +6686,8 @@ var lessonPackErrors = {};
 function lessonPackHelpers() {
   return {learnBlock: learnBlock, lessonChord: lessonChord, lessonPcs: lessonPcs, lessonHas: lessonHas, lessonLowest: lessonLowest,
     buildChord: buildChord, blockLabel: blockLabel, getChordSymbol: getChordSymbol, defaultBlock: defaultBlock,
-    MEDIANTS: MEDIANTS, APPLIED_FUNCTIONS: APPLIED_FUNCTIONS, SHAPE_ORDER: SHAPE_ORDER, EXTENSION_NAMES: EXTENSION_NAMES};
+    MEDIANTS: MEDIANTS, APPLIED_FUNCTIONS: APPLIED_FUNCTIONS, SHAPE_ORDER: SHAPE_ORDER, EXTENSION_NAMES: EXTENSION_NAMES,
+    lessonFunction: lessonFunction, lessonMelodyFit: lessonMelodyFit, melodyFitsEverywhere: melodyFitsEverywhere, noteRole: noteRole};
 }
 function readLessonPack(text) {
   var helpers = lessonPackHelpers(), names = Object.keys(helpers);
@@ -6818,7 +6840,8 @@ function openLesson(lessonId) {
   // already; switchToSongView hands it back on the way out).
   state.masterRootIndex = lesson.masterRoot || 0; // a pack lesson can be in the book's key (Bb for "Silent Night")
   state.masterModeIndex = lesson.masterMode !== undefined ? lesson.masterMode : 0;
-  sandbox = {title: lesson.title, blocks: lesson.blocks(), lessonId: lessonId, melody: lesson.melody || null};
+  sandbox = {title: lesson.title, blocks: lesson.blocks(), lessonId: lessonId, melody: lesson.melody || null,
+    beatsPerBar: lesson.beatsPerBar || 4, pickupBeats: lesson.pickupBeats || 0};
   editingRef = {kind: "scratch"};
   editingBlocks = sandbox.blocks;
   blockSelection = null;
@@ -6840,15 +6863,71 @@ function openLesson(lessonId) {
 // For a melody lesson: the melody notes heard over a block, and which of them are in
 // that block's chord. A note that's in the chord sounds settled; one that isn't is a
 // passing or color note. That's the whole test of a reharmonization.
-function melodyOverBlock(blockIndex) {
+// Each note also gets a ROLE against its chord: "chord" (a chord tone), "tension" (an
+// available tension: a color the chord can carry, such as the 9th on a major 7th) or
+// "avoid" (a note that clashes, such as the natural 11 over a major chord). See noteRole.
+function melodyOverBlock(blockIndex, blocks) {
+  blocks = blocks || sandbox.blocks;
   var startBeat = 0;
-  for (var i = 0; i < blockIndex; i++) startBeat += getDurationBeats(sandbox.blocks[i]);
-  var endBeat = startBeat + getDurationBeats(sandbox.blocks[blockIndex]);
-  var chord = buildChord(sandbox.blocks[blockIndex], state.masterRootIndex, state.masterModeIndex);
+  for (var i = 0; i < blockIndex; i++) startBeat += getDurationBeats(blocks[i]);
+  var endBeat = startBeat + getDurationBeats(blocks[blockIndex]);
+  var chord = buildChord(blocks[blockIndex], state.masterRootIndex, state.masterModeIndex);
   var pcs = chord.pitches.map(function (p) { return ((p % 12) + 12) % 12; });
   return sandbox.melody.filter(function (n) { return n[0] / 4 >= startBeat && n[0] / 4 < endBeat; }).map(function (n) {
     var pc = ((melodyMidi(n[2]) % 12) + 12) % 12;
-    return {semis: n[2], pc: pc, inChord: pcs.indexOf(pc) >= 0, startsChord: n[0] / 4 === startBeat};
+    var role = noteRole(chord, blocks[blockIndex], pc);
+    return {semis: n[2], pc: pc, inChord: role.role === "chord", role: role.role, tension: role.name, startsChord: n[0] / 4 === startBeat};
+  });
+}
+// The available tensions of each chord family, in half steps above the root (the usual
+// jazz rules): major 9 #11 13; dominant b9 9 #9 #11 b13 13; minor 9 11 13; half-diminished
+// 9 11 b13; diminished a whole step above any chord tone; sus4 dominant b9 9 b13 13.
+var TENSION_NAMES = {1: "\u266D9", 2: "9", 3: "\u266F9", 5: "11", 6: "\u266F11", 8: "\u266D13", 9: "13", 11: "maj7"};
+var TENSIONS_BY_FAMILY = {major: [2, 6, 9], dominant: [1, 2, 3, 6, 8, 9], minor: [2, 5, 9], halfDim: [2, 5, 8], dim: [2, 5, 8, 11], sus: [1, 2, 8, 9], aug: [2, 6]};
+// The family a chord belongs to, for its tensions. A major triad with no 7th counts as a
+// dominant when it does a dominant's job (V, or an applied dominant).
+function chordFamily(chord, block) {
+  var o = chord.offsets, third = o[1], fifth = o[2], seventh = chord.is6 || chord.addNine ? null : o[3];
+  if (chord.sus === "sus4" || chord.sus === "sus2") return "sus";
+  if (third === 3 && fifth === 6) return seventh === 9 ? "dim" : seventh === 10 ? "halfDim" : "dim";
+  if (third === 3) return "minor";
+  if (fifth === 8 && seventh !== 10) return "aug";
+  if (seventh === 10) return "dominant";
+  if (seventh === 11) return "major";
+  return block && lessonFunction(block) === "D" ? "dominant" : "major";
+}
+function noteRole(chord, block, pc) {
+  var rootPc = ((chord.chordRootPitch % 12) + 12) % 12;
+  var pcs = chord.pitches.map(function (p) { return ((p % 12) + 12) % 12; });
+  if (pcs.indexOf(pc) >= 0) return {role: "chord"};
+  var interval = ((pc - rootPc) % 12 + 12) % 12;
+  if (TENSIONS_BY_FAMILY[chordFamily(chord, block)].indexOf(interval) >= 0) return {role: "tension", name: TENSION_NAMES[interval]};
+  return {role: "avoid"};
+}
+// A block's job in the key: "T" (tonic: I, iii, vi), "S" (subdominant: ii, IV) or "D"
+// (dominant: V, vii, and every applied chord that leads into its target), or null for a
+// chord with no function in the key (free, mediant). The same seven slots in minor.
+function lessonFunction(block) {
+  if (block.chordSource === "applied") {
+    var fn = block.appliedFunction;
+    if (fn === "mediant") return null;
+    return fn === "supertonic" ? "S" : "D";
+  }
+  if (block.chordSource === "free") return null;
+  return ["T", "S", "T", "S", "D", "T", "D"][block.degreeIndex];
+}
+// For lesson goals: the melody's fit over every block, [{notes: [...], landing: [...]}].
+function lessonMelodyFit(blocks) {
+  return blocks.map(function (b, i) {
+    var notes = melodyOverBlock(i, blocks);
+    return {notes: notes, landing: notes.filter(function (n) { return n.startsChord; })};
+  });
+}
+// True when no melody note clashes with its chord (every note is a chord tone or an
+// available tension) and every chord holds the note it lands with.
+function melodyFitsEverywhere(blocks) {
+  return lessonMelodyFit(blocks).every(function (f) {
+    return f.notes.every(function (n) { return n.role !== "avoid"; }) && f.landing.every(function (n) { return n.role !== "avoid"; });
   });
 }
 function describeMelodyFit(blockIndex) {
@@ -6859,12 +6938,14 @@ function describeMelodyFit(blockIndex) {
   var name = function (pc) { return pitchToNoteName(pc, flats).replace("#", "♯"); };
   var uniq = function (arr) { return arr.filter(function (x, i) { return arr.indexOf(x) === i; }); };
   var inside = uniq(notes.filter(function (n) { return n.inChord; }).map(function (n) { return name(n.pc); }));
-  var outside = uniq(notes.filter(function (n) { return !n.inChord; }).map(function (n) { return name(n.pc); }));
+  var colors = uniq(notes.filter(function (n) { return n.role === "tension"; }).map(function (n) { return name(n.pc) + " (" + n.tension + ")"; }));
+  var clashes = uniq(notes.filter(function (n) { return n.role === "avoid"; }).map(function (n) { return name(n.pc); }));
   var head = "Block " + (blockIndex + 1) + ", " + label.degree + (label.name !== label.degree ? " (" + label.name + ")" : "") + ": ";
   if (!notes.length) return head + "the melody rests here.";
   var parts = [];
   if (inside.length) parts.push(inside.join(", ") + (inside.length > 1 ? " are" : " is") + " in the chord");
-  if (outside.length) parts.push(outside.join(", ") + (outside.length > 1 ? " pass" : " passes") + " outside it");
+  if (colors.length) parts.push(colors.join(", ") + (colors.length > 1 ? " are tensions" : " is a tension"));
+  if (clashes.length) parts.push(clashes.join(", ") + (clashes.length > 1 ? " clash" : " clashes") + " with it");
   return head + parts.join("; ") + ".";
 }
 // Done once some chord differs from the lesson's start and the melody note that starts
@@ -6902,7 +6983,10 @@ function updateLessonReveal() {
   if (goalLesson && goalLesson.goal) {
     var hit = goalLesson.goal(sandbox.blocks);
     el.classList.toggle("found", !!hit);
-    el.textContent = hit ? hit.name + " \u2014 " + hit.reveal : "Follow the steps above and listen \u2014 this updates as you go.";
+    // A melody lesson with a goal reports the selected chord's fit until the goal is met.
+    el.textContent = hit ? hit.name + " \u2014 " + hit.reveal
+      : sandbox.melody ? describeMelodyFit(state.currentIndex)
+      : "Follow the steps above and listen \u2014 this updates as you go.";
     if (hit) markLessonComplete(sandbox.lessonId);
     return;
   }
