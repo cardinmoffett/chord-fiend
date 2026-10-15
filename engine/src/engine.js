@@ -626,8 +626,42 @@ var BUILTIN_BEAT_PATTERNS = {
       {voice:"bass1", hits:[{beat:0,dur:0.75}, {beat:0.75,dur:0.75}, {beat:1.5,dur:1}, {beat:2.5,dur:0.75}, {beat:3.25,dur:0.75}]},
       {voice:"bass3", hits:[]}, {voice:"bass5", hits:[]}, {voice:"bass7", hits:[]}
     ]
+  },
+  // 3/4 beats (loopBeats 3). A pattern's loopBeats is its meter: the app lists only the
+  // ones that fit the song's time signature (beatPatternsForMeter).
+  waltz: {
+    label: "Waltz", loopBeats: 3, lanes: [
+      {voice:"kick", hits:[{beat:0,dur:0.25}]},
+      {voice:"snare", hits:[{beat:1,dur:0.25}, {beat:2,dur:0.25}]},
+      {voice:"hihat", hits:[{beat:0,dur:0.25}, {beat:1,dur:0.25}, {beat:2,dur:0.25}]},
+      {voice:"bass1", hits:[{beat:0,dur:1}]},
+      {voice:"bass3", hits:[]}, {voice:"bass5", hits:[{beat:1,dur:1}, {beat:2,dur:1}]}, {voice:"bass7", hits:[]}
+    ]
+  },
+  jazzwaltz: {
+    label: "Jazz Waltz", loopBeats: 3, lanes: [
+      {voice:"kick", hits:[{beat:0,dur:0.25}]},
+      {voice:"snare", hits:[{beat:1.75,dur:0.25}]},
+      {voice:"hihat", hits:[{beat:0,dur:0.25}, {beat:1,dur:0.25}, {beat:1.75,dur:0.25}, {beat:2,dur:0.25}]},
+      {voice:"bass1", hits:[{beat:0,dur:2}]},
+      {voice:"bass3", hits:[]}, {voice:"bass5", hits:[{beat:2,dur:1}]}, {voice:"bass7", hits:[]}
+    ]
+  },
+  ballad34: {
+    label: "Slow 3/4", loopBeats: 3, lanes: [
+      {voice:"kick", hits:[{beat:0,dur:0.25}]},
+      {voice:"snare", hits:[{beat:2,dur:0.25}]},
+      {voice:"hihat", hits:[{beat:0,dur:0.25}, {beat:0.5,dur:0.25}, {beat:1,dur:0.25}, {beat:1.5,dur:0.25}, {beat:2,dur:0.25}, {beat:2.5,dur:0.25}]},
+      {voice:"bass1", hits:[{beat:0,dur:3}]},
+      {voice:"bass3", hits:[]}, {voice:"bass5", hits:[]}, {voice:"bass7", hits:[]}
+    ]
   }
 };
+// The built-in beats in a meter (3 or 4 beats a bar), and the one a song starts on.
+function beatPatternsForMeter(beats) {
+  return Object.keys(BUILTIN_BEAT_PATTERNS).filter(function (k) { return BUILTIN_BEAT_PATTERNS[k].loopBeats === beats; });
+}
+function defaultBeatForMeter(beats) { return beats === 3 ? "waltz" : "rock"; }
 
 // customBeatPatterns (state.customBeatPatterns in the app) holds only the
 // beats a project has actually edited (a full pattern override each) --
@@ -887,7 +921,7 @@ export {
   ROMAN_BASE, APPLIED_FUNCTIONS, APPLIED_FUNCTION_LABELS, MEDIANTS,
   DOMINANT_INTERVALS, MAJOR7_INTERVALS, MINOR7_INTERVALS, DIMINISHED7_INTERVALS,
   CHORD_DEGREE_REFERENCE, STACKED_THIRD_ROLES,
-  BASS_VOICES, BUILTIN_BEAT_PATTERNS,
+  BASS_VOICES, BUILTIN_BEAT_PATTERNS, beatPatternsForMeter, defaultBeatForMeter,
   // chords
   keyPrefersFlats, buildExtendedScale, applyDrops, degreeLabels, buildChord,
   pitchToNoteName, pitchToFullNoteName, noteChoiceLabel, getChordSymbol,

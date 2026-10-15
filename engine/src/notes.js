@@ -84,7 +84,7 @@ export function sectionToNotes(blocks, settings) {
     var steps = Math.round(cursor * 4);
     for (var step = 0; step < steps; step++) {
       DRUM_VOICES.forEach(function (voice) {
-        if (!patternHasHitAtStep(laneByVoice(pattern, voice), step % 16, 4)) return;
+        if (!patternHasHitAtStep(laneByVoice(pattern, voice), step % Math.round(pattern.loopBeats * 4), 4)) return; // one loop: 16 steps in 4/4, 12 in 3/4
         var start = step / 4;
         drums.push({pitch: drumMap[voice], start: start, duration: Math.min(s.drumHitBeats, cursor - start), velocity: s.drumVelocity});
       });

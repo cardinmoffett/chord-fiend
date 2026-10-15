@@ -106,6 +106,8 @@ export const CHORD_DEGREE_REFERENCE: Record<number, number>;
 export const STACKED_THIRD_ROLES: number[];
 export const BASS_VOICES: string[];
 export const BUILTIN_BEAT_PATTERNS: Record<string, BeatPattern>;
+export function beatPatternsForMeter(beats: number): string[];
+export function defaultBeatForMeter(beats: number): string;
 
 export function keyPrefersFlats(rootIndex: number, modeIndex: number): boolean;
 export function buildExtendedScale(modeIntervals: number[], length: number): number[];

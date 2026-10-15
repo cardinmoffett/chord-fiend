@@ -69,11 +69,13 @@ names.forEach(function (n) {
   // The app's three applied functions still come first in order; four were added after
   // (checked in test_applied_more).
   if (n === 'APPLIED_FUNCTIONS') { same(n + ' (the app\'s three, in order)', orig[n], engine[n].filter(function (f) { return orig[n].indexOf(f) >= 0; })); return; }
+  // The app's five beats are unchanged; the 3/4 beats were added after (test_meter_beats).
+  if (n === 'BUILTIN_BEAT_PATTERNS') { Object.keys(orig[n]).forEach(function (k) { same(n + '.' + k, orig[n][k], engine[n][k]); }); return; }
   if (n === 'APPLIED_FUNCTION_LABELS') { Object.keys(orig[n]).forEach(function (k) { same(n + '.' + k, orig[n][k], engine[n][k]); }); return; }
   if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
   same(n, orig[n], engine[n]);
 });
-same('the only additions are blockLabel, shapes, Alter, Position, Length, step numerals and the newer applied chords', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'MAJOR7_INTERVALS', 'MEDIANTS', 'MINOR7_INTERVALS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'appliedColorDegrees', 'blockLabel', 'lengthChange', 'lengthParts', 'mediantNumeral', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
+same('the only additions are blockLabel, shapes, Alter, Position, Length, step numerals and the newer applied chords and 3/4 beats', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'MAJOR7_INTERVALS', 'MEDIANTS', 'MINOR7_INTERVALS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'appliedColorDegrees', 'beatPatternsForMeter', 'blockLabel', 'defaultBeatForMeter', 'lengthChange', 'lengthParts', 'mediantNumeral', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
@@ -150,7 +152,7 @@ for (var di = 0; di < engine.DURATION_NAMES.length; di++) for (var dm = 0; dm < 
   var db = blk({durationIndex: di, durationModifier: dm});
   same('getDurationBeats ' + di + ' ' + dm, orig.getDurationBeats(db), engine.getDurationBeats(db));
 }
-Object.keys(engine.BUILTIN_BEAT_PATTERNS).concat(['nope']).forEach(function (k) { same('beatPatternLabel ' + k, orig.beatPatternLabel(k), engine.beatPatternLabel(k)); });
+Object.keys(orig.BUILTIN_BEAT_PATTERNS).concat(['nope']).forEach(function (k) { same('beatPatternLabel ' + k, orig.beatPatternLabel(k), engine.beatPatternLabel(k)); });
 report('degreeLabels, keyPrefersFlats, note names, durations and beat labels');
 
 console.log('\n=== bass: every beat, bass lowest note, bass tone setting and chord tone ===');
@@ -158,7 +160,7 @@ var custom = {rock: {label: 'Edited Rock', loopBeats: 4, lanes: [
   {voice: 'kick', hits: [{beat: 0, dur: 0.25}]},
   {voice: 'bass1', hits: [{beat: 1, dur: 1}]}, {voice: 'bass5', hits: [{beat: 0.5, dur: 0.5}]},
   {voice: 'bass3', hits: []}, {voice: 'bass7', hits: []}]}};
-var beats = Object.keys(engine.BUILTIN_BEAT_PATTERNS).concat(['off', 'unknown']);
+var beats = Object.keys(orig.BUILTIN_BEAT_PATTERNS).concat(['off', 'unknown']); // (the 3/4 beats are the engine's own, in test_meter_beats)
 [{}, custom].forEach(function (customPatterns) {
   state.customBeatPatterns = customPatterns;
   beats.forEach(function (beat) {
@@ -179,7 +181,7 @@ var beats = Object.keys(engine.BUILTIN_BEAT_PATTERNS).concat(['off', 'unknown'])
   });
 });
 engine.BASS_VOICES.concat(['kick', 'snare', 'hihat']).forEach(function (v) { same('bassSlotForVoice ' + v, orig.bassSlotForVoice(v), engine.bassSlotForVoice(v)); });
-Object.keys(engine.BUILTIN_BEAT_PATTERNS).forEach(function (k) {
+Object.keys(orig.BUILTIN_BEAT_PATTERNS).forEach(function (k) {
   var pat = engine.BUILTIN_BEAT_PATTERNS[k];
   ['kick', 'snare', 'hihat', 'bass1', 'bass5', 'none'].forEach(function (v) {
     same('laneByVoice ' + k + ' ' + v, orig.laneByVoice(pat, v), engine.laneByVoice(pat, v));

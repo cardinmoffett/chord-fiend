@@ -1824,8 +1824,42 @@ var BUILTIN_BEAT_PATTERNS = {
       {voice:"bass1", hits:[{beat:0,dur:0.75}, {beat:0.75,dur:0.75}, {beat:1.5,dur:1}, {beat:2.5,dur:0.75}, {beat:3.25,dur:0.75}]},
       {voice:"bass3", hits:[]}, {voice:"bass5", hits:[]}, {voice:"bass7", hits:[]}
     ]
+  },
+  // 3/4 beats (loopBeats 3). A pattern's loopBeats is its meter: the app lists only the
+  // ones that fit the song's time signature (beatPatternsForMeter).
+  waltz: {
+    label: "Waltz", loopBeats: 3, lanes: [
+      {voice:"kick", hits:[{beat:0,dur:0.25}]},
+      {voice:"snare", hits:[{beat:1,dur:0.25}, {beat:2,dur:0.25}]},
+      {voice:"hihat", hits:[{beat:0,dur:0.25}, {beat:1,dur:0.25}, {beat:2,dur:0.25}]},
+      {voice:"bass1", hits:[{beat:0,dur:1}]},
+      {voice:"bass3", hits:[]}, {voice:"bass5", hits:[{beat:1,dur:1}, {beat:2,dur:1}]}, {voice:"bass7", hits:[]}
+    ]
+  },
+  jazzwaltz: {
+    label: "Jazz Waltz", loopBeats: 3, lanes: [
+      {voice:"kick", hits:[{beat:0,dur:0.25}]},
+      {voice:"snare", hits:[{beat:1.75,dur:0.25}]},
+      {voice:"hihat", hits:[{beat:0,dur:0.25}, {beat:1,dur:0.25}, {beat:1.75,dur:0.25}, {beat:2,dur:0.25}]},
+      {voice:"bass1", hits:[{beat:0,dur:2}]},
+      {voice:"bass3", hits:[]}, {voice:"bass5", hits:[{beat:2,dur:1}]}, {voice:"bass7", hits:[]}
+    ]
+  },
+  ballad34: {
+    label: "Slow 3/4", loopBeats: 3, lanes: [
+      {voice:"kick", hits:[{beat:0,dur:0.25}]},
+      {voice:"snare", hits:[{beat:2,dur:0.25}]},
+      {voice:"hihat", hits:[{beat:0,dur:0.25}, {beat:0.5,dur:0.25}, {beat:1,dur:0.25}, {beat:1.5,dur:0.25}, {beat:2,dur:0.25}, {beat:2.5,dur:0.25}]},
+      {voice:"bass1", hits:[{beat:0,dur:3}]},
+      {voice:"bass3", hits:[]}, {voice:"bass5", hits:[]}, {voice:"bass7", hits:[]}
+    ]
   }
 };
+// The built-in beats in a meter (3 or 4 beats a bar), and the one a song starts on.
+function beatPatternsForMeter(beats) {
+  return Object.keys(BUILTIN_BEAT_PATTERNS).filter(function (k) { return BUILTIN_BEAT_PATTERNS[k].loopBeats === beats; });
+}
+function defaultBeatForMeter(beats) { return beats === 3 ? "waltz" : "rock"; }
 
 // customBeatPatterns (state.customBeatPatterns in the app) holds only the
 // beats a project has actually edited (a full pattern override each) --
@@ -2885,22 +2919,23 @@ function ensureDrumSynths() {
 // immediately -- the cost is trivial at one lookup per sixteenth note.
 function playDrumStepAt(stepIndex, time) {
   ensureDrumSynths();
-  var pattern = activeBeatPattern(state.drumBeat, state.customBeatPatterns);
+  var pattern = currentBeatPattern();
   if (!pattern) return;
-  var step = stepIndex % 16;
+  var step = stepIndex % Math.round(pattern.loopBeats * 4); // one loop: 16 steps in 4/4, 12 in 3/4
   if (patternHasHitAtStep(laneByVoice(pattern, "kick"), step, 4)) kickSynth.triggerAttackRelease("C1", 0.2, time);
   if (patternHasHitAtStep(laneByVoice(pattern, "snare"), step, 4)) snareSynth.triggerAttackRelease(0.15, time);
   if (patternHasHitAtStep(laneByVoice(pattern, "hihat"), step, 4)) hihatSynth.triggerAttackRelease("16n", time);
 }
 
-// The rhythm patterns are 4/4. In any other meter (a waltz lesson) the drums keep time
-// simply: kick on beat 1, hi-hat on the other beats.
-function playOddMeterDrumStep(step, time) {
-  ensureDrumSynths();
-  if (step % 4 !== 0) return;
-  if (step === 0) kickSynth.triggerAttackRelease("C1", 0.2, time);
-  else hihatSynth.triggerAttackRelease("16n", time);
+// The beat that plays: the song's chosen one when it fits the meter in force, else that
+// meter's default (a 3/4 lesson in a 4/4 song plays the Waltz). With drums Off, the bass
+// still follows this pattern's bass lanes.
+function currentBeatKey() {
+  var beats = currentMeter().beats, key = state.drumBeat;
+  if (key && key !== "off" && activeBeatPattern(key, state.customBeatPatterns).loopBeats === beats) return key;
+  return defaultBeatForMeter(beats);
 }
+function currentBeatPattern() { return activeBeatPattern(currentBeatKey(), state.customBeatPatterns); }
 
 // Shared by sequence playback, tap-hold preview, and setting-change preview,
 // so all three treat bass identically. Returns null if bass is Off for this
@@ -2942,7 +2977,7 @@ function buildArpSequence(chord) {
 // hit that would run past the block's end is shortened rather than
 // bleeding into the next chord.
 function scheduleBassForBlock(chord, atOffsetSeconds, durBeats, baseTime, secondsPerBeat) {
-  var pattern = activeBeatPattern(state.drumBeat, state.customBeatPatterns);
+  var pattern = currentBeatPattern();
   var shift = bassOctaveShift(chord.chordRootPitch, state.bassWrapLow);
   pattern.lanes.forEach(function (lane) {
     var slot = bassSlotForVoice(lane.voice);
@@ -3264,7 +3299,7 @@ function buildSegElement(seg, widthCss, boundary) {
     el.classList.add("sounding");
     held = true;
     holdPitches(chord.pitches);
-    var bassPitch = computeBassPitchForBlock(block, chord, activeBeatPattern(state.drumBeat, state.customBeatPatterns), state.bassWrapLow);
+    var bassPitch = computeBassPitchForBlock(block, chord, currentBeatPattern(), state.bassWrapLow);
     if (bassPitch !== null) {
       ensureAudioReady(function () { bassSynth.triggerAttack(midiToFreq(bassPitch)); });
     }
@@ -4363,7 +4398,7 @@ function previewCurrentBlock() {
   if (!block) return;
   var chord = buildChord(block, state.masterRootIndex, state.masterModeIndex);
   playPitchesTimed(chord.pitches, 0.5); // short, fixed-length preview -- not held
-  var bassPitch = computeBassPitchForBlock(block, chord, activeBeatPattern(state.drumBeat, state.customBeatPatterns), state.bassWrapLow);
+  var bassPitch = computeBassPitchForBlock(block, chord, currentBeatPattern(), state.bassWrapLow);
   if (bassPitch !== null) {
     ensureAudioReady(function () { bassSynth.triggerAttackRelease(midiToFreq(bassPitch), 0.5 * 0.92); });
   }
@@ -4439,14 +4474,18 @@ Object.keys(PALETTES).forEach(function (key) {
 });
 
 var drumBeatSelect = document.getElementById("drumBeatSelect");
-(function () {
+// The beat menu lists only the beats in the song's time signature.
+function fillDrumBeatSelect() {
+  drumBeatSelect.innerHTML = "";
   var offOpt = document.createElement("option"); offOpt.value = "off"; offOpt.textContent = "Off";
   drumBeatSelect.appendChild(offOpt);
-  Object.keys(BUILTIN_BEAT_PATTERNS).forEach(function (key) {
+  beatPatternsForMeter(state.beatsPerBar || 4).forEach(function (key) {
     var o = document.createElement("option"); o.value = key; o.textContent = BUILTIN_BEAT_PATTERNS[key].label;
     drumBeatSelect.appendChild(o);
   });
-})();
+  drumBeatSelect.value = state.drumBeat;
+}
+fillDrumBeatSelect();
 drumBeatSelect.addEventListener("change", function () {
   state.drumBeat = drumBeatSelect.value;
   save();
@@ -4585,7 +4624,7 @@ function renderRhythmEditor() {
     row.appendChild(label);
 
     var lane = laneByVoice(pattern, rowDef.voice);
-    for (var step = 0; step < 16; step++) {
+    for (var step = 0; step < Math.round(pattern.loopBeats * 4); step++) { // 16 cells in 4/4, 12 in 3/4
       var cell = document.createElement("div");
       cell.className = "rhythm-cell" + (step % 4 === 0 ? " beat-start" : "");
       cell.dataset.voice = rowDef.voice;
@@ -4687,17 +4726,18 @@ function startRhythmPreview() {
     var tempo = state.tempo || 100;
     var secondsPerBeat = 60 / tempo;
     var stepCounter = 0;
+    var loopBeats = currentBeatPattern().loopBeats; // 4, or 3 for a 3/4 beat
     Tone.Transport.bpm.value = tempo;
     rhythmPreview.repeatId = Tone.Transport.scheduleRepeat(function (time) {
       playDrumStepAt(stepCounter, time);
-      stepCounter = (stepCounter + 1) % 16;
+      stepCounter = (stepCounter + 1) % Math.round(loopBeats * 4);
     }, secondsPerBeat / 4);
     var chord = rhythmPreviewChord();
     function scheduleLoop(atTime) {
-      scheduleBassForBlock(chord, atTime, 4, 0, secondsPerBeat);
+      scheduleBassForBlock(chord, atTime, loopBeats, 0, secondsPerBeat);
       rhythmPreview.bassEventId = Tone.Transport.scheduleOnce(function () {
-        if (rhythmPreview.active) scheduleLoop(atTime + 4 * secondsPerBeat);
-      }, atTime + 4 * secondsPerBeat - 0.1);
+        if (rhythmPreview.active) scheduleLoop(atTime + loopBeats * secondsPerBeat);
+      }, atTime + loopBeats * secondsPerBeat - 0.1);
     }
     scheduleLoop(Tone.Transport.seconds);
     Tone.Transport.start();
@@ -4809,7 +4849,7 @@ bassSoundSelect.addEventListener("change", function () {
   // Hear the new sound once: the current block's bass note.
   if (!playback.active && toneReady && editingBlocks && editingBlocks[state.currentIndex]) {
     var b = editingBlocks[state.currentIndex], c = buildChord(b, state.masterRootIndex, state.masterModeIndex);
-    var bp = computeBassPitchForBlock(b, c, activeBeatPattern(state.drumBeat, state.customBeatPatterns), state.bassWrapLow);
+    var bp = computeBassPitchForBlock(b, c, currentBeatPattern(), state.bassWrapLow);
     if (bp !== null) bassSynth.triggerAttackRelease(midiToFreq(bp), 0.6);
   }
 });
@@ -4903,7 +4943,7 @@ function openSettings() {
   melodyVolumeLabel.textContent = "Melody volume (" + dbText(state.melodyVolume || 0) + ")";
   syncInstrumentVolumeControl();
   paletteSelect.value = state.palette;
-  drumBeatSelect.value = state.drumBeat;
+  fillDrumBeatSelect();
   syncRhythmEditBtn();
   syncArpEnabledToggle();
   arpPatternSelect.value = state.arpPattern;
@@ -4954,8 +4994,8 @@ settingsBackdrop.addEventListener("click", function (e) {
 });
 // TIME SIGNATURE. Changing it keeps bar-long blocks a bar long: a whole note in 4/4
 // becomes a dotted half in 3/4 and back, in every section of the song. Other lengths
-// stay as they are. Drums in 3/4 keep a simple waltz (playOddMeterDrumStep), since the
-// rhythm patterns are 4/4.
+// stay as they are. The beat menu then lists that meter's beats (a pattern's loopBeats
+// is its meter), and a beat from the other meter gives way to the new meter's default.
 var meterSelect = document.getElementById("meterSelect");
 function blockIsOneBar(b, beats) {
   return Math.abs(getDurationBeats(b) - beats) < 1e-9 && !b.durationMult;
@@ -4977,9 +5017,13 @@ function setBeatsPerBar(beats) {
     });
   });
   state.beatsPerBar = beats;
+  // A beat from the other meter gives way to this meter's default.
+  if (state.drumBeat !== "off" && activeBeatPattern(state.drumBeat, state.customBeatPatterns).loopBeats !== beats) state.drumBeat = defaultBeatForMeter(beats);
 }
 meterSelect.addEventListener("change", function () {
   setBeatsPerBar(parseInt(meterSelect.value, 10) === 3 ? 3 : 4);
+  fillDrumBeatSelect();
+  syncRhythmEditBtn();
   save();
   refresh();
 });
@@ -5193,8 +5237,7 @@ function scheduleOnePass(startIndex, baseTime) {
     var cycle = meter.beats * 4;
     var stepCounter = ((Math.round((cumulativeBeatsBeforeIndex(startIndex) - meter.pickup) * 4) % cycle) + cycle) % cycle;
     clickTrackRepeatId = Tone.Transport.scheduleRepeat(function (time) {
-      if (meter.beats === 4) playDrumStepAt(stepCounter, time);
-      else playOddMeterDrumStep(stepCounter, time);
+      playDrumStepAt(stepCounter, time);
       stepCounter = (stepCounter + 1) % cycle;
     }, secondsPerBeat / 4, baseTime);
   }
