@@ -807,9 +807,10 @@
   .toast {
     position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 64px); transform: translateX(-50%);
     background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 16px;
-    font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200;
+    font-size: 13px; font-weight: 700; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200;
   }
   .toast.show { opacity: 1; }
+  .app-version { text-align: center; font-size: 11px; color: var(--text-faint); margin-top: 8px; }
   .learn-pack-title {
     font-weight: 800;
     font-size: 15px;
@@ -1197,6 +1198,7 @@
     </div>
 
     <button class="pill" id="settingsCloseBtn" style="margin-top: 4px;">Done</button>
+    <div class="app-version" id="appVersionText"></div>
   </div>
 </div>
 
@@ -2471,7 +2473,8 @@ function debugReport() {
   try { voices = synth && synth._activeVoices ? synth._activeVoices.length : "?"; } catch (e) {}
   return [
     "Chord Fiend debug log, " + new Date().toISOString(),
-    "Device: " + (navigator.userAgent || "?"),
+    "Version: " + APP_VERSION,
+    "Device: " + (typeof navigator !== "undefined" && navigator.userAgent || "?"),
     "Audio: " + audioState() + ", ready " + !!toneReady + ", page " + (document.visibilityState || "?"),
     "Sound: " + state.instrument + ", bass " + state.bassInstrument + (state.bassEnabled ? "" : " (off)") +
       ", strum " + state.strum + " " + strumWidthMs() + "ms, arp " + (state.arpEnabled ? "on" : "off") +
@@ -5075,6 +5078,20 @@ function closeSettings() { settingsBackdrop.classList.remove("open"); }
 
 settingsBtn.addEventListener("click", openSettings);
 document.getElementById("songSettingsBtn").addEventListener("click", openSettings);
+
+// VERSION. The publish workflow (.github/workflows/pages.yml) replaces the placeholder with
+// the commit and the time it was published, e.g. "237f810 · Oct 17 18:57 UTC". It shows at
+// the bottom of Settings and in the debug report; when it changes since the last time the
+// app was opened, a toast says the app updated.
+var APP_VERSION = "__APP_VERSION__".indexOf("__") === 0 ? "local copy" : "__APP_VERSION__";
+document.getElementById("appVersionText").textContent = "Version " + APP_VERSION;
+(function () {
+  try {
+    var last = localStorage.getItem("chordFiendVersion");
+    if (last && last !== APP_VERSION) setTimeout(function () { showToast("Updated to " + APP_VERSION); }, 600);
+    localStorage.setItem("chordFiendVersion", APP_VERSION);
+  } catch (e) {}
+})();
 
 // The bug button copies the debug report (debugReport) to the clipboard, ready to paste
 // into a message, and says so briefly.
