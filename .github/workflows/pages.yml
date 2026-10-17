@@ -34,10 +34,11 @@ jobs:
         run: |
           mkdir site
           cp -r mobile/index.html mobile/manifest.webmanifest mobile/sw.js mobile/icons mobile/vendor site/
-      - name: Stamp the version (commit and publish time, shown in Settings)
+      - name: Stamp the version (run number in the editor; commit and publish time in Settings)
         run: |
           STAMP="${GITHUB_SHA::7} · $(date -u '+%b %-d %H:%M') UTC"
           sed -i "s/__APP_VERSION__/$STAMP/g" site/index.html
+          sed -i "s/__APP_BUILD__/${{ github.run_number }}/g" site/index.html
           grep -q "$STAMP" site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

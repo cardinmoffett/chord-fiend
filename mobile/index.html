@@ -811,13 +811,8 @@
   }
   .toast.show { opacity: 1; }
   .app-version { text-align: center; font-size: 11px; color: var(--text-faint); margin-top: 8px; }
-  /* The running version, faint in the middle of the work area, behind blocks and dialogs. */
-  .version-watermark {
-    position: fixed; left: 0; right: 0; top: 38vh;
-    text-align: center; font-size: 22px; font-weight: 800; letter-spacing: 0.04em;
-    color: var(--text); opacity: 0.16; pointer-events: none; user-select: none; z-index: 0;
-    white-space: nowrap;
-  }
+  /* The build number, small and faint between Copy/Paste and the block buttons. */
+  .build-number { flex: 1; text-align: center; font-size: 11px; font-weight: 700; color: var(--text-faint); opacity: 0.7; user-select: none; }
   .learn-pack-title {
     font-weight: 800;
     font-size: 15px;
@@ -1037,7 +1032,6 @@
 </div>
 
 <div id="toast" class="toast" role="status"></div>
-<div id="versionWatermark" class="version-watermark" aria-hidden="true"></div>
 
 <div class="settings-backdrop" id="rhythmEditorBackdrop">
   <div class="settings-panel rhythm-editor-panel">
@@ -2458,6 +2452,10 @@ function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
 // On-screen log (in addition to console.log) so this is readable on mobile
 // without needing dev tools connected to a desktop.
+// The running version, stamped in by the publish workflow (see VERSION below).
+var APP_VERSION = "__APP_VERSION__".indexOf("__") === 0 ? "local copy" : "__APP_VERSION__";
+// The publish run's number (1, 2, 3...), shown on its own in the editor's bottom row.
+var APP_BUILD = "__APP_BUILD__".indexOf("__") === 0 ? "local" : "__APP_BUILD__";
 var debugLogLines = [];
 function logAudio() {
   var msg = Array.prototype.slice.call(arguments).map(function (a) {
@@ -2481,7 +2479,7 @@ function debugReport() {
   try { voices = synth && synth._activeVoices ? synth._activeVoices.length : "?"; } catch (e) {}
   return [
     "Chord Fiend debug log, " + new Date().toISOString(),
-    "Version: " + APP_VERSION,
+    "Version: " + APP_BUILD + " (" + APP_VERSION + ")",
     "Device: " + (typeof navigator !== "undefined" && navigator.userAgent || "?"),
     "Audio: " + audioState() + ", ready " + !!toneReady + ", page " + (document.visibilityState || "?"),
     "Sound: " + state.instrument + ", bass " + state.bassInstrument + (state.bassEnabled ? "" : " (off)") +
@@ -4450,7 +4448,10 @@ function renderEditor() {
   clip.appendChild(copyBtn); clip.appendChild(pasteBtn);
   var bar = document.createElement("div");
   bar.className = "editor-bottom";
-  bar.appendChild(clip); bar.appendChild(actions);
+  var build = document.createElement("span");
+  build.className = "build-number";
+  build.textContent = APP_BUILD;
+  bar.appendChild(clip); bar.appendChild(build); bar.appendChild(actions);
   // 5. Alter (expanded drawer only), then the block buttons, always at the bottom right.
   appendAlterGroup(grid, block);
   grid.appendChild(bar);
@@ -5087,17 +5088,17 @@ function closeSettings() { settingsBackdrop.classList.remove("open"); }
 settingsBtn.addEventListener("click", openSettings);
 document.getElementById("songSettingsBtn").addEventListener("click", openSettings);
 
-// VERSION. The publish workflow (.github/workflows/pages.yml) replaces the placeholder with
-// the commit and the time it was published, e.g. "237f810 · Oct 17 18:57 UTC". It shows at
-// the bottom of Settings and in the debug report; when it changes since the last time the
-// app was opened, a toast says the app updated.
-var APP_VERSION = "__APP_VERSION__".indexOf("__") === 0 ? "local copy" : "__APP_VERSION__";
-document.getElementById("appVersionText").textContent = "Version " + APP_VERSION;
-document.getElementById("versionWatermark").textContent = "v " + APP_VERSION.replace(/ UTC$/, "");
+// VERSION. The publish workflow (.github/workflows/pages.yml) replaces the placeholders with
+// the publish run's number (APP_BUILD, e.g. "53") and the commit and time it was published
+// (APP_VERSION, e.g. "237f810 · Oct 17 18:57 UTC"). The number shows in the editor's bottom
+// row; both show at the bottom of Settings and in the debug report; when the version
+// changes since the app was last opened, a toast says it updated.
+document.getElementById("appVersionText").textContent = "Version " + APP_BUILD + " (" + APP_VERSION + ")";
+
 (function () {
   try {
     var last = localStorage.getItem("chordFiendVersion");
-    if (last && last !== APP_VERSION) setTimeout(function () { showToast("Updated to " + APP_VERSION); }, 600);
+    if (last && last !== APP_VERSION) setTimeout(function () { showToast("Updated to version " + APP_BUILD); }, 600);
     localStorage.setItem("chordFiendVersion", APP_VERSION);
   } catch (e) {}
 })();
