@@ -811,6 +811,13 @@
   }
   .toast.show { opacity: 1; }
   .app-version { text-align: center; font-size: 11px; color: var(--text-faint); margin-top: 8px; }
+  /* The running version, faint in the middle of the work area, behind blocks and dialogs. */
+  .version-watermark {
+    position: fixed; left: 0; right: 0; top: 38vh;
+    text-align: center; font-size: 22px; font-weight: 800; letter-spacing: 0.04em;
+    color: var(--text); opacity: 0.16; pointer-events: none; user-select: none; z-index: 0;
+    white-space: nowrap;
+  }
   .learn-pack-title {
     font-weight: 800;
     font-size: 15px;
@@ -1030,6 +1037,7 @@
 </div>
 
 <div id="toast" class="toast" role="status"></div>
+<div id="versionWatermark" class="version-watermark" aria-hidden="true"></div>
 
 <div class="settings-backdrop" id="rhythmEditorBackdrop">
   <div class="settings-panel rhythm-editor-panel">
@@ -5085,6 +5093,7 @@ document.getElementById("songSettingsBtn").addEventListener("click", openSetting
 // app was opened, a toast says the app updated.
 var APP_VERSION = "__APP_VERSION__".indexOf("__") === 0 ? "local copy" : "__APP_VERSION__";
 document.getElementById("appVersionText").textContent = "Version " + APP_VERSION;
+document.getElementById("versionWatermark").textContent = "v " + APP_VERSION.replace(/ UTC$/, "");
 (function () {
   try {
     var last = localStorage.getItem("chordFiendVersion");
