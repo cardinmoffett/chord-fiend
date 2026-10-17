@@ -804,6 +804,12 @@
   .learn-lesson-row[disabled] {
     opacity: 0.4;
   }
+  .toast {
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 64px); transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 16px;
+    font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200;
+  }
+  .toast.show { opacity: 1; }
   .learn-pack-title {
     font-weight: 800;
     font-size: 15px;
@@ -1002,7 +1008,7 @@
     <div class="transport">
       <button class="pill" id="addBtn">+ Add</button>
       <button class="pill play" id="playBtn">▶ Play</button>
-      <button class="icon" id="debugLogBtn" title="Show audio log">🐞</button>
+      <button class="icon" id="debugLogBtn" title="Copy the debug log">🐞</button>
     </div>
   </header>
 
@@ -1022,17 +1028,7 @@
   <input type="file" id="lessonPackInput" accept=".js,.txt,.json,text/plain,application/javascript" hidden>
 </div>
 
-<div class="settings-backdrop" id="debugLogBackdrop">
-  <div class="settings-panel">
-    <h2>Audio log</h2>
-    <textarea id="debugLogText" readonly rows="14" style="width:100%; background:var(--bg-elevated); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:8px; font-family:monospace; font-size:11px; resize:vertical;"></textarea>
-    <div style="display:flex; gap:8px;">
-      <button class="pill" id="debugLogCopyBtn" style="flex:1;">Copy</button>
-      <button class="pill" id="debugLogClearBtn" style="flex:1;">Clear</button>
-      <button class="pill" id="debugLogCloseBtn" style="flex:1;">Done</button>
-    </div>
-  </div>
-</div>
+<div id="toast" class="toast" role="status"></div>
 
 <div class="settings-backdrop" id="rhythmEditorBackdrop">
   <div class="settings-panel rhythm-editor-panel">
@@ -2458,10 +2454,32 @@ function logAudio() {
     return typeof a === "object" ? JSON.stringify(a) : String(a);
   }).join(" ");
   console.log("[AUDIO]", msg);
-  debugLogLines.push(msg);
-  if (debugLogLines.length > 200) debugLogLines.shift();
-  var el = document.getElementById("debugLogText");
-  if (el) { el.value = debugLogLines.join("\n"); el.scrollTop = el.scrollHeight; }
+  var t = (typeof performance !== "undefined" && performance.now) ? (performance.now() / 1000).toFixed(3) : "";
+  debugLogLines.push(t + " " + msg);
+  if (debugLogLines.length > 300) debugLogLines.shift();
+}
+function audioState() {
+  try {
+    var raw = Tone.context.rawContext || Tone.context;
+    return (Tone.context.state || "?") + " " + (raw.sampleRate || "?") + "Hz";
+  } catch (e) { return "unavailable"; }
+}
+// What the bug button copies: the device, the audio's state, the sound settings, what's
+// held right now, and the recent log (oldest first, seconds since the page opened).
+function debugReport() {
+  var voices = "?";
+  try { voices = synth && synth._activeVoices ? synth._activeVoices.length : "?"; } catch (e) {}
+  return [
+    "Chord Fiend debug log, " + new Date().toISOString(),
+    "Device: " + (navigator.userAgent || "?"),
+    "Audio: " + audioState() + ", ready " + !!toneReady + ", page " + (document.visibilityState || "?"),
+    "Sound: " + state.instrument + ", bass " + state.bassInstrument + (state.bassEnabled ? "" : " (off)") +
+      ", strum " + state.strum + " " + strumWidthMs() + "ms, arp " + (state.arpEnabled ? "on" : "off") +
+      ", tempo " + state.tempo + ", " + (state.beatsPerBar || 4) + "/4, drums " + state.drumBeat,
+    "Now: playing " + !!playback.active + ", held " + JSON.stringify(heldFreqs) + ", held bass " + heldBassFreq +
+      ", hold #" + holdToken + ", synth voices sounding " + voices,
+    "--- log ---"
+  ].concat(debugLogLines).join("\n");
 }
 
 // Triangle (not sine) as the clean base -- a pure sine has NO overtones at
@@ -2850,12 +2868,19 @@ function rebuildBassSynth() {
 function ensureAudioReady(callback) {
   if (toneReady) {
     // iPhone can suspend or interrupt the audio context (backgrounding, a call); wake it first.
-    if (Tone.context.state !== "running") Tone.context.resume().then(callback, callback);
-    else callback();
+    if (Tone.context.state !== "running") {
+      logAudio("audio was " + Tone.context.state + ", waking it");
+      Tone.context.resume().then(callback, callback);
+    } else callback();
     return;
   }
   Tone.start().then(function () {
     toneReady = true;
+    logAudio("audio started", audioState());
+    try {
+      (Tone.context.rawContext || Tone.context).addEventListener("statechange", function () { logAudio("audio is now", audioState()); });
+      document.addEventListener("visibilitychange", function () { logAudio("page " + document.visibilityState); });
+    } catch (e) {}
     ensureEffectsChain();
     rebuildSynth();
     ensureBassSynth();
@@ -2881,27 +2906,50 @@ function attackChord(freqs, time) {
   strummed(freqs).forEach(function (f, i) { synth.triggerAttack(f, time + i * gap); });
 }
 
-function holdPitches(pitches) {
-  if (heldFreqs.length) {
-    // A previous hold's release was somehow missed -- a defensive backstop
-    // alongside the pointer-capture fix above, not a substitute for it.
-    // Don't let a stuck note silently keep ringing underneath a new one.
-    logAudio("holdPitches: releasing a STUCK previous hold first", heldFreqs);
-    if (synth) synth.triggerRelease(heldFreqs);
-    heldFreqs = [];
+// HOLD TO PLAY. Two races used to leave notes hanging after a quick tap:
+// - the audio may need waking first (ensureAudioReady is asynchronous on iPhone), so the
+//   finger could lift before the notes started; they then started and never stopped.
+//   Each hold has a number (holdToken); a release bumps it, so a hold whose audio
+//   wasn't ready yet is simply skipped;
+// - with Strum on, the later notes of the strum start after a quick release. The release
+//   is now scheduled for after the strum's last note (heldAttackEnd).
+// The bass note is held and released the same way. While the song isn't playing, a new
+// hold and every release also silence anything still ringing (releaseAll), as a backstop.
+var holdToken = 0, heldAttackEnd = 0, heldBassFreq = null;
+function audioNow() { return Tone.now ? Tone.now() : 0; }
+function holdPitches(pitches, bassMidi) {
+  if (heldFreqs.length || heldBassFreq !== null) {
+    logAudio("holdPitches: releasing a STUCK previous hold first", heldFreqs, heldBassFreq);
+    releaseHeld();
   }
+  var token = ++holdToken;
+  logAudio("hold #" + token + " down", pitches, "bass", bassMidi, "audio", audioState());
   ensureAudioReady(function () {
+    if (token !== holdToken) { logAudio("hold #" + token + " skipped: released before the audio was ready"); return; }
+    if (!playback.active && synth && synth.releaseAll) synth.releaseAll();
+    var now = audioNow();
     heldFreqs = pitches.map(midiToFreq);
-    logAudio("holdPitches triggerAttack", heldFreqs);
-    if (strumGap(heldFreqs.length)) attackChord(heldFreqs, Tone.now());
-    else synth.triggerAttack(heldFreqs);
+    var gap = strumGap(heldFreqs.length);
+    attackChord(heldFreqs, now);
+    heldAttackEnd = now + gap * Math.max(0, heldFreqs.length - 1);
+    if (bassMidi !== null && bassMidi !== undefined && bassSynth) {
+      heldBassFreq = midiToFreq(bassMidi);
+      bassSynth.triggerAttack(heldBassFreq, now);
+    }
+    logAudio("hold #" + token + " attack at", now.toFixed(3), "strum ends", heldAttackEnd.toFixed(3));
   });
 }
 function releaseHeld() {
+  var token = holdToken;
+  holdToken++; // a hold still waiting for the audio won't start now
+  var at = Math.max(audioNow(), heldAttackEnd + 0.01);
   if (synth && heldFreqs.length) {
-    logAudio("releaseHeld triggerRelease", heldFreqs);
-    synth.triggerRelease(heldFreqs); heldFreqs = [];
+    logAudio("hold #" + token + " release at", at.toFixed(3), heldFreqs);
+    synth.triggerRelease(heldFreqs, at);
   }
+  if (heldBassFreq !== null && bassSynth) { try { bassSynth.triggerRelease(at); } catch (e) {} }
+  if (!playback.active && synth && synth.releaseAll) synth.releaseAll(at + 0.05);
+  heldFreqs = []; heldBassFreq = null; heldAttackEnd = 0;
 }
 function playPitchesTimed(pitches, durationSeconds) {
   ensureAudioReady(function () {
@@ -3333,16 +3381,12 @@ function buildSegElement(seg, widthCss, boundary) {
     scrollSelectedBlockIntoView(); // keeps it visible above the drawer, whatever height the drawer is currently at
     el.classList.add("sounding");
     held = true;
-    holdPitches(chord.pitches);
-    var bassPitch = computeBassPitchForBlock(block, chord, currentBeatPattern(), state.bassWrapLow);
-    if (bassPitch !== null) {
-      ensureAudioReady(function () { bassSynth.triggerAttack(midiToFreq(bassPitch)); });
-    }
+    holdPitches(chord.pitches, computeBassPitchForBlock(block, chord, currentBeatPattern(), state.bassWrapLow));
   });
-  var release = function () {
+  var release = function (e) {
     if (held) {
+      logAudio("tap up (" + (e && e.type) + ")");
       releaseHeld();
-      try { bassSynth.triggerRelease(); } catch (e) {}
       held = false;
       document.querySelectorAll(".seg.sounding").forEach(function (s) { s.classList.remove("sounding"); });
     }
@@ -5032,29 +5076,30 @@ function closeSettings() { settingsBackdrop.classList.remove("open"); }
 settingsBtn.addEventListener("click", openSettings);
 document.getElementById("songSettingsBtn").addEventListener("click", openSettings);
 
+// The bug button copies the debug report (debugReport) to the clipboard, ready to paste
+// into a message, and says so briefly.
 var debugLogBtn = document.getElementById("debugLogBtn");
-var debugLogBackdrop = document.getElementById("debugLogBackdrop");
-var debugLogText = document.getElementById("debugLogText");
-document.getElementById("debugLogCloseBtn").addEventListener("click", function () {
-  debugLogBackdrop.classList.remove("open");
-});
-document.getElementById("debugLogClearBtn").addEventListener("click", function () {
-  debugLogLines = [];
-  debugLogText.value = "";
-});
-document.getElementById("debugLogCopyBtn").addEventListener("click", function () {
-  debugLogText.select();
-  debugLogText.setSelectionRange(0, 999999);
-  try {
-    document.execCommand("copy");
-  } catch (e) {}
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(debugLogText.value).catch(function () {});
+function showToast(text) {
+  var t = document.getElementById("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(function () { t.classList.remove("show"); }, 1800);
+}
+function copyText(text, done) {
+  function fallback() {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    done(ok);
   }
-});
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+  else fallback();
+}
 debugLogBtn.addEventListener("click", function () {
-  debugLogText.value = debugLogLines.join("\n");
-  debugLogBackdrop.classList.add("open");
+  copyText(debugReport(), function (ok) { showToast(ok ? "Debug log copied" : "Couldn't copy the debug log"); });
 });
 settingsCloseBtn.addEventListener("click", closeSettings);
 settingsBackdrop.addEventListener("click", function (e) {
