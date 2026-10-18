@@ -11,7 +11,7 @@ var ls = {getItem:function(k){return k in store ? store[k] : null;}, setItem:fun
 var ToneMock = { start:function(){return {then:function(){return{catch:function(){}};}};}, Transport:{scheduleOnce:function(fn,t){fn(t);return 1;},scheduleRepeat:function(){return 1;},clear:function(){},bpm:{value:100},seconds:0,start:function(){},stop:function(){},cancel:function(){}}, Draw:{schedule:function(fn){fn();}} };
 var api = new Function('document','localStorage','Tone', code +
   '\nvar pendingAudio = []; ensureAudioReady = function (cb) { pendingAudio.push(cb); };' +
-  '\nreturn {holdPitches:holdPitches, releaseHeld:releaseHeld, debugReport:debugReport, flush:function(){ var p = pendingAudio; pendingAudio = []; p.forEach(function(cb){cb();}); },' +
+  '\nreturn {sequenceStop:sequenceStop, attackChord:attackChord, holdPitches:holdPitches, releaseHeld:releaseHeld, debugReport:debugReport, flush:function(){ var p = pendingAudio; pendingAudio = []; p.forEach(function(cb){cb();}); },' +
   ' setSynths:function(s, b){ synth = s; bassSynth = b; }, state:function(){return state;}};')(doc, ls, Object.assign({}, ToneMock, {now: function () { return 10; }}));
 var ok = true;
 function check(l, c) { console.log((c ? 'PASS' : 'FAIL') + '  ' + l); if (!c) ok = false; }
@@ -50,7 +50,21 @@ check('notes and bass start when held', log.some(function (x) { return x[0] === 
 api.releaseHeld();
 check('...and stop when released', log.some(function (x) { return x[0] === 'release'; }) && log.some(function (x) { return x[0] === 'bassRelease'; }));
 
+console.log('=== Stop while playback has a chord queued ===');
+// Playback queues a chord a little ahead: here a strummed chord due at 10.20-10.28 while the
+// audio clock reads 10.00. Stop must release again after it, or it starts after the Stop.
+fresh(); st.strum = 'on'; st.strumWidth = 40;
+api.attackChord([262, 330, 392], 10.2);
+api.sequenceStop();
+var releasesNow = log.filter(function (x) { return x[0] === 'releaseAll'; }).length;
+check('Stop releases at once', releasesNow === 1);
+
 console.log('=== the bug button\'s report ===');
 var report = api.debugReport();
-check('it names the audio state, the sound settings and what is held, then the log', /Audio: /.test(report) && /strum off/.test(report) && /held \[\]/.test(report) && /--- log ---/.test(report) && /hold #\d+ release at/.test(report));
-console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');
+check('it names the audio state, the sound settings and what is held, then the log', /Audio: /.test(report) && /strum (on|off)/.test(report) && /last note due/.test(report) && /held \[\]/.test(report) && /--- log ---/.test(report) && /hold #\d+ release at/.test(report));
+// ...and sweeps again once the queued notes have started (here after about 0.3 s).
+setTimeout(function () {
+  var all = log.filter(function (x) { return x[0] === 'releaseAll'; }).length;
+  check('...and sweeps again after the queued notes have started (a release before they start does nothing)', all >= 2);
+  console.log(ok ? '\nALL PASSED' : '\nSOME FAILED');
+}, 500);
