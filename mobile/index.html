@@ -2486,7 +2486,7 @@ function debugReport() {
       ", strum " + state.strum + " " + strumWidthMs() + "ms, arp " + (state.arpEnabled ? "on" : "off") +
       ", tempo " + state.tempo + ", " + (state.beatsPerBar || 4) + "/4, drums " + state.drumBeat,
     "Now: playing " + !!playback.active + ", held " + JSON.stringify(heldFreqs) + ", held bass " + heldBassFreq +
-      ", hold #" + holdToken + ", synth voices sounding " + voices,
+      ", hold #" + holdToken + ", synth voices sounding " + voices + ", audio time " + audioNow().toFixed(3) + ", last note due " + lastAttackAt.toFixed(3),
     "--- log ---"
   ].concat(debugLogLines).join("\n");
 }
@@ -2909,8 +2909,22 @@ function strumWidthMs() { return Math.max(STRUM_WIDTH_MIN, Math.min(STRUM_WIDTH_
 // Seconds between one note and the next, for a chord of n notes (0: all at once).
 function strumGap(n) { return strumOn() && n > 1 ? strumWidthMs() / 1000 : 0; }
 function strummed(freqs) { return freqs.slice().sort(function (a, b) { return a - b; }); }
+// lastAttackAt: the latest moment any chord note is due to start. Playback queues each chord
+// a little ahead (BLOCK_PREPARE_AHEAD plus the audio's own lookahead), and a strum spreads it
+// further, so at Stop some notes may not have started yet; sequenceStop releases again after
+// them, or they'd start after the Stop and ring on.
+var lastAttackAt = 0;
+function sweepAfterQueuedNotes() {
+  var wait = Math.max(0, (lastAttackAt - audioNow()) * 1000) + 40;
+  setTimeout(function () {
+    if (playback.active || heldFreqs.length || !synth) return; // something new is playing: leave it
+    logAudio("sweep: releasing notes that were still queued at the last stop");
+    synth.releaseAll(audioNow());
+  }, wait);
+}
 function attackChord(freqs, time) {
   var gap = strumGap(freqs.length);
+  lastAttackAt = Math.max(lastAttackAt, time + gap * Math.max(0, freqs.length - 1));
   if (!gap) { synth.triggerAttack(freqs, time); return; }
   strummed(freqs).forEach(function (f, i) { synth.triggerAttack(f, time + i * gap); });
 }
@@ -2957,8 +2971,8 @@ function releaseHeld() {
     synth.triggerRelease(heldFreqs, at);
   }
   if (heldBassFreq !== null && bassSynth) { try { bassSynth.triggerRelease(at); } catch (e) {} }
-  if (!playback.active && synth && synth.releaseAll) synth.releaseAll(at + 0.05);
   heldFreqs = []; heldBassFreq = null; heldAttackEnd = 0;
+  if (!playback.active && synth && synth.releaseAll) sweepAfterQueuedNotes(); // backstop, once every queued note has started
 }
 function playPitchesTimed(pitches, durationSeconds) {
   ensureAudioReady(function () {
@@ -2970,7 +2984,15 @@ function playPitchesTimed(pitches, durationSeconds) {
   });
 }
 function sequenceStop() {
-  if (synth) { logAudio("sequenceStop releaseAll"); synth.releaseAll(); }
+  if (synth) {
+    var now = audioNow();
+    logAudio("sequenceStop releaseAll", lastAttackAt > now ? "(notes still queued until " + lastAttackAt.toFixed(3) + ", sweeping again after)" : "");
+    synth.releaseAll(now);
+    // A release can't stop a note that hasn't started yet, even one scheduled for later
+    // (checked against Tone 14.8: releaseAll(future) leaves it ringing). So once the queued
+    // notes have started, sweep again, unless playback has started again meanwhile.
+    if (lastAttackAt > now) sweepAfterQueuedNotes();
+  }
   if (bassSynth) { logAudio("sequenceStop bass triggerRelease"); try { bassSynth.triggerRelease(); } catch(e) {} }
 }
 
