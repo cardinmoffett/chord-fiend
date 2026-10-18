@@ -2474,9 +2474,19 @@ function audioState() {
 }
 // What the bug button copies: the device, the audio's state, the sound settings, what's
 // held right now, and the recent log (oldest first, seconds since the page opened).
+// A level meter on the output, so the report says whether anything is actually audible.
+var outputMeter = null;
+function outputLevelDb() {
+  try {
+    if (!outputMeter) { outputMeter = new Tone.Meter({smoothing: 0}); Tone.Destination.connect(outputMeter); }
+    var v = outputMeter.getValue();
+    return typeof v === "number" && isFinite(v) ? v.toFixed(1) + " dB" : "silent";
+  } catch (e) { return "?"; }
+}
 function debugReport() {
-  var voices = "?";
+  var voices = "?", audible = "?";
   try { voices = synth && synth._activeVoices ? synth._activeVoices.length : "?"; } catch (e) {}
+  try { audible = audibleVoices().length; } catch (e) {}
   return [
     "Chord Fiend debug log, " + new Date().toISOString(),
     "Version: " + APP_BUILD + " (" + APP_VERSION + ")",
@@ -2486,7 +2496,8 @@ function debugReport() {
       ", strum " + state.strum + " " + strumWidthMs() + "ms, arp " + (state.arpEnabled ? "on" : "off") +
       ", tempo " + state.tempo + ", " + (state.beatsPerBar || 4) + "/4, drums " + state.drumBeat,
     "Now: playing " + !!playback.active + ", held " + JSON.stringify(heldFreqs) + ", held bass " + heldBassFreq +
-      ", hold #" + holdToken + ", synth voices sounding " + voices + ", audio time " + audioNow().toFixed(3) + ", last note due " + lastAttackAt.toFixed(3),
+      ", hold #" + holdToken + ", voices tracked " + voices + ", voices audible " + audible + ", output " + outputLevelDb() +
+      ", audio time " + audioNow().toFixed(3) + ", last note due " + lastAttackAt.toFixed(3),
     "--- log ---"
   ].concat(debugLogLines).join("\n");
 }
@@ -2885,6 +2896,7 @@ function ensureAudioReady(callback) {
   }
   Tone.start().then(function () {
     toneReady = true;
+    outputLevelDb(); // starts the output meter, so a report later has readings
     logAudio("audio started", audioState());
     try {
       (Tone.context.rawContext || Tone.context).addEventListener("statechange", function () { logAudio("audio is now", audioState()); });
@@ -2918,9 +2930,31 @@ function sweepAfterQueuedNotes() {
   var wait = Math.max(0, (lastAttackAt - audioNow()) * 1000) + 40;
   setTimeout(function () {
     if (playback.active || heldFreqs.length || !synth) return; // something new is playing: leave it
-    logAudio("sweep: releasing notes that were still queued at the last stop");
-    synth.releaseAll(audioNow());
+    var loose = releaseLooseVoices();
+    logAudio("sweep: released everything" + (loose ? ", including " + loose + " voice(s) the synth had lost track of" : ""));
   }, wait);
+}
+// Tone's PolySynth only releases the voices it's tracking, and its bookkeeping can lose one
+// (when a voice reports silence twice it drops the wrong entry), leaving a note nothing can
+// stop. So this goes to every voice directly and releases any that is still sounding.
+function audibleVoices() {
+  var now = audioNow(), list = [];
+  ((synth && synth._voices) || []).forEach(function (v) {
+    try { if (v.getLevelAtTime && v.getLevelAtTime(now) > 0.001) list.push(v); } catch (e) {}
+  });
+  return list;
+}
+function releaseLooseVoices() {
+  if (!synth) return 0;
+  var now = audioNow();
+  var tracked = (synth._activeVoices || []).map(function (a) { return a.voice; });
+  synth.releaseAll(now);
+  var loose = 0;
+  audibleVoices().forEach(function (v) {
+    if (tracked.indexOf(v) < 0) loose++;
+    try { v.triggerRelease(now); } catch (e) {}
+  });
+  return loose;
 }
 function attackChord(freqs, time) {
   var gap = strumGap(freqs.length);
@@ -2991,7 +3025,7 @@ function sequenceStop() {
     // A release can't stop a note that hasn't started yet, even one scheduled for later
     // (checked against Tone 14.8: releaseAll(future) leaves it ringing). So once the queued
     // notes have started, sweep again, unless playback has started again meanwhile.
-    if (lastAttackAt > now) sweepAfterQueuedNotes();
+    sweepAfterQueuedNotes(); // also catches any voice the synth lost track of
   }
   if (bassSynth) { logAudio("sequenceStop bass triggerRelease"); try { bassSynth.triggerRelease(); } catch(e) {} }
 }
