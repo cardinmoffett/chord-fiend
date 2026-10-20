@@ -5582,7 +5582,8 @@ function findSlotById(id) { return state.songSlots.find(function (s) { return s 
    LINKS: an arrangement box can be LINKED to the section it came from
    (it shows that section's live content, and is read-only), or INLINED
    (an independent copy that just remembers where it came from, so it can
-   be relinked). Slot fields: sourceSectionId, linked.
+   be made into a new linked section). There is deliberately no Relink: it
+   would replace the box's own edits. Slot fields: sourceSectionId, linked.
    ============================================================ */
 
 function withAsterisk(name) {
@@ -5605,17 +5606,7 @@ function inlineSlot(slot) {
   if (!r.linked) return;
   slot.blocks = JSON.parse(JSON.stringify(r.blocks));
   slot.name = withAsterisk(r.name);
-  slot.linked = false; // sourceSectionId is kept, so Relink stays possible
-  save();
-}
-
-// Destructive by design: whatever this box had is replaced by the section.
-function relinkSlot(slot) {
-  var src = findSectionById(slot.sourceSectionId);
-  if (!src) return;
-  slot.blocks = JSON.parse(JSON.stringify(src.blocks));
-  slot.name = src.name;
-  slot.linked = true;
+  slot.linked = false; // sourceSectionId is kept, as a record of where it came from
   save();
 }
 
@@ -5668,7 +5659,7 @@ function applyEditorLock() {
   addBtn.style.opacity = locked ? "0.4" : "";
 }
 
-// After inlining/relinking the box that's open in the editor.
+// After inlining, or making a new linked section from, the box that's open in the editor.
 function afterLinkChange(slot) {
   editingBlocks = resolveSlot(slot).blocks;
   blockSelection = null;
@@ -5958,7 +5949,7 @@ function openNamePicker() {
   });
   flyoutPanel.appendChild(customBtn);
 
-  // Link controls, only for arrangement boxes that have (or had) a source.
+  // Link controls for arrangement boxes: Inline a linked box, or make an independent one a new linked section.
   if (editingRef && editingRef.kind === "slot") {
     var linkSlot = findSlotById(editingRef.id);
     var linkInfo = linkSlot ? resolveSlot(linkSlot) : null;
@@ -5977,40 +5968,19 @@ function openNamePicker() {
       });
       flyoutPanel.appendChild(newSrcBtn);
     }
-    if (linkInfo && (linkInfo.linked || linkInfo.source)) {
+    if (linkInfo && linkInfo.linked) {
       var linkBtn = document.createElement("button");
       linkBtn.className = "pill";
       linkBtn.style.width = "100%";
-      if (linkInfo.linked) {
-        linkBtn.textContent = "\uD83D\uDD17 Inline";
-        linkBtn.addEventListener("click", function () {
-          inlineSlot(linkSlot); afterLinkChange(linkSlot); closeFlyout();
-        });
-      } else {
-        linkBtn.textContent = "\uD83D\uDD17 Relink\u2026";
-        linkBtn.addEventListener("click", function () { openRelinkConfirm(linkSlot); });
-      }
+      linkBtn.textContent = "\uD83D\uDD17 Inline";
+      linkBtn.addEventListener("click", function () {
+        inlineSlot(linkSlot); afterLinkChange(linkSlot); closeFlyout();
+      });
       flyoutPanel.appendChild(linkBtn);
     }
   }
 
   flyoutBackdrop.classList.add("open");
-}
-
-function openRelinkConfirm(slot) {
-  var src = findSectionById(slot.sourceSectionId);
-  if (!src) return;
-  ensureFlyoutDom();
-  flyoutPanel.innerHTML = "";
-  flyoutTitle("Relink to \u201C" + src.name + "\u201D?");
-  var note = document.createElement("div");
-  note.style.fontSize = "12px";
-  note.style.color = "var(--text-dim)";
-  note.textContent = "This box\u2019s own edits will be replaced by the section\u2019s content.";
-  flyoutPanel.appendChild(note);
-  flyoutButton("Relink", function () { relinkSlot(slot); afterLinkChange(slot); closeFlyout(); });
-  flyoutButton("Cancel", closeFlyout);
-  showFlyoutPanel();
 }
 
 /* ---------- Projects: create / open / rename / duplicate / delete ---------- */
@@ -6262,7 +6232,7 @@ function deleteSection(id) {
       sl.name = withAsterisk(section.name);
       sl.linked = false;
     }
-    sl.sourceSectionId = null; // nothing left to relink to
+    sl.sourceSectionId = null; // the section is gone
   });
   state.sections.splice(idx, 1);
   if (armedSectionId === id) armedSectionId = null;
