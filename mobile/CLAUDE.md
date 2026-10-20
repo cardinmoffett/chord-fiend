@@ -1,4 +1,6 @@
-# Chord Fiend: Modal Interchange Sketchpad (the phone app)
+# Theoryaoke (the phone app)
+
+The app is called **Theoryaoke** (renamed from Chord Fiend on 2026-10-20). The repo, the web address and the storage keys (`modalSketchpadProjects`, `chordFiend…`) keep their old names on purpose: changing the address or a key would start the owner with no saved songs.
 
 A single-file, touch-first web app for sketching chord progressions. Blocks are chords you edit visually. It does modal interchange, applied chords (secondary dominants, applied ii, tritone substitutions, backdoor, leading-tone, common-tone diminished, chromatic mediants), auto-generated drums and bass, and has a built-in Learn curriculum (55 lessons in 13 units). Plain JavaScript, no build step. Sound is Tone.js 14.8.49, bundled in `vendor/Tone.js`.
 
