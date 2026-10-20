@@ -743,6 +743,8 @@
     flex-direction: column;
     gap: 10px;
   }
+  /* A long list (projects, names) scrolls; it never squashes its rows. */
+  .settings-panel > * { flex-shrink: 0; }
 
   .settings-panel h2 {
     margin: 0;
