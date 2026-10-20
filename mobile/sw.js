@@ -4,7 +4,7 @@
 // offline. Other files are served from the cache straight away and refreshed in the
 // background.
 // Bump VERSION when the file list changes.
-var VERSION = 'chord-fiend-v2';
+var VERSION = 'chord-fiend-v3';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'vendor/Tone.js'];
 
 self.addEventListener('install', function (e) {
