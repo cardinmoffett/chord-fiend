@@ -318,6 +318,19 @@
     opacity: 0.9;
   }
   .editor.locked .editor-grid { opacity: 0.5; }
+  .editor { position: relative; }
+  /* A linked box's editor is ghosted; these two buttons sit over it. */
+  .lock-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 0 16px;
+  }
+  .lock-overlay button {
+    flex: 0 1 160px; padding: 12px 0; border-radius: 12px;
+    font: inherit; font-size: 15px; font-weight: 700;
+    background: var(--bg-elevated); color: var(--text);
+    border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+  }
   .chip .chip-color-strip {
     position: absolute;
     top: 0; left: 0; right: 0;
@@ -4523,7 +4536,26 @@ function renderEditor() {
   editor.classList.toggle("locked", locked);
   if (locked) {
     editor.querySelectorAll("select, button, input").forEach(function (el) { el.disabled = true; });
+    appendLockOverlay();
   }
+}
+
+// Over a linked box's ghosted editor: Edit source opens the section itself
+// (the change shows in every box linked to it); Edit instance turns this box
+// into its own copy (inlines it) and unlocks the editor.
+function appendLockOverlay() {
+  var slot = findSlotById(editingRef.id);
+  if (!slot) return;
+  var overlay = document.createElement("div");
+  overlay.className = "lock-overlay";
+  var sourceBtn = document.createElement("button");
+  sourceBtn.textContent = "Edit source";
+  sourceBtn.addEventListener("click", function () { openSectionForEditing(slot.sourceSectionId); });
+  var instanceBtn = document.createElement("button");
+  instanceBtn.textContent = "Edit instance";
+  instanceBtn.addEventListener("click", function () { inlineSlot(slot); afterLinkChange(slot); });
+  overlay.appendChild(sourceBtn); overlay.appendChild(instanceBtn);
+  editor.appendChild(overlay);
 }
 
 // View-aware: settings (palette, root, mode...) can now be changed from the
@@ -5602,6 +5634,22 @@ function healLinks(st) {
   });
 }
 
+// The reverse of Inline: an independent box becomes a new section of its own,
+// and the box is linked to it (so it can be placed elsewhere and stay in sync).
+function slotToNewSection(slot) {
+  var r = resolveSlot(slot);
+  if (r.linked) return;
+  var base = (slot.name || "Section").replace(/\*$/, "");
+  var name = base, n = 2;
+  while (state.sections.some(function (sec) { return sec.name === name; })) name = base + " " + n++;
+  var id = state.nextSectionId++;
+  state.sections.push({id: id, name: name, blocks: JSON.parse(JSON.stringify(slot.blocks))});
+  slot.sourceSectionId = id;
+  slot.name = name;
+  slot.linked = true;
+  save();
+}
+
 function linkedSlotCount(sectionId) {
   return state.songSlots.filter(function (sl) { return sl && sl.linked && sl.sourceSectionId === sectionId; }).length;
 }
@@ -5914,10 +5962,22 @@ function openNamePicker() {
   if (editingRef && editingRef.kind === "slot") {
     var linkSlot = findSlotById(editingRef.id);
     var linkInfo = linkSlot ? resolveSlot(linkSlot) : null;
-    if (linkInfo && (linkInfo.linked || linkInfo.source)) {
+    if (linkInfo) {
       var divider = document.createElement("div");
       divider.style.cssText = "border-top:1px solid var(--line-soft);margin-top:8px;";
       flyoutPanel.appendChild(divider);
+    }
+    if (linkInfo && !linkInfo.linked) {
+      var newSrcBtn = document.createElement("button");
+      newSrcBtn.className = "pill";
+      newSrcBtn.style.width = "100%";
+      newSrcBtn.textContent = "\uD83D\uDD17 New linked section";
+      newSrcBtn.addEventListener("click", function () {
+        slotToNewSection(linkSlot); afterLinkChange(linkSlot); closeFlyout();
+      });
+      flyoutPanel.appendChild(newSrcBtn);
+    }
+    if (linkInfo && (linkInfo.linked || linkInfo.source)) {
       var linkBtn = document.createElement("button");
       linkBtn.className = "pill";
       linkBtn.style.width = "100%";
