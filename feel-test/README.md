@@ -23,6 +23,10 @@ A Set saved with an earlier round opens with its song intact.
 
 A new device now starts with no song: one section, **Section 1**, holding the key's I chord, and nothing in the song row, as the app started a new project. Add sections and place them to build your song. A Set you have already saved keeps its song. (Earlier rounds started with a sample Verse, Chorus, Verse, Chorus; the tests still use it.)
 
+## Round 4.1
+
+- **Length icons** are drawn now. Live's window has no font with the music note characters, so they showed as boxes (as they did on the iPhone).
+
 ## Round 4: the new chord editor, 3/4, copy and paste, linked parts as in the app
 
 - **The new chord editor**, built since round 3 but not in your Live until now, laid out like the phone app's drawer: **Diatonic / Applied / Free** tabs, coloured chord pads (one click sets the chord), **Length** (a note plus Straight / Dotted / Triplet, ties and splits), **Shape**, **Inversion** (▲ ▼ through the octaves), **Spread** (drop voicings), and **Alter** (one row per chord tone, plus Borrow). Applied has every function the app has: Dominant, Applied ii, Tritone sub, Backdoor, Leading tone, Common-tone dim and Mediants.
@@ -100,7 +104,7 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip (round 4): `064c4501b88ae01bf902608501923ddb7f7fcc300142c5754b3244a9b077c87c`. The zip holds it in a `Theoryaoke Feel Test` folder.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip (round 4.1): `670a8a3884370d065ce66ee03f2702a7e847505a2ed8d3f232d16628a0104c9e`. The zip holds it in a `Theoryaoke Feel Test` folder.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
 - The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`, with Edit source / Edit instance over the inspector; `inlineSlot`, `slotToNewSection`; no Relink, on purpose), the meter (`beatsPerBar` from Live's signature via `cf_meter`, polled every 2 s; `setMeter` converts bar-long chords and the beat as the app's time-signature setting does; `barBlock`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.

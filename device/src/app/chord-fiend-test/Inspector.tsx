@@ -42,7 +42,38 @@ const FUNCTION_PREFIX: Record<string, string> = {
 };
 /** The Length menu: feels, then multipliers that tie copies together, then splits. */
 const LENGTH_MENU: LengthMod[] = ["straight", "dotted", "triplet", "x2", "x3", "x4", "x1/2", "x1/4"];
-const NOTE_LABELS: Record<string, string> = { quarter: "\u2669", half: "\u{1D15E}", whole: "\u{1D15D}", double: "\u{1D15C}" };
+/**
+ * The Length notes, drawn rather than typed: Live's window has no font with the music
+ * characters (they showed as boxes), the same reason the phone app draws them (NOTE_ICONS).
+ */
+const NOTE_LABELS: Record<string, React.ReactNode> = {
+  quarter: (
+    <svg width="14" height="22" viewBox="0 0 14 22" aria-label="quarter note">
+      <ellipse cx="6" cy="17" rx="5" ry="3.6" transform="rotate(-20 6 17)" fill="currentColor" />
+      <rect x="9.6" y="1" width="1.6" height="16" fill="currentColor" />
+    </svg>
+  ),
+  half: (
+    <svg width="14" height="22" viewBox="0 0 14 22" aria-label="half note">
+      <ellipse cx="6" cy="17" rx="4.4" ry="3" transform="rotate(-20 6 17)" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="9.6" y="1" width="1.6" height="16" fill="currentColor" />
+    </svg>
+  ),
+  whole: (
+    <svg width="18" height="22" viewBox="0 0 18 22" aria-label="whole note">
+      <ellipse cx="9" cy="13" rx="6.4" ry="4.2" fill="none" stroke="currentColor" strokeWidth="2.4" />
+    </svg>
+  ),
+  double: (
+    <svg width="26" height="22" viewBox="0 0 26 22" aria-label="double whole note">
+      <ellipse cx="13" cy="13" rx="6.4" ry="4.2" fill="none" stroke="currentColor" strokeWidth="2.4" />
+      <rect x="2" y="6" width="1.5" height="14" fill="currentColor" />
+      <rect x="4.8" y="6" width="1.5" height="14" fill="currentColor" />
+      <rect x="19.7" y="6" width="1.5" height="14" fill="currentColor" />
+      <rect x="22.5" y="6" width="1.5" height="14" fill="currentColor" />
+    </svg>
+  ),
+};
 const SHAPE_LABELS: Record<string, string> = { triad: "Triad", add9: "add9", "6": "6", "6/9": "6/9", "7": "7", "9": "9", "11": "11", "13": "13" };
 /** A new root or kind (tab, degree, function, target, free root, borrowed mode) starts with no alterations. */
 const CLEAR_ALTER: Partial<Block> = {
@@ -303,7 +334,7 @@ export function Segmented({
   disabled,
   home,
 }: {
-  options: readonly string[];
+  options: readonly React.ReactNode[];
   value: number;
   onChange: (i: number) => void;
   disabled?: boolean;
