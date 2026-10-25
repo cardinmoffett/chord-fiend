@@ -6,6 +6,7 @@ import {
   defaultBlock,
   getDurationBeats,
   type Block,
+  type SharedSong,
 } from "../../../../engine/src/engine.js";
 import { sectionToNotes, type Note } from "../../../../engine/src/notes.js";
 
@@ -45,6 +46,8 @@ export type Editing = { kind: "section" | "slot"; id: number };
 /** Everything the device remembers, saved in the Live Set. The window owns the song. */
 export interface Song {
   version: 2;
+  /** The song's name, when it came from the phone (it goes back with it). */
+  name?: string;
   rootIndex: number;
   modeIndex: number;
   drumBeat: string;
@@ -172,6 +175,71 @@ export function slotToNewSection(song: Song, slotId: number): Song {
     sections: [...song.sections, { id, name, blocks: slot.blocks.map((b) => ({ ...b })) }],
     slots: song.slots.map((x) => (x.id === slotId ? { ...x, sectionId: id, blocks: null } : x)),
     nextId: id + 1,
+  };
+}
+
+/* ---------------- sharing with the phone app ---------------- */
+
+/**
+ * The song as the engine's shared song (encodeSharedSong turns it into text). A linked part
+ * goes as a link; an inline part carries its own blocks and the section it came from.
+ * `tempo` is Live's, so the phone opens it at the speed it was heard here.
+ */
+export function songToShared(song: Song, tempo?: number | null): SharedSong {
+  const shared: SharedSong = {
+    name: song.name || "From Live",
+    rootIndex: song.rootIndex,
+    modeIndex: song.modeIndex,
+    beatsPerBar: song.beatsPerBar,
+    drumBeat: song.drumBeat,
+    bassWrapLow: song.bassWrapLow,
+    sections: song.sections.map((x) => ({ id: x.id, name: x.name, blocks: x.blocks })),
+    parts: song.slots.map((slot) =>
+      slot.blocks
+        ? { section: slot.sectionId, name: slotLabel(song, slot), blocks: slot.blocks, linked: false as const }
+        : { section: slot.sectionId, linked: true as const },
+    ),
+  };
+  if (tempo) shared.tempo = Math.round(tempo);
+  return shared;
+}
+
+/**
+ * A shared song (from decodeSharedSong) as this device's song, replacing what it had. The
+ * track choices stay: they belong to the Live Set, not the song. A phone part that belongs
+ * to no section becomes a section of its own (named after the part), with the part holding
+ * its own copy, so it still shows as "Tag*" and edits on its own.
+ */
+export function sharedToSong(shared: SharedSong, current: Song): Song {
+  const copy = (blocks: Block[]) => blocks.map((b) => ({ ...b }));
+  const idFor = new Map<string, number>();
+  const sections: Section[] = shared.sections.map((x, i) => {
+    idFor.set(String(x.id), i + 1);
+    return { id: i + 1, name: x.name, blocks: copy(x.blocks) };
+  });
+  let nextId = sections.length + 1;
+  const slots: Slot[] = shared.parts.map((pt) => {
+    if (pt.linked) return { id: nextId++, sectionId: idFor.get(String(pt.section))!, blocks: null };
+    let sectionId = pt.section == null ? undefined : idFor.get(String(pt.section));
+    if (sectionId === undefined) {
+      sectionId = nextId++;
+      sections.push({ id: sectionId, name: pt.name.replace(/\*$/, ""), blocks: copy(pt.blocks) });
+    }
+    return { id: nextId++, sectionId, blocks: copy(pt.blocks) };
+  });
+  return {
+    ...DEFAULT_SONG,
+    name: shared.name,
+    rootIndex: shared.rootIndex,
+    modeIndex: shared.modeIndex,
+    beatsPerBar: shared.beatsPerBar,
+    drumBeat: shared.drumBeat,
+    bassWrapLow: shared.bassWrapLow,
+    sections,
+    slots,
+    nextId,
+    editing: { kind: "section", id: sections[0].id },
+    tracks: current.tracks,
   };
 }
 

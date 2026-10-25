@@ -911,6 +911,168 @@ function blockLabel(block, masterRootIndex, masterModeIndex) {
   return {degree: degree, name: name};
 }
 
+
+// ============================================================
+// SHARING A SONG between the phone app and the Ableton device
+// ============================================================
+// A song travels as text, copied on one side and pasted on the other (the iPhone and the
+// Mac share a clipboard). The text is a readable first line plus one line of data:
+//
+//   Theoryaoke song: Verse, Chorus (paste into Theoryaoke)
+//   theoryaoke:1:<base64 of the song as JSON>.
+//
+// The full stop ends the data, so words pasted after it (or a line break inserted into it)
+// don't get mixed in, and a copy cut short is caught instead of half-read.
+// Base64 so nothing on the way (Notes, Messages, smart quotes, line wrapping) can change
+// it. Both apps convert their own project to and from this one shape, so it is defined
+// here once:
+//
+//   {name, rootIndex, modeIndex, beatsPerBar (3 or 4), drumBeat (a built-in beat or "off"),
+//    bassWrapLow, tempo (optional),
+//    sections: [{id, name, blocks}],
+//    parts: [{section: <section id>, linked: true}
+//          | {section: <section id or null>, name, blocks, linked: false}]}
+//
+// A linked part plays its section; any other part carries its own blocks (and remembers
+// the section it came from, if any). Sounds, effects, strum and tempo stay with each app.
+
+var SHARED_SONG_VERSION = 1;
+var SHARED_SONG_TAG = "theoryaoke:";
+var B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function utf8Bytes(str) {
+  var out = [];
+  for (var i = 0; i < str.length; i++) {
+    var c = str.charCodeAt(i);
+    if (c >= 0xd800 && c < 0xdc00 && i + 1 < str.length) {
+      var d = str.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d < 0xe000) { c = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00); i++; }
+    }
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return out;
+}
+
+function utf8String(bytes) {
+  var out = "";
+  for (var i = 0; i < bytes.length;) {
+    var c = bytes[i++];
+    if (c >= 0xf0) c = ((c & 7) << 18) | ((bytes[i++] & 63) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+    else if (c >= 0xe0) c = ((c & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+    else if (c >= 0xc0) c = ((c & 31) << 6) | (bytes[i++] & 63);
+    if (c >= 0x10000) { c -= 0x10000; out += String.fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 1023)); }
+    else out += String.fromCharCode(c);
+  }
+  return out;
+}
+
+function base64Encode(str) {
+  var b = utf8Bytes(str), out = "";
+  for (var i = 0; i < b.length; i += 3) {
+    var n = (b[i] << 16) | ((b[i + 1] || 0) << 8) | (b[i + 2] || 0);
+    out += B64_CHARS[n >> 18] + B64_CHARS[(n >> 12) & 63] +
+      (i + 1 < b.length ? B64_CHARS[(n >> 6) & 63] : "=") + (i + 2 < b.length ? B64_CHARS[n & 63] : "=");
+  }
+  return out;
+}
+
+function base64Decode(text) {
+  var clean = text.replace(/[^A-Za-z0-9+\/]/g, ""), bytes = [];
+  for (var i = 0; i + 1 < clean.length; i += 4) {
+    var n = (B64_CHARS.indexOf(clean[i]) << 18) | (B64_CHARS.indexOf(clean[i + 1]) << 12) |
+      ((i + 2 < clean.length ? B64_CHARS.indexOf(clean[i + 2]) : 0) << 6) | (i + 3 < clean.length ? B64_CHARS.indexOf(clean[i + 3]) : 0);
+    bytes.push(n >> 16);
+    if (i + 2 < clean.length) bytes.push((n >> 8) & 255);
+    if (i + 3 < clean.length) bytes.push(n & 255);
+  }
+  return utf8String(bytes);
+}
+
+function cleanBlocks(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(function (b) { return b && typeof b === "object"; }).map(function (b) {
+    return Object.assign(defaultBlock(), JSON.parse(JSON.stringify(b)));
+  });
+}
+
+function clampInt(v, lo, hi, fallback) {
+  v = Math.round(Number(v));
+  return isNaN(v) ? fallback : Math.max(lo, Math.min(hi, v));
+}
+
+// A shared song made safe to use: every field present and in range, every block complete
+// (missing fields take defaultBlock's values), sections never empty, parts pointing only at
+// sections that exist. Throws if there is nothing usable in it.
+function normalizeSharedSong(raw) {
+  if (!raw || typeof raw !== "object") throw new Error("That isn’t a Theoryaoke song.");
+  var sections = (Array.isArray(raw.sections) ? raw.sections : []).filter(function (x) { return x && typeof x === "object"; }).map(function (x, i) {
+    var blocks = cleanBlocks(x.blocks);
+    return {id: x.id != null ? x.id : "s" + i, name: String(x.name || "Section " + (i + 1)), blocks: blocks.length ? blocks : [defaultBlock()]};
+  });
+  var ids = sections.map(function (x) { return x.id; });
+  var parts = [];
+  (Array.isArray(raw.parts) ? raw.parts : []).forEach(function (pt) {
+    if (!pt || typeof pt !== "object") return;
+    var known = ids.indexOf(pt.section) >= 0;
+    if (pt.linked && known) { parts.push({section: pt.section, linked: true}); return; }
+    var blocks = cleanBlocks(pt.blocks);
+    if (!blocks.length) return; // an own-copy part with nothing in it
+    parts.push({section: known ? pt.section : null, name: String(pt.name || "Part"), blocks: blocks, linked: false});
+  });
+  if (!sections.length && !parts.length) throw new Error("That song has nothing in it.");
+  if (!sections.length) sections.push({id: "s0", name: "Section 1", blocks: [defaultBlock()]});
+  var beats = raw.beatsPerBar === 3 ? 3 : 4;
+  var beat = raw.drumBeat === "off" ? "off" : BUILTIN_BEAT_PATTERNS[raw.drumBeat] && BUILTIN_BEAT_PATTERNS[raw.drumBeat].loopBeats === beats ? raw.drumBeat : defaultBeatForMeter(beats);
+  var out = {
+    name: String(raw.name || "Shared song"),
+    rootIndex: clampInt(raw.rootIndex, 0, 11, 0),
+    modeIndex: clampInt(raw.modeIndex, 0, MASTER_MODE_NAMES.length - 1, 0),
+    beatsPerBar: beats,
+    drumBeat: beat,
+    bassWrapLow: clampInt(raw.bassWrapLow, 24, 48, 28),
+    sections: sections,
+    parts: parts
+  };
+  if (raw.tempo != null && !isNaN(Number(raw.tempo))) out.tempo = clampInt(raw.tempo, 20, 999, 100);
+  return out;
+}
+
+// The text to copy: a readable line, then the data line.
+function encodeSharedSong(song) {
+  var s = normalizeSharedSong(song);
+  var names = s.sections.map(function (x) { return x.name; }).join(", ");
+  return "Theoryaoke song: " + s.name + (names ? " — " + names : "") + " (paste into Theoryaoke)\n" +
+    SHARED_SONG_TAG + SHARED_SONG_VERSION + ":" + base64Encode(JSON.stringify(s)) + ".";
+}
+
+// The song in pasted text, wherever it sits in it. Throws a message to show the person
+// when the text holds no song, a damaged one, or one from a newer version.
+function decodeSharedSong(text) {
+  var str = String(text || "");
+  var m = /theoryaoke:(\d+):([A-Za-z0-9+\/=\s]+)\./i.exec(str);
+  if (!m && /theoryaoke:\d+:/i.test(str)) throw new Error("That song didn\u2019t come through whole. Copy it again.");
+  if (!m) throw new Error("That isn’t a Theoryaoke song. Copy it again with Send to Live or Copy for phone.");
+  if (Number(m[1]) > SHARED_SONG_VERSION) throw new Error("That song comes from a newer version of Theoryaoke. Update this one first.");
+  var raw;
+  try { raw = JSON.parse(base64Decode(m[2])); }
+  catch (e) { throw new Error("That song didn’t come through whole. Copy it again."); }
+  return normalizeSharedSong(raw);
+}
+
+// One line saying what a shared song holds: "Verse, Chorus · 6 parts · D Dorian · 3/4".
+function describeSharedSong(s) {
+  var key = pitchToNoteName(s.rootIndex, keyPrefersFlats(s.rootIndex, s.modeIndex)) + " " + MASTER_MODE_NAMES[s.modeIndex];
+  return [
+    s.sections.map(function (x) { return x.name; }).join(", "),
+    s.parts.length + (s.parts.length === 1 ? " part" : " parts"),
+    key,
+    s.beatsPerBar + "/4"
+  ].join(" · ");
+}
+
 export {
   // constants
   MODES, DEGREE_NAMES, DEGREE_INDEX, BLOCK_MODE_NAMES, MASTER_MODE_NAMES,
@@ -930,5 +1092,7 @@ export {
   LENGTH_BASES, LENGTH_MODS, LENGTH_MOD_LABELS, lengthParts, lengthChange, withoutAlter, alterRows, alterChange, alterFitToShape,
   // bass and drums
   bassSlotForVoice, activeBeatPattern, beatPatternLabel, laneByVoice, patternHasHitAtStep,
-  chordTonePitch, bassOctaveShift, computeBassPitchForBlock
+  chordTonePitch, bassOctaveShift, computeBassPitchForBlock,
+  // sharing a song between the phone and Live
+  SHARED_SONG_VERSION, normalizeSharedSong, encodeSharedSong, decodeSharedSong, describeSharedSong
 };

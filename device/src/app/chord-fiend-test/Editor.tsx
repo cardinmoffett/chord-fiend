@@ -6,8 +6,12 @@ import {
   beatPatternLabel,
   beatPatternsForMeter,
   buildChord,
+  decodeSharedSong,
+  describeSharedSong,
+  encodeSharedSong,
   noteChoiceLabel,
   pitchToFullNoteName,
+  type SharedSong,
 } from "../../../../engine/src/engine.js";
 import { Dropdown, IndexDropdown } from "./Dropdown";
 import { useDevice } from "../shared/device";
@@ -31,7 +35,9 @@ import {
   planSongWrite,
   sectionColor,
   setMeter,
+  sharedToSong,
   slotToNewSection,
+  songToShared,
   withEditingBlocks,
   type Block,
   type PlacedSlot,
@@ -100,6 +106,9 @@ export default function Editor() {
   const [tracks, setTracks] = useState<LiveTrack[] | null>(null);
   const [activity, setActivity] = useState<string[]>([]);
   const [synced, setSynced] = useState<string | null>(null);
+  // Copy for phone / Paste from phone (the dialog), and a meter a pasted song asked Live for.
+  const [share, setShare] = useState<null | { mode: "copy"; text: string } | { mode: "paste" }>(null);
+  const pendingMeter = useRef<{ beats: number; until: number } | null>(null);
   const say = (line: string) => setActivity((l) => [new Date().toLocaleTimeString() + "  " + line, ...l].slice(0, 30));
 
   /* ---------------- Live: tracks and results ---------------- */
@@ -127,6 +136,13 @@ export default function Editor() {
       const meter = meterFromLive(numerator, denominator);
       if (sig !== "3/4" && sig !== "4/4" && warnedMeter.current !== sig) say(`Live is in ${sig}: Theoryaoke writes 4/4`);
       warnedMeter.current = sig;
+      // A pasted song has just asked Live for its meter: until Live shows it (a few seconds at
+      // most), Live's old meter must not convert the new song back.
+      const pending = pendingMeter.current;
+      if (pending) {
+        if (meter === pending.beats || Date.now() > pending.until) pendingMeter.current = null;
+        else return;
+      }
       // Until the Set's saved song has arrived, the window holds the untouched default; saving
       // a converted copy of it then would overwrite the real song. The next poll catches up.
       if (JSON.stringify(songRef.current) === JSON.stringify(DEFAULT_SONG)) return;
@@ -334,6 +350,27 @@ export default function Editor() {
     const slots = song.slots.filter((x) => x.sectionId !== id);
     update({ sections, slots, editing: { kind: "section", id: sections[0].id } });
     setView("song");
+  }
+
+  /* ---------------- sharing with the phone ---------------- */
+
+  // A song from the phone replaces this device's song (the dialog says so first); the track
+  // choices stay. Its meter becomes Live's time signature.
+  function applyShared(shared: SharedSong) {
+    const next = sharedToSong(shared, songRef.current);
+    save(next);
+    setView("song");
+    setSelectedSlotId(null);
+    setSelectedSectionId(null);
+    setSelectedBlock(0);
+    setAnchor(null);
+    if (warnedMeter.current !== `${next.beatsPerBar}/4`) {
+      pendingMeter.current = { beats: next.beatsPerBar, until: Date.now() + 6000 };
+      outlet(OUT.cf_set_meter, next.beatsPerBar);
+    }
+    say(`pasted "${shared.name}" from the phone`);
+    setShare(null);
+    setSettingsOpen(false);
   }
 
   /* ---------------- blocks ---------------- */
@@ -709,6 +746,15 @@ export default function Editor() {
         </div>
       )}
 
+      {share && (
+        <ShareDialog
+          share={share}
+          onClose={() => setShare(null)}
+          onCopied={() => say("copied for the phone")}
+          onReplace={applyShared}
+        />
+      )}
+
       {/* ---------------- settings drawer ---------------- */}
       {settingsOpen && (
         <>
@@ -768,6 +814,11 @@ export default function Editor() {
                 onChange={(v) => update({ bassWrapLow: Number(v) })}
               />
             </div>
+            <h4>Phone</h4>
+            <button onClick={() => setShare({ mode: "copy", text: encodeSharedSong(songToShared(songRef.current, device.tempo)) })}>
+              Copy for phone
+            </button>
+            <button onClick={() => setShare({ mode: "paste" })}>Paste from phone…</button>
             <button
               className="danger"
               onClick={() => {
@@ -784,5 +835,86 @@ export default function Editor() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Copy for phone: the song as text, selected, to copy with Cmd+C. Inside Live's window a
+ * programmatic copy can claim success and copy nothing, so the dialog waits for the
+ * browser's own copy event, which only fires when a copy really happened.
+ *
+ * Paste from phone: paste with Cmd+V, see what the song holds, then Replace (or Cancel).
+ */
+function ShareDialog({
+  share,
+  onClose,
+  onCopied,
+  onReplace,
+}: {
+  share: { mode: "copy"; text: string } | { mode: "paste" };
+  onClose: () => void;
+  onCopied: () => void;
+  onReplace: (song: SharedSong) => void;
+}) {
+  const field = useRef<HTMLTextAreaElement>(null);
+  const [pasted, setPasted] = useState("");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    field.current?.focus();
+    if (share.mode === "copy") field.current?.select();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, []);
+  let found: SharedSong | null = null;
+  let problem = "";
+  if (share.mode === "paste" && pasted.trim()) {
+    try {
+      found = decodeSharedSong(pasted);
+    } catch (e) {
+      problem = (e as Error).message;
+    }
+  }
+  return (
+    <>
+      <div className="drawer-shade share-shade" onClick={onClose} />
+      <div className="share-dialog">
+        <strong>{share.mode === "copy" ? "Copy for phone" : "Paste from phone"}</strong>
+        <div className="share-note">
+          {share.mode === "copy"
+            ? copied
+              ? "Copied. On the phone, open the project menu and use Paste from Live."
+              : "Press ⌘C to copy it. Then, on the phone, open the project menu and use Paste from Live."
+            : "On the phone, use Send to Live in the project menu. Then press ⌘V here."}
+        </div>
+        {share.mode === "copy" ? (
+          <textarea
+            ref={field}
+            readOnly
+            value={share.text}
+            onCopy={() => {
+              setCopied(true);
+              onCopied();
+            }}
+          />
+        ) : (
+          <textarea ref={field} value={pasted} placeholder="Paste the song here (⌘V)" onChange={(e) => setPasted(e.target.value)} />
+        )}
+        {share.mode === "paste" && (
+          <div className={found ? "share-found" : "share-note"}>
+            {found ? `${found.name}: ${describeSharedSong(found)}` : problem || " "}
+          </div>
+        )}
+        {share.mode === "paste" && found && <div className="share-note">This replaces the song in this device. The tracks you chose stay.</div>}
+        <div className="share-buttons">
+          {share.mode === "paste" && (
+            <button className="danger" disabled={!found} onClick={() => found && onReplace(found)}>
+              Replace this song
+            </button>
+          )}
+          <button onClick={onClose}>{share.mode === "copy" && copied ? "Done" : share.mode === "copy" ? "Close" : "Cancel"}</button>
+        </div>
+      </div>
+    </>
   );
 }

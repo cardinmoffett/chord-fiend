@@ -10,6 +10,7 @@
  *
  *   cf_tracks                      -> cf_tracks <b64 [{id, name, midi}]>
  *   cf_meter                       -> cf_meter <b64 {numerator, denominator}>  Live's time signature
+ *   cf_set_meter <beats>           Live's time signature to <beats>/4 (a song pasted from the phone)
  *   cf_prune <b64 {role, trackId, keep:[{name, start, length}]}>
  *                                  -> cf_result <b64 {role, op:"prune", ok, deleted, error}>
  *   cf_write <b64 {role, name, trackId, start, length, color, notes:[[p,s,d,v]...]}>
@@ -169,6 +170,14 @@ function cf_tracks(): void {
     tracks.push({ id: cfIdOf(t.id), name: cfGet(t, "name"), midi: cfNum(t, "has_midi_input") === 1 });
   }
   cfReply("cf_tracks", tracks);
+}
+
+/** A song pasted from the phone brings its meter: Live's time signature follows it. */
+function cf_set_meter(beats: number): void {
+  var song = new LiveAPI("live_set");
+  song.set("signature_numerator", beats === 3 ? 3 : 4);
+  song.set("signature_denominator", 4);
+  post("theoryaoke: time signature " + (beats === 3 ? 3 : 4) + "/4\n");
 }
 
 /** Live's time signature. The window asks on opening and every few seconds after. */
@@ -381,6 +390,7 @@ function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: 
   try {
     if (selector === "cf_tracks") cf_tracks();
     else if (selector === "cf_meter") cf_meter();
+    else if (selector === "cf_set_meter") cf_set_meter(Number(a1));
     else if (selector === "cf_write") cf_write(a1);
     else if (selector === "cf_prune") cf_prune(a1);
     else if (selector === "cf_clear") cf_clear(a1);

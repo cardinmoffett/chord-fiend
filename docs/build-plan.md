@@ -54,7 +54,7 @@ Seven steps, and two evenings of testing on the Mac decide whether the plan hold
 4. **Engine extraction.** Pass key and mode in as parameters instead of reading app-wide state, then run the engine tests against the package.
 5. **Editor in the window.** Lift the UI out of the single app file and build blocks, sections, the wide layout and the transport controls.
 6. **Writer.** Sections to clips, the placement list, hand-edit protection, link/detach, drum note mapping and track pickers.
-7. **Paste-in from the mobile app.**
+7. **Paste-in from the mobile app.** Done 2026-10-25 both ways: the engine's shared song format, Send to Live / Paste from Live on the phone, Copy for phone / Paste from phone in the device.
 
 ## Open decisions
 

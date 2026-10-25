@@ -75,7 +75,7 @@ names.forEach(function (n) {
   if (n === 'EXTENSION_NAMES') { same(n + ' (the app\'s six, first)', orig[n], engine[n].slice(0, orig[n].length)); same(n + ' (appended)', ['add9', '6/9'], engine[n].slice(orig[n].length)); return; }
   same(n, orig[n], engine[n]);
 });
-same('the only additions are blockLabel, shapes, Alter, Position, Length, step numerals and the newer applied chords and 3/4 beats', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'MAJOR7_INTERVALS', 'MEDIANTS', 'MINOR7_INTERVALS', 'SHAPE_ORDER', 'alterChange', 'alterFitToShape', 'alterRows', 'appliedColorDegrees', 'beatPatternsForMeter', 'blockLabel', 'defaultBeatForMeter', 'lengthChange', 'lengthParts', 'mediantNumeral', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
+same('the only additions are blockLabel, shapes, Alter, Position, Length, step numerals, the newer applied chords and 3/4 beats, and sharing a song', additions.slice().sort(), ['ALTER_FIELDS', 'LENGTH_BASES', 'LENGTH_MODS', 'LENGTH_MOD_LABELS', 'MAJOR7_INTERVALS', 'MEDIANTS', 'MINOR7_INTERVALS', 'SHAPE_ORDER', 'SHARED_SONG_VERSION', 'alterChange', 'alterFitToShape', 'alterRows', 'appliedColorDegrees', 'beatPatternsForMeter', 'blockLabel', 'decodeSharedSong', 'defaultBeatForMeter', 'describeSharedSong', 'encodeSharedSong', 'lengthChange', 'lengthParts', 'mediantNumeral', 'normalizeSharedSong', 'positionLabel', 'positionStep', 'stepNumeral', 'withoutAlter']);
 same('defaultBlock()', orig.defaultBlock(), engine.defaultBlock());
 report('every exported constant equals the app\'s');
 
