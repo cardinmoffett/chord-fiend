@@ -23,6 +23,10 @@ A Set saved with an earlier round opens with its song intact.
 
 A new device now starts with no song: one section, **Section 1**, holding the key's I chord, and nothing in the song row, as the app started a new project. Add sections and place them to build your song. A Set you have already saved keeps its song. (Earlier rounds started with a sample Verse, Chorus, Verse, Chorus; the tests still use it.)
 
+## Round 5.1
+
+- **+ Add duplicates.** It adds a copy of the selected chord right after it (with several selected, a copy of the last of them). With nothing selected, it adds a copy of the last chord at the end.
+
 ## Round 5: songs between the phone and Live
 
 - **Phone → Live.** On the phone, open the project menu and tap **Send to Live**: it copies the song. In Live, open ⚙ and click **Paste from phone…**, press ⌘V, check the line that says what's in it, then **Replace this song**. It replaces the device's song (it asks first); the tracks you chose stay. A 3/4 song sets Live to 3/4.
@@ -111,7 +115,7 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip (round 5): `7acd50df343c5c24510aa2b67dc668cca59caf620cfa3401b2785cdcaa9edcf8`. The zip holds it in a `Theoryaoke Feel Test` folder.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip (round 5.1): `5e7a3394efe540dfb3642f121b385eefb9a25186a98e9b7f5910346376cd9bce`. The zip holds it in a `Theoryaoke Feel Test` folder.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
 - The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`, with Edit source / Edit instance over the inspector; `inlineSlot`, `slotToNewSection`; no Relink, on purpose), the meter (`beatsPerBar` from Live's signature via `cf_meter`, polled every 2 s; `setMeter` converts bar-long chords and the beat as the app's time-signature setting does; `barBlock`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.
