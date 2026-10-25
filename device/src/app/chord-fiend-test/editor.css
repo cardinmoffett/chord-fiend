@@ -219,7 +219,17 @@
 
 fieldset.inspector.locked { opacity: 0.55; }
 .locked-note { color: var(--dim); }
-.confirm { display: inline-flex; gap: 8px; align-items: center; background: #3a2222; border: 1px solid #7a3a3a; border-radius: 8px; padding: 4px 8px; }
+.inspector-wrap { position: relative; }
+/* Over a linked part's greyed-out editor: Edit source, Edit instance. */
+.lock-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.cf .lock-overlay button {
+  min-width: 170px; padding: 12px 18px; font-size: 15px; font-weight: 700; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.cf .lock-overlay button:hover { border-color: var(--accent); }
+/* Shift-click selects several chords: they get a blue outline, as in the app. */
+.block.in-range { box-shadow: 0 0 0 2px #5aa9ff; border-color: #5aa9ff; }
+.block.in-range.selected { border-color: var(--accent); }
 /* Song view: the song builder at the top, the sections palette held at the bottom. */
 .song-view { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
 .palette { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }

@@ -27,7 +27,7 @@ export default function App() {
   }, []);
 
   return (
-    <Frame title="CHORD FIEND (feel test)" device={device}>
+    <Frame title="THEORYAOKE (feel test)" device={device}>
       <dt>editor</dt>
       <dd style={{ display: "flex", gap: 8 }}>
         <button onClick={editor.open} style={{ padding: "4px 10px" }}>

@@ -1,6 +1,8 @@
 import {
+  BUILTIN_BEAT_PATTERNS,
   appliedColorDegrees,
   blockLabel as engineBlockLabel,
+  defaultBeatForMeter,
   defaultBlock,
   getDurationBeats,
   type Block,
@@ -10,7 +12,8 @@ import { sectionToNotes, type Note } from "../../../../engine/src/notes.js";
 export type { Block };
 export type Role = "chords" | "bass" | "drums";
 export const ROLES: Role[] = ["chords", "bass", "drums"];
-export const BEATS_PER_BAR = 4;
+/** The time signatures the song can be in: 4/4 or 3/4, following Live's. */
+export type Meter = 3 | 4;
 
 export interface TrackRef {
   id: number;
@@ -27,7 +30,9 @@ export interface Section {
 /**
  * One place in the song order (a "part"). A linked part plays its section's blocks, so
  * editing the section changes every part that uses it. An inline part has its own copy
- * (`blocks`), made with Make inline; Relink drops the copy and follows the section again.
+ * (`blocks`), made with Edit instance. There is deliberately no way back to the old section
+ * (a Relink would throw the part's own chords away): New linked section turns the copy into
+ * a section of its own instead.
  */
 export interface Slot {
   id: number;
@@ -43,6 +48,8 @@ export interface Song {
   rootIndex: number;
   modeIndex: number;
   drumBeat: string;
+  /** Beats per bar, taken from Live's time signature (3/4 or 4/4). */
+  beatsPerBar: Meter;
   bassWrapLow: number;
   sections: Section[];
   slots: Slot[];
@@ -61,6 +68,7 @@ export const DEFAULT_SONG: Song = {
   rootIndex: 0,
   modeIndex: 0,
   drumBeat: "rock",
+  beatsPerBar: 4,
   bassWrapLow: 28,
   sections: [{ id: 1, name: "Section 1", blocks: [defaultBlock()] }],
   slots: [],
@@ -77,7 +85,7 @@ export const DEFAULT_SONG: Song = {
 export function normalizeSong(stored: unknown): Song {
   const s = stored as any;
   if (!s || typeof s !== "object") return DEFAULT_SONG;
-  if (s.version === 2 && Array.isArray(s.sections) && s.sections.length) return s as Song;
+  if (s.version === 2 && Array.isArray(s.sections) && s.sections.length) return s.beatsPerBar === 3 || s.beatsPerBar === 4 ? (s as Song) : { ...s, beatsPerBar: 4 };
   if (Array.isArray(s.blocks) && s.blocks.length) {
     const { blocks, ...rest } = s;
     return {
@@ -116,7 +124,7 @@ export function editingBlocks(song: Song): Block[] {
   return findSection(song, song.editing.id)?.blocks ?? song.sections[0].blocks;
 }
 
-/** Is the editor showing a linked part? Then it is locked: Make inline to change that part. */
+/** Is the editor showing a linked part? Then it is locked: Edit source or Edit instance to change it. */
 export function editingLocked(song: Song): boolean {
   if (song.editing.kind !== "slot") return false;
   const slot = song.slots.find((x) => x.id === song.editing.id);
@@ -136,6 +144,76 @@ export function withEditingBlocks(song: Song, blocks: Block[]): Song {
     else return song;
   }
   return { ...song, sections: song.sections.map((x) => (x.id === target.id ? { ...x, blocks } : x)) };
+}
+
+/* ---------------- linked parts ---------------- */
+
+/** Edit instance: the part gets its own copy of its section's chords, edited on its own. */
+export function inlineSlot(song: Song, slotId: number): Song {
+  const slot = song.slots.find((x) => x.id === slotId);
+  if (!slot || slot.blocks) return song;
+  const copy = (findSection(song, slot.sectionId)?.blocks ?? []).map((b) => ({ ...b }));
+  return { ...song, slots: song.slots.map((x) => (x.id === slotId ? { ...x, blocks: copy } : x)) };
+}
+
+/**
+ * New linked section: an inline part's chords become a new section, and the part is linked
+ * to it. The section takes the old section's name, numbered so it stays distinct (Verse 2).
+ */
+export function slotToNewSection(song: Song, slotId: number): Song {
+  const slot = song.slots.find((x) => x.id === slotId);
+  if (!slot || !slot.blocks) return song;
+  const base = findSection(song, slot.sectionId)?.name ?? "Section";
+  let name = base;
+  for (let n = 2; song.sections.some((x) => x.name === name); n++) name = `${base} ${n}`;
+  const id = song.nextId;
+  return {
+    ...song,
+    sections: [...song.sections, { id, name, blocks: slot.blocks.map((b) => ({ ...b })) }],
+    slots: song.slots.map((x) => (x.id === slotId ? { ...x, sectionId: id, blocks: null } : x)),
+    nextId: id + 1,
+  };
+}
+
+/* ---------------- time signature ---------------- */
+
+/** Live's time signature as the song's meter: 3/4 is 3, everything else is treated as 4/4. */
+export function meterFromLive(numerator: number, denominator: number): Meter {
+  return numerator === 3 && denominator === 4 ? 3 : 4;
+}
+
+/** A new chord, one bar long in the song's meter (a dotted half in 3/4). */
+export function barBlock(beats: Meter): Block {
+  const b = defaultBlock();
+  if (beats === 3) {
+    b.durationIndex = 3;
+    b.durationModifier = 1;
+  }
+  return b;
+}
+
+function isOneBar(b: Block, beats: number): boolean {
+  return Math.abs(getDurationBeats(b) - beats) < 1e-9 && !(b as any).durationMult;
+}
+
+/**
+ * The song in another meter, as the app's time signature setting does it: chords a bar long
+ * stay a bar long (whole note <-> dotted half), and a beat from the other meter gives way to
+ * the new meter's default (Rock <-> Waltz). Everything else keeps its length in beats.
+ */
+export function setMeter(song: Song, beats: Meter): Song {
+  const old = song.beatsPerBar;
+  if (beats === old) return song;
+  const fit = (blocks: Block[]) =>
+    blocks.map((b) => (isOneBar(b, old) ? { ...b, ...(beats === 3 ? { durationIndex: 3, durationModifier: 1 } : { durationIndex: 2, durationModifier: 0 }) } : b));
+  const pattern = BUILTIN_BEAT_PATTERNS[song.drumBeat];
+  return {
+    ...song,
+    beatsPerBar: beats,
+    drumBeat: song.drumBeat !== "off" && (!pattern || pattern.loopBeats !== beats) ? defaultBeatForMeter(beats) : song.drumBeat,
+    sections: song.sections.map((x) => ({ ...x, blocks: fit(x.blocks) })),
+    slots: song.slots.map((x) => (x.blocks ? { ...x, blocks: fit(x.blocks) } : x)),
+  };
 }
 
 export interface PlacedSlot {

@@ -9,9 +9,14 @@ import {
   blockLabel,
   editingBlocks,
   editingLocked,
+  inlineSlot,
   layoutSong,
+  meterFromLive,
+  setMeter,
+  slotToNewSection,
   normalizeSong,
   planSongWrite,
+  barBlock,
   sectionColor,
   withEditingBlocks,
   type Song,
@@ -107,12 +112,12 @@ describe("writing the song to a fake Live set", () => {
     const t = setup();
     t.write(t.song, true);
     expect(t.clips(t.c)).toEqual([
-      ["Chord Fiend: 1 Verse - chords", 0, 16],
-      ["Chord Fiend: 2 Chorus - chords", 16, 32],
-      ["Chord Fiend: 3 Verse - chords", 32, 48],
-      ["Chord Fiend: 4 Chorus - chords", 48, 64],
+      ["Theoryaoke: 1 Verse - chords", 0, 16],
+      ["Theoryaoke: 2 Chorus - chords", 16, 32],
+      ["Theoryaoke: 3 Verse - chords", 32, 48],
+      ["Theoryaoke: 4 Chorus - chords", 48, 64],
     ]);
-    expect(t.clips(t.d).map((x: any) => x[0])).toEqual(["Chord Fiend: 1 Verse - drums", "Chord Fiend: 2 Chorus - drums", "Chord Fiend: 3 Verse - drums", "Chord Fiend: 4 Chorus - drums"]);
+    expect(t.clips(t.d).map((x: any) => x[0])).toEqual(["Theoryaoke: 1 Verse - drums", "Theoryaoke: 2 Chorus - drums", "Theoryaoke: 3 Verse - drums", "Theoryaoke: 4 Chorus - drums"]);
     // the chords of song part 2 (Chorus: IV V I vi) start with F major
     // each section's clips take its colour (Verse is section 1, Chorus section 2)
     expect(t.c.arrangement_clips.map((x: any) => x.color)).toEqual([sectionColor(1).live, sectionColor(2).live, sectionColor(1).live, sectionColor(2).live]);
@@ -152,17 +157,17 @@ describe("writing the song to a fake Live set", () => {
     const swapped = { ...t.song, slots: [t.song.slots[1], t.song.slots[0], ...t.song.slots.slice(2)] };
     t.write(swapped);
     expect(t.clips(t.c).map((x: any) => x[0])).toEqual([
-      "Chord Fiend: 1 Chorus - chords",
-      "Chord Fiend: 2 Verse - chords",
-      "Chord Fiend: 3 Verse - chords",
-      "Chord Fiend: 4 Chorus - chords",
+      "Theoryaoke: 1 Chorus - chords",
+      "Theoryaoke: 2 Verse - chords",
+      "Theoryaoke: 3 Verse - chords",
+      "Theoryaoke: 4 Chorus - chords",
       "my riff",
     ]);
     const shorter = { ...swapped, slots: swapped.slots.slice(0, 2) };
     t.write(shorter);
     expect(t.clips(t.b).map((x: any) => [x[0], x[1], x[2]])).toEqual([
-      ["Chord Fiend: 1 Chorus - bass", 0, 16],
-      ["Chord Fiend: 2 Verse - bass", 16, 32],
+      ["Theoryaoke: 1 Chorus - bass", 0, 16],
+      ["Theoryaoke: 2 Verse - bass", 16, 32],
     ]);
     expect(t.clips(t.c).map((x: any) => x[0])).toContain("my riff");
   });
@@ -173,7 +178,7 @@ describe("writing the song to a fake Live set", () => {
     const blocks = editingBlocks({ ...t.song, editing: { kind: "section", id: 2 } });
     const longer = withEditingBlocks({ ...t.song, editing: { kind: "section", id: 2 } }, [{ ...blocks[0], durationIndex: 1 }, ...blocks.slice(1)]); // first Chorus chord: 2 bars
     t.write(longer);
-    expect(t.clips(t.c).map((x: any) => [x[0].replace("Chord Fiend: ", ""), x[1], x[2]])).toEqual([
+    expect(t.clips(t.c).map((x: any) => [x[0].replace("Theoryaoke: ", ""), x[1], x[2]])).toEqual([
       ["1 Verse - chords", 0, 16],
       ["2 Chorus - chords", 16, 36],
       ["3 Verse - chords", 36, 52],
@@ -186,14 +191,14 @@ describe("writing the song to a fake Live set", () => {
     t.write(t.song, true);
     let s: Song = { ...t.song, slots: t.song.slots.map((x) => (x.id === 5 ? { ...x, blocks: editingBlocks(t.song).map((b) => ({ ...b })) } : x)) };
     t.write(s);
-    expect(t.clips(t.c).map((x: any) => x[0])[2]).toBe("Chord Fiend: 3 Verse* - chords");
+    expect(t.clips(t.c).map((x: any) => x[0])[2]).toBe("Theoryaoke: 3 Verse* - chords");
     const verse = editingBlocks({ ...s, editing: { kind: "section", id: 1 } });
     s = withEditingBlocks({ ...s, editing: { kind: "section", id: 1 } }, [{ ...verse[0], degreeIndex: 6 }, ...verse.slice(1)]); // same length
     const plan = t.write(s);
     expect(plan.sent).toBe(2); // chords and bass of song part 1 only; the detached part 3 is untouched
   });
 
-  it("removing every part leaves no Chord Fiend clips, and other clips stay", () => {
+  it("removing every part leaves no Theoryaoke clips, and other clips stay", () => {
     const t = setup();
     const theirs = t.live.add({ kind: "Clip", name: "my riff", start_time: 100, end_time: 104, notes: [] });
     t.c.arrangement_clips.push(theirs);
@@ -248,5 +253,80 @@ describe("block labels: the degree large, the chord name small", () => {
     expect(label({ chordSource: "free", freeRoot: 5, extensionIndex: 2 }, { ...DEFAULT_SONG, rootIndex: 5 }).degree).toBe("IV7");
     expect(label({ chordSource: "free", freeRoot: 11, third: "minor", fifth: "b5", seventh: "dim", extensionIndex: 2 })).toEqual({ degree: "vii\u00B07", name: "Bdim7" });
     expect(label({ chordSource: "free", freeRoot: 3, seventh: "maj" })).toEqual({ degree: "\u266DIII", name: "E\u266D" });
+  });
+});
+
+describe("linked parts: Edit instance and New linked section", () => {
+  it("Edit instance gives the part its own copy; the section and the other parts stay linked", () => {
+    const s = inlineSlot(SAMPLE, 3);
+    const slot = s.slots.find((x) => x.id === 3)!;
+    expect(slot.blocks).toHaveLength(4);
+    expect(slot.blocks).not.toBe(SAMPLE.sections[0].blocks);
+    expect(s.slots.find((x) => x.id === 5)!.blocks).toBeNull();
+    expect(layoutSong(s)[0].label).toBe("Verse*");
+  });
+
+  it("New linked section turns that copy into a section of its own, linked, with a distinct name", () => {
+    const own = withEditingBlocks({ ...inlineSlot(SAMPLE, 3), editing: { kind: "slot", id: 3 } }, [blk({ degreeIndex: 1 })]);
+    const s = slotToNewSection(own, 3);
+    const made = s.sections[s.sections.length - 1];
+    expect(made).toMatchObject({ id: 7, name: "Verse 2" });
+    expect(made.blocks.map((b) => b.degreeIndex)).toEqual([1]);
+    expect(s.slots.find((x) => x.id === 3)).toEqual({ id: 3, sectionId: 7, blocks: null });
+    expect(s.nextId).toBe(8);
+    expect(s.sections[0].blocks).toHaveLength(4); // the old Verse is untouched
+    expect(editingLocked(s)).toBe(true); // the part is linked now, so it opens locked
+    expect(slotToNewSection(s, 3)).toBe(s); // only an inline part can become a section
+  });
+});
+
+describe("time signature: the song follows Live's 3/4 or 4/4", () => {
+  it("reads 3/4 as 3, anything else as 4", () => {
+    expect([meterFromLive(3, 4), meterFromLive(4, 4), meterFromLive(6, 8), meterFromLive(5, 4)]).toEqual([3, 4, 4, 4]);
+  });
+
+  it("a Set saved before this round opens in 4/4", () => {
+    const { beatsPerBar, ...old } = SAMPLE;
+    expect(normalizeSong(old).beatsPerBar).toBe(4);
+  });
+
+  it("switching to 3/4 keeps bar-long chords a bar long, swaps the beat, and leaves other lengths alone", () => {
+    const half = blk({ durationIndex: 3 }); // a half note
+    const song = { ...SAMPLE, sections: [{ ...SAMPLE.sections[0], blocks: [...SAMPLE.sections[0].blocks, half] }, SAMPLE.sections[1]] };
+    const s = setMeter(song, 3);
+    expect(s.beatsPerBar).toBe(3);
+    expect(s.drumBeat).toBe("waltz");
+    const placed = layoutSong(s);
+    expect(placed.map((p) => p.length)).toEqual([14, 12, 14, 12]); // four bars of 3, plus the half note
+    expect(placed[0].blockStarts).toEqual([0, 3, 6, 9, 12]);
+    // The waltz: a kick on 1 of every bar.
+    const kicks = placed[1].notes.drums.filter((n) => n.pitch === 36).map((n) => n.start);
+    expect(kicks).toEqual([0, 3, 6, 9]);
+    // And back: whole notes again, Rock again.
+    const back = setMeter(s, 4);
+    expect(layoutSong(back).map((p) => p.length)).toEqual([18, 16, 18, 16]);
+    expect(back.drumBeat).toBe("rock");
+  });
+
+  it("a new chord is one bar in the song's meter", () => {
+    expect(layoutSong({ ...SAMPLE, beatsPerBar: 3, sections: [{ id: 1, name: "V", blocks: [barBlock(3)] }], slots: [{ id: 3, sectionId: 1, blocks: null }] })[0].length).toBe(3);
+  });
+
+  it("the wrapper reports Live's time signature", () => {
+    const live = fakeLive();
+    live.song.signature_numerator = 3;
+    const w = loadWrapper(live);
+    w.send("cf_meter");
+    expect(w.replies("cf_meter")).toEqual([{ numerator: 3, denominator: 4 }]);
+  });
+});
+
+describe("the rename to Theoryaoke", () => {
+  it("replaces the clips written under the old name", () => {
+    const t = setup();
+    for (const [name, start] of [["Chord Fiend: 1 Verse - chords", 0], ["Chord Fiend: 2 Chorus - chords", 16]] as const)
+      t.c.arrangement_clips.push(t.live.add({ kind: "Clip", name, start_time: start, end_time: start + 16, notes: [] }));
+    t.write(t.song, true);
+    expect(t.clips(t.c).map((x: any) => x[0])).toEqual(["Theoryaoke: 1 Verse - chords", "Theoryaoke: 2 Chorus - chords", "Theoryaoke: 3 Verse - chords", "Theoryaoke: 4 Chorus - chords"]);
   });
 });

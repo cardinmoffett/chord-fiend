@@ -1,13 +1,13 @@
 # feel-test/ : the feel tests in Live (build plan step 3)
 
-One test device, **chord-fiend-test**: a MIDI effect with a big editor window. The window holds the song, and Live's Arrangement follows it automatically: every part of the song is a set of clips on a chords, a bass and a drums track. It is not the finished editor; it is where we work out how the editor should feel, one round at a time.
+One test device, **Theoryaoke** (the file is still `chord-fiend-test.amxd`): a MIDI effect with a big editor window. The window holds the song, and Live's Arrangement follows it automatically: every part of the song is a set of clips on a chords, a bass and a drums track. It is not the finished editor; it is where we work out how the editor should feel, one round at a time.
 
-The device is in `chord-fiend-feel-test.zip`. This is **round 3**.
+The device is in `chord-fiend-feel-test.zip`. This is **round 4**.
 
 ## Install
 
-1. Open the zip on GitHub: [feel-test/chord-fiend-feel-test.zip](https://github.com/cardinmoffett/chord-fiend/blob/claude/loving-ramanujan-zfphj8/feel-test/chord-fiend-feel-test.zip), and click **Download raw file**.
-2. Double-click the zip. You get a folder called **Chord Fiend Feel Test** with one file, `chord-fiend-test.amxd`.
+1. Open the zip on GitHub: [feel-test/chord-fiend-feel-test.zip](https://github.com/cardinmoffett/chord-fiend/blob/main/feel-test/chord-fiend-feel-test.zip), and click **Download raw file**.
+2. Double-click the zip. You get a folder called **Theoryaoke Feel Test** with one file, `chord-fiend-test.amxd`.
 3. Put it in your User Library, replacing the old one. If an older version is on a track, delete it from the track first: Live keeps its own copy of a device in the Set.
 
 ## Set up
@@ -23,6 +23,15 @@ A Set saved with an earlier round opens with its song intact.
 
 A new device now starts with no song: one section, **Section 1**, holding the key's I chord, and nothing in the song row, as the app started a new project. Add sections and place them to build your song. A Set you have already saved keeps its song. (Earlier rounds started with a sample Verse, Chorus, Verse, Chorus; the tests still use it.)
 
+## Round 4: the new chord editor, 3/4, copy and paste, linked parts as in the app
+
+- **The new chord editor**, built since round 3 but not in your Live until now, laid out like the phone app's drawer: **Diatonic / Applied / Free** tabs, coloured chord pads (one click sets the chord), **Length** (a note plus Straight / Dotted / Triplet, ties and splits), **Shape**, **Inversion** (▲ ▼ through the octaves), **Spread** (drop voicings), and **Alter** (one row per chord tone, plus Borrow). Applied has every function the app has: Dominant, Applied ii, Tritone sub, Backdoor, Leading tone, Common-tone dim and Mediants.
+- **3/4.** The song follows **Live's time signature**: set the Set to 3/4 and, within two seconds, chords a bar long become a dotted half, the beat becomes the Waltz, the Beat menu lists the 3/4 beats (Waltz, Jazz Waltz, Slow 3/4), and new chords are a bar of 3. Set it back to 4/4 and it goes back. Any other signature is written as 4/4 (the Activity list says so).
+- **Copy and paste.** **Shift-click** a second chord to select everything between (a blue outline). **Copy** (⌘C) takes the selection, or the one selected chord; **Paste** (⌘V) inserts it after the selection, in any section or part. **←** **→** move the whole selection, **✕** (or Delete) removes it.
+- **Play loops the selection** when several chords are selected; otherwise it loops the whole section from the selected chord, as before.
+- **Linked parts as in the app.** A linked part still opens locked (greyed out), now with two buttons over it: **Edit source** opens the section (the change shows in every part linked to it), **Edit instance** gives this part its own copy (`Verse*`). An inline part has **🔗 New linked section**: its chords become a new section (`Verse 2`), and the part links to it. **Relink is gone**: it threw away the part's own chords.
+- **The name is Theoryaoke**: the window, the device strip, and the clips (`Theoryaoke: 1 Verse - chords`). Clips written by earlier rounds as `Chord Fiend: ...` are replaced on the first sync.
+
 ## Round 3.3: the song part menu as a flyout
 
 - **Click a part** in the song row and its menu opens as a flyout attached to the card: **←** **→** move it, **✕** removes it, and **+ Add** lists your sections, inserting the one you pick right after this part. Click away or press Escape to close it.
@@ -36,7 +45,7 @@ From your notes on round 3.1:
 - **Less labelling.** Cards show only the name (and 🔗 on a linked part). No bar ranges, chord counts, hints, or "Part 1: Verse" line.
 - **The sections palette sits at the bottom** of the song view, below a divider, apart from the song builder.
 - **A selected part** shows only **←** **→** (move) and **✕** (remove), in a flyout from 3.3. A selected section shows only **Duplicate**.
-- **Linked and inline, as in the app.** Double-click a part to open it:
+- **Linked and inline, as in the app** (replaced in round 4). Double-click a part to open it:
   - A **linked** part opens **locked**: you can see, tap and play its chords, but not change them. Next to its name is **Make inline**.
   - **Make inline** gives that part its own copy (shown as `Verse*`), which you edit on its own; its section and the other parts do not change.
   - An inline part has **Relink**, which asks first, because it throws away that part's own changes and follows the section again.
@@ -91,12 +100,13 @@ If something fails, a screenshot of the window helps, and so does the **Activity
 
 ## Notes for Claude Code
 
-- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip: `84d556b72718168c9d555fbc205d879b0d9529ec563079b41b8948b41855da72`.
+- Source: `device/` (an `m4l-jweb` 1.6.1 project). Build with `cd device && pnpm install && pnpm build && pnpm test`; the device is `device/dist/chord-fiend-test/chord-fiend-test.amxd`. SHA-256 of the one in the zip (round 4): `064c4501b88ae01bf902608501923ddb7f7fcc300142c5754b3244a9b077c87c`. The zip holds it in a `Theoryaoke Feel Test` folder.
 - `device/patches/@m4l-jweb__wrapper@1.6.1.patch` (applied by pnpm) carries the two Mac fixes: `pageUrl()` for the `Macintosh HD:` page address, and a retry that re-sends a page's URL every 2 s, up to 3 times, until the page says `ui_ready`.
 - UI: `Editor.tsx` (transport, song view, section view, block rows, settings drawer, sync), `Inspector.tsx`, `editor.css`.
-- The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.
+- The song model is `device/src/app/chord-fiend-test/song.ts`: sections, slots ("parts": linked, or inline with their own blocks; a linked part opens locked, see `editingLocked`, with Edit source / Edit instance over the inspector; `inlineSlot`, `slotToNewSection`; no Relink, on purpose), the meter (`beatsPerBar` from Live's signature via `cf_meter`, polled every 2 s; `setMeter` converts bar-long chords and the beat as the app's time-signature setting does; `barBlock`), `layoutSong` (slots end to end from bar 1, bass always on), `planSongWrite`, `blockLabel`, `blockColor` and `sectionColor`. The window syncs on every change (150 ms debounce), after the track list arrives, and the first sync after opening sends every clip. A sync is, per role, a `cf_prune` (only when clip names or ranges changed) and then a `cf_write` per clip that is new or changed. Clip names are `<position> <section>[*] - <role>`, unique per track. Older saved songs are converted by `normalizeSong`.
 - Tapping a chord while stopped sends `cf_audition` from the window; the wrapper passes it to the device page (`outlet 0`), which plays it with `sendNote` through the `midiout` chain. The patcher keeps its `midiin -> midiout` cord, so clips on the track still pass through. `Dropdown.tsx` replaces every native `<select>`: in the window, a native select's popup only stayed open while the mouse button was held.
-- The window's requests (`cf_tracks`, `cf_prune`, `cf_write`, `cf_clear`, `cf_loop <start> <length> [jump] [from]`, `cf_unloop`, `cf_audition`, `cf_play`, `cf_stop`) are handled in `device/wrapper/device.ts` through `onWindowMessage`, with base64 JSON payloads. `onTick` forwards the transport poll to the window. `cf_write` also sets the clip colour.
-- Our clips are recognized by name: `Chord Fiend: <name>`. A write whose clip already covers the same range replaces the notes in place (`remove_notes_extended` + `add_new_notes`); otherwise a new clip is created (`Track.create_midi_clip`) after `cf_prune` has deleted stale ones (`Track.delete_clip`). Clips moved or edited by hand in Live are not followed; the next sync overwrites them (hand-edit protection is build plan step 6).
+- The window's requests (`cf_tracks`, `cf_meter`, `cf_prune`, `cf_write`, `cf_clear`, `cf_loop <start> <length> [jump] [from]`, `cf_unloop`, `cf_audition`, `cf_play`, `cf_stop`) are handled in `device/wrapper/device.ts` through `onWindowMessage`, with base64 JSON payloads. `onTick` forwards the transport poll to the window. `cf_write` also sets the clip colour.
+- Copy/paste and selection (`anchor` + `selectedBlock`, shift-click) live in `Editor.tsx`; the clipboard lasts while the window is open. Play with a selection sends `cf_loop` for just those chords (`loopTarget`).
+- Our clips are recognized by name: `Theoryaoke: <name>`, and the old `Chord Fiend: <name>` (pruned on the next sync). A write whose clip already covers the same range replaces the notes in place (`remove_notes_extended` + `add_new_notes`); otherwise a new clip is created (`Track.create_midi_clip`) after `cf_prune` has deleted stale ones (`Track.delete_clip`). Clips moved or edited by hand in Live are not followed; the next sync overwrites them (hand-edit protection is build plan step 6).
 - Tests: `device/tests/wrapper-live.test.mjs` (the Live side against a fake Max and Live set) and `device/tests/song.test.ts` (the song model, labels, and whole-song syncs end to end through the wrapper into the fake). The fake follows the Live Object Model docs, so it checks our logic, not Live itself.
 - Engine additions for this round: `flat5` and `chordSource: "free"` in `engine/src/engine.js`, tested in `engine/tests/test_free_flat5.mjs`.

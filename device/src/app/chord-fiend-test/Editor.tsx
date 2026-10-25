@@ -2,11 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, decodeBase64, encodeBase64, outlet } from "@m4l-jweb/bridge";
 import { useStateSync } from "@m4l-jweb/surface/react";
 import {
-  BUILTIN_BEAT_PATTERNS,
   MASTER_MODE_NAMES,
   beatPatternLabel,
+  beatPatternsForMeter,
   buildChord,
-  defaultBlock,
   noteChoiceLabel,
   pitchToFullNoteName,
 } from "../../../../engine/src/engine.js";
@@ -16,18 +15,23 @@ import { Inspector } from "./Inspector";
 import { IN, OUT } from "./protocol";
 import surface from "./surface";
 import {
-  BEATS_PER_BAR,
+  DEFAULT_SONG,
   ROLES,
+  barBlock,
   blockColor,
   blockLabel,
   blockLength,
   editingBlocks,
   editingLocked,
   findSection,
+  inlineSlot,
   layoutSong,
+  meterFromLive,
   normalizeSong,
   planSongWrite,
   sectionColor,
+  setMeter,
+  slotToNewSection,
   withEditingBlocks,
   type Block,
   type PlacedSlot,
@@ -43,9 +47,16 @@ interface LiveTrack {
   midi: boolean;
 }
 
-const BEATS_PER_ROW = 4 * BEATS_PER_BAR;
 const send = (selector: string, value: unknown) => outlet(selector, encodeBase64(JSON.stringify(value)));
-const barBeat = (beats: number) => `Bar ${Math.floor(beats / BEATS_PER_BAR) + 1} · ${Math.floor(beats % BEATS_PER_BAR) + 1}`;
+const barBeat = (beats: number, perBar: number) => `Bar ${Math.floor(beats / perBar) + 1} · ${Math.floor(beats % perBar) + 1}`;
+const copyBlocks = (list: Block[]) => list.map((b) => ({ ...b }));
+
+/** What Play is looping: a song part, or just some of its chords (`lo`..`hi`, a selection). */
+interface LoopTarget {
+  slotId: number;
+  lo: number | null;
+  hi: number | null;
+}
 
 /** The editor window. The window owns the song; the Arrangement follows it automatically. */
 export default function Editor() {
@@ -60,7 +71,6 @@ export default function Editor() {
   const [view, setView] = useState<"song" | "section">("song");
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
-  const [confirmRelink, setConfirmRelink] = useState(false);
   const [partAdd, setPartAdd] = useState(false);
 
   // The selected part's flyout closes on Escape or a click away from it.
@@ -79,10 +89,14 @@ export default function Editor() {
     };
   }, [selectedSlotId]);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(0);
+  // Shift-click selects several chords: from `anchor` to the selected block. Copy, Paste,
+  // ← →, ✕ and Play act on the selection when there is one, as in the app.
+  const [anchor, setAnchor] = useState<number | null>(null);
+  const [clipboard, setClipboard] = useState<Block[]>([]);
   const [picker, setPicker] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The song part whose section Play is looping (Play in the section view), if any.
-  const [loopSlotId, setLoopSlotId] = useState<number | null>(null);
+  // What Play is looping (Play in the section view), if anything.
+  const [loopTarget, setLoopTarget] = useState<LoopTarget | null>(null);
   const [tracks, setTracks] = useState<LiveTrack[] | null>(null);
   const [activity, setActivity] = useState<string[]>([]);
   const [synced, setSynced] = useState<string | null>(null);
@@ -101,6 +115,29 @@ export default function Editor() {
       } else say(r.ok ? `${r.name}: ${r.action}, ${r.notes} notes` : `${r.name}: FAILED - ${r.error}`);
     });
     outlet(OUT.cf_tracks);
+  }, []);
+
+  // The song follows Live's time signature (3/4 or 4/4). Live has no message for a change, so
+  // the window asks on opening and every two seconds after.
+  const warnedMeter = useRef("");
+  useEffect(() => {
+    bindInlet(IN.cf_meter, (b64) => {
+      const { numerator, denominator } = JSON.parse(decodeBase64(String(b64)));
+      const sig = `${numerator}/${denominator}`;
+      const meter = meterFromLive(numerator, denominator);
+      if (sig !== "3/4" && sig !== "4/4" && warnedMeter.current !== sig) say(`Live is in ${sig}: Theoryaoke writes 4/4`);
+      warnedMeter.current = sig;
+      // Until the Set's saved song has arrived, the window holds the untouched default; saving
+      // a converted copy of it then would overwrite the real song. The next poll catches up.
+      if (JSON.stringify(songRef.current) === JSON.stringify(DEFAULT_SONG)) return;
+      if (meter !== songRef.current.beatsPerBar) {
+        save(setMeter(songRef.current, meter));
+        say(`time signature: ${meter}/4`);
+      }
+    });
+    outlet(OUT.cf_meter);
+    const poll = setInterval(() => outlet(OUT.cf_meter), 2000);
+    return () => clearInterval(poll);
   }, []);
 
   // Track ids are not stable across reopening a Set, so a saved choice is found again by name.
@@ -148,54 +185,84 @@ export default function Editor() {
   const hearing: PlacedSlot | undefined = editingSlot ? placed.find((p) => p.slot.id === editingSlot.id) : usesOfSection[0];
   const block = selectedBlock !== null ? blocks[selectedBlock] : undefined;
   const locked = editingLocked(song);
+  const perBar = song.beatsPerBar;
+  const beatsPerRow = 4 * perBar;
+  // The selected chords, first to last: a shift-click range, or just the selected chord.
+  const range: [number, number] | null =
+    selectedBlock === null ? null : anchor === null || anchor >= blocks.length ? [selectedBlock, selectedBlock] : [Math.min(anchor, selectedBlock), Math.max(anchor, selectedBlock)];
+  const multi = !!range && range[1] > range[0];
+
+  function selectBlock(i: number, extend: boolean) {
+    if (extend && selectedBlock !== null) setAnchor(anchor ?? selectedBlock);
+    else setAnchor(null);
+    setSelectedBlock(i);
+  }
 
   // A song part opens as itself: locked if it is linked to its section, editable if inline.
   function openEditor(slot: Slot | null, sectionId?: number) {
-    setConfirmRelink(false);
     if (slot) update({ editing: { kind: "slot", id: slot.id } });
     else if (sectionId) update({ editing: { kind: "section", id: sectionId } });
     setSelectedBlock(0);
+    setAnchor(null);
     setView("section");
   }
 
   /* ---------------- transport ---------------- */
 
   // Play in the section view loops the whole section (where it is heard), starting from the
-  // selected chord. Play in the song view plays the song from the selected part, without a loop.
-  const loopPart = loopSlotId !== null ? placed.find((p) => p.slot.id === loopSlotId) : undefined;
+  // selected chord; with several chords selected, it loops just those. Play in the song view
+  // plays the song from the selected part, without a loop.
+  const loopPart = loopTarget ? placed.find((p) => p.slot.id === loopTarget.slotId) : undefined;
+  // The looped range, in song beats. A selection that no longer fits the part loops the whole part.
+  const loopRange = useMemo(() => {
+    if (!loopPart || !loopTarget) return undefined;
+    const { lo, hi } = loopTarget;
+    if (lo === null || hi === null || hi >= loopPart.blocks.length) return { start: loopPart.start, length: loopPart.length, part: true };
+    const start = loopPart.start + loopPart.blockStarts[lo];
+    const end = loopPart.start + loopPart.blockStarts[hi] + blockLength(loopPart.blocks[hi]);
+    return { start, length: end - start, part: false };
+  }, [loopPart, loopTarget]);
 
-  // If an edit changes the looping section's length or position, the loop follows it without jumping.
+  // If an edit changes the looped range's length or position, the loop follows it without jumping.
   const sentLoop = useRef("");
   useEffect(() => {
-    if (loopSlotId === null) {
+    if (!loopTarget) {
       sentLoop.current = "";
       return;
     }
-    if (!loopPart) {
+    if (!loopRange) {
       outlet(OUT.cf_unloop);
-      setLoopSlotId(null);
+      setLoopTarget(null);
       return;
     }
-    const key = `${loopPart.start}|${loopPart.length}`;
-    if (sentLoop.current && sentLoop.current !== key) outlet(OUT.cf_loop, loopPart.start, loopPart.length, 0);
+    const key = `${loopRange.start}|${loopRange.length}`;
+    if (sentLoop.current && sentLoop.current !== key) outlet(OUT.cf_loop, loopRange.start, loopRange.length, 0);
     sentLoop.current = key;
-  }, [loopSlotId, loopPart?.start, loopPart?.length]);
+  }, [loopTarget, loopRange?.start, loopRange?.length]);
 
   function play() {
     if (view === "section") {
       if (!hearing) return;
+      if (multi && range) {
+        const start = hearing.start + hearing.blockStarts[range[0]];
+        const length = hearing.blockStarts[range[1]] + blockLength(hearing.blocks[range[1]]) - hearing.blockStarts[range[0]];
+        sentLoop.current = `${start}|${length}`;
+        setLoopTarget({ slotId: hearing.slot.id, lo: range[0], hi: range[1] });
+        outlet(OUT.cf_loop, start, length, 1, start);
+        return;
+      }
       const from = hearing.start + (selectedBlock !== null && selectedBlock < hearing.blocks.length ? hearing.blockStarts[selectedBlock] : 0);
       sentLoop.current = `${hearing.start}|${hearing.length}`;
-      setLoopSlotId(hearing.slot.id);
+      setLoopTarget({ slotId: hearing.slot.id, lo: null, hi: null });
       outlet(OUT.cf_loop, hearing.start, hearing.length, 1, from);
     } else {
-      setLoopSlotId(null);
+      setLoopTarget(null);
       outlet(OUT.cf_play, placed.find((p) => p.slot.id === selectedSlotId)?.start ?? 0);
     }
   }
   function stop() {
     outlet(OUT.cf_stop);
-    setLoopSlotId(null);
+    setLoopTarget(null);
   }
 
   // Tapping a chord plays it, but only while stopped: during playback a tap only selects, so
@@ -241,26 +308,17 @@ export default function Editor() {
     update({ slots: song.slots.filter((x) => x.id !== id), editing });
     setSelectedSlotId(null);
   }
-  // Make inline: this part gets its own copy of the section's chords, edited on its own.
-  function makeInline(slot: Slot) {
-    const copy = (findSection(song, slot.sectionId)?.blocks ?? []).map((b) => ({ ...b }));
-    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: copy } : x)) });
-  }
-  // Relink: the part follows its section again, and its own changes are gone (asked first).
-  function relinkSlot(slot: Slot) {
-    update({ slots: song.slots.map((x) => (x.id === slot.id ? { ...x, blocks: null } : x)) });
-    setConfirmRelink(false);
-  }
   function newSection() {
     const s = songRef.current;
     const id = s.nextId;
     save({
       ...s,
-      sections: [...s.sections, { id, name: `Section ${s.sections.length + 1}`, blocks: [defaultBlock()] }],
+      sections: [...s.sections, { id, name: `Section ${s.sections.length + 1}`, blocks: [barBlock(s.beatsPerBar)] }],
       nextId: id + 1,
       editing: { kind: "section", id },
     });
     setSelectedBlock(0);
+    setAnchor(null);
     setView("section");
   }
   function duplicateSection(id: number) {
@@ -283,23 +341,61 @@ export default function Editor() {
   const setBlocks = (next: Block[]) => save(withEditingBlocks(songRef.current, next));
   const changeBlock = (i: number, change: Partial<Block>) => setBlocks(blocks.map((b, j) => (j === i ? { ...b, ...change } : b)));
   function addBlock() {
-    const at = selectedBlock !== null ? selectedBlock + 1 : blocks.length;
-    setBlocks([...blocks.slice(0, at), defaultBlock(), ...blocks.slice(at)]);
+    const at = range ? range[1] + 1 : blocks.length;
+    setBlocks([...blocks.slice(0, at), barBlock(perBar), ...blocks.slice(at)]);
     setSelectedBlock(at);
+    setAnchor(null);
   }
-  function moveBlock(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= blocks.length) return;
+  // ← → move the selected chords together, and the selection moves with them.
+  function moveSelection(dir: -1 | 1) {
+    if (!range) return;
+    const [lo, hi] = range;
+    if (lo + dir < 0 || hi + dir >= blocks.length) return;
     const next = [...blocks];
-    [next[i], next[j]] = [next[j], next[i]];
+    const moving = next.splice(lo, hi - lo + 1);
+    next.splice(lo + dir, 0, ...moving);
     setBlocks(next);
-    setSelectedBlock(j);
+    setSelectedBlock(selectedBlock! + dir);
+    if (anchor !== null) setAnchor(anchor + dir);
   }
-  function removeBlock(i: number) {
-    if (blocks.length < 2) return;
-    setBlocks(blocks.filter((_, j) => j !== i));
-    setSelectedBlock(Math.min(i, blocks.length - 2));
+  function removeSelection() {
+    if (!range || blocks.length - (range[1] - range[0] + 1) < 1) return;
+    setBlocks([...blocks.slice(0, range[0]), ...blocks.slice(range[1] + 1)]);
+    setSelectedBlock(Math.min(range[0], blocks.length - (range[1] - range[0] + 1) - 1));
+    setAnchor(null);
   }
+  // Copy takes the selected chords (or the one selected chord); Paste inserts copies after the
+  // selection, in any section or part, and selects what it pasted. The clipboard lasts while the window is open.
+  function copySelection() {
+    if (!range) return;
+    setClipboard(copyBlocks(blocks.slice(range[0], range[1] + 1)));
+    say(`copied ${range[1] - range[0] + 1} chord(s)`);
+  }
+  function paste() {
+    if (locked || !clipboard.length) return;
+    const at = range ? range[1] + 1 : blocks.length;
+    setBlocks([...blocks.slice(0, at), ...copyBlocks(clipboard), ...blocks.slice(at)]);
+    setAnchor(at);
+    setSelectedBlock(at + clipboard.length - 1);
+  }
+
+  // Keyboard: Cmd/Ctrl+C and V copy and paste, Delete removes, in the section view (not while typing a name).
+  const keys = useRef({ copySelection, paste, removeSelection, locked, view });
+  keys.current = { copySelection, paste, removeSelection, locked, view };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = keys.current;
+      if (k.view !== "section" || (e.target as HTMLElement).closest("input, textarea")) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "c") k.copySelection();
+      else if (mod && e.key.toLowerCase() === "v") k.paste();
+      else if ((e.key === "Delete" || e.key === "Backspace") && !k.locked) k.removeSelection();
+      else return;
+      e.preventDefault();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   // Blocks laid out in rows of 4 bars; a block that crosses a row edge is drawn in pieces.
   const segments = useMemo(() => {
@@ -310,10 +406,10 @@ export default function Editor() {
       let remaining = blockLength(b);
       let first = true;
       while (remaining > 0.0001) {
-        const row = Math.floor(start / BEATS_PER_ROW + 1e-9);
-        const pos = start - row * BEATS_PER_ROW;
-        const len = Math.min(remaining, BEATS_PER_ROW - pos);
-        out.push({ block: i, row, left: pos / BEATS_PER_ROW, width: len / BEATS_PER_ROW, cont: !first, split: remaining - len > 0.0001 });
+        const row = Math.floor(start / beatsPerRow + 1e-9);
+        const pos = start - row * beatsPerRow;
+        const len = Math.min(remaining, beatsPerRow - pos);
+        out.push({ block: i, row, left: pos / beatsPerRow, width: len / beatsPerRow, cont: !first, split: remaining - len > 0.0001 });
         first = false;
         start += len;
         remaining -= len;
@@ -321,7 +417,7 @@ export default function Editor() {
       cursor += blockLength(b);
     });
     return out;
-  }, [blocks]);
+  }, [blocks, beatsPerRow]);
   const rowCount = segments.length ? segments[segments.length - 1].row + 1 : 1;
 
   const selectedSlot = song.slots.find((x) => x.id === selectedSlotId);
@@ -343,7 +439,13 @@ export default function Editor() {
         <div className="controls">
           <button
             className={device.playing ? "tbtn on" : "tbtn"}
-            title={view === "section" ? "Loop this section, from the selected chord" : "Play the song from the selected part"}
+            title={
+              view === "section"
+                ? multi
+                  ? "Loop the selected chords"
+                  : "Loop this section, from the selected chord (shift-click to select several chords and loop just those)"
+                : "Play the song from the selected part"
+            }
             onClick={play}
             disabled={!hasTracks || (view === "section" && !hearing)}
           >
@@ -353,10 +455,15 @@ export default function Editor() {
             ■
           </button>
         </div>
-        <span className="loopinfo">{loopPart && device.playing ? `Looping ${loopPart.label}` : ""}</span>
+        <span className="loopinfo">
+          {loopPart && loopRange && device.playing
+            ? `Looping ${loopPart.label}${loopRange.part || !loopTarget || loopTarget.lo === null ? "" : `, chords ${loopTarget.lo + 1}–${loopTarget.hi! + 1}`}`
+            : ""}
+        </span>
         <span className="position">
           {device.playing ? "▶ " : ""}
-          {barBeat(device.beats)}
+          {barBeat(device.beats, perBar)}
+          {perBar === 3 ? "  (3/4)" : ""}
         </span>
         <span className="spacer" />
         <span className={hasTracks ? "sync" : "sync off"}>
@@ -487,24 +594,22 @@ export default function Editor() {
                 </button>
               </>
             ) : editingSlot && locked ? (
-              <>
-                <span className="locked-note">🔗 {findSection(song, editingSlot.sectionId)?.name}</span>
-                <button onClick={() => makeInline(editingSlot)}>Make inline</button>
-              </>
+              <span className="locked-note">🔗 {findSection(song, editingSlot.sectionId)?.name}</span>
             ) : editingSlot ? (
-              confirmRelink ? (
-                <span className="confirm">
-                  Relink to {findSection(song, editingSlot.sectionId)?.name}? This part's own changes will be lost.
-                  <button className="danger" onClick={() => relinkSlot(editingSlot)}>
-                    Relink
-                  </button>
-                  <button onClick={() => setConfirmRelink(false)}>Cancel</button>
-                </span>
-              ) : (
-                <button onClick={() => setConfirmRelink(true)}>Relink</button>
-              )
+              <button
+                onClick={() => save(slotToNewSection(songRef.current, editingSlot.id))}
+                title="Make this part's chords a new section, and link this part to it"
+              >
+                🔗 New linked section
+              </button>
             ) : null}
             <span style={{ flex: 1 }} />
+            <button onClick={copySelection} disabled={!range} title="Copy the selected chords (⌘C). Shift-click to select several.">
+              Copy
+            </button>
+            <button onClick={paste} disabled={locked || !clipboard.length} title="Paste after the selected chords (⌘V)">
+              Paste{clipboard.length > 1 ? ` ${clipboard.length}` : ""}
+            </button>
             <button onClick={addBlock} disabled={locked} title="Insert a chord after the selected one">
               + Add
             </button>
@@ -535,6 +640,7 @@ export default function Editor() {
                     const cls = [
                       "block",
                       sg.block === selectedBlock && "selected",
+                      multi && range && sg.block >= range[0] && sg.block <= range[1] && "in-range",
                       sg.block === playingBlock && "playing",
                       sg.cont && "cont",
                       sg.split && "split",
@@ -547,9 +653,9 @@ export default function Editor() {
                         key={k}
                         className={cls}
                         style={{ left: `calc(${sg.left * 100}% + 1px)`, width: `calc(${sg.width * 100}% - 2px)`, background: blockColor(b) }}
-                        onClick={() => {
-                          setSelectedBlock(sg.block);
-                          audition(b);
+                        onClick={(e) => {
+                          selectBlock(sg.block, e.shiftKey);
+                          if (!e.shiftKey) audition(b);
                         }}
                         title={`${label.degree}  ${label.name}`}
                       >
@@ -567,22 +673,35 @@ export default function Editor() {
           </div>
 
           <div className="section-bottom">
-            {block && selectedBlock !== null ? (
-              <Inspector
-                block={block}
-                song={song}
-                locked={locked}
-                canRemove={blocks.length > 1}
-                isFirst={selectedBlock === 0}
-                isLast={selectedBlock === blocks.length - 1}
-                onChange={(c) => {
-                  changeBlock(selectedBlock, c);
-                  audition({ ...block, ...c });
-                }}
-                onReset={() => changeBlock(selectedBlock, defaultBlock())}
-                onMove={(d) => moveBlock(selectedBlock, d)}
-                onRemove={() => removeBlock(selectedBlock)}
-              />
+            {block && selectedBlock !== null && range ? (
+              <div className="inspector-wrap">
+                <Inspector
+                  block={block}
+                  song={song}
+                  locked={locked}
+                  canRemove={blocks.length > range[1] - range[0] + 1}
+                  isFirst={range[0] === 0}
+                  isLast={range[1] === blocks.length - 1}
+                  onChange={(c) => {
+                    changeBlock(selectedBlock, c);
+                    audition({ ...block, ...c });
+                  }}
+                  onReset={() => changeBlock(selectedBlock, barBlock(perBar))}
+                  onMove={moveSelection}
+                  onRemove={removeSelection}
+                />
+                {/* A linked part is locked: these sit over its greyed-out editor. */}
+                {locked && editingSlot && (
+                  <div className="lock-overlay">
+                    <button onClick={() => openEditor(null, editingSlot.sectionId)} title="Edit the section: the change shows in every part linked to it">
+                      Edit source
+                    </button>
+                    <button onClick={() => save(inlineSlot(songRef.current, editingSlot.id))} title="Give this part its own copy of the chords, to change on its own">
+                      Edit instance
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="empty-hint">Click a chord to edit it</div>
             )}
@@ -617,7 +736,7 @@ export default function Editor() {
               <Dropdown
                 value={song.drumBeat}
                 options={[
-                  ...Object.keys(BUILTIN_BEAT_PATTERNS).map((k) => ({ value: k, label: beatPatternLabel(k) })),
+                  ...beatPatternsForMeter(perBar).map((k) => ({ value: k, label: beatPatternLabel(k) })),
                   { value: "off", label: "Off" },
                 ]}
                 onChange={(v) => update({ drumBeat: String(v) })}
@@ -655,9 +774,9 @@ export default function Editor() {
                 send(OUT.cf_clear, { trackIds: ROLES.map((r) => song.tracks[r]?.id).filter(Boolean) });
                 lastSent.current.clear();
               }}
-              title="Deletes every Chord Fiend clip on the chosen tracks. The next edit writes the song again."
+              title="Deletes every Theoryaoke clip on the chosen tracks. The next edit writes the song again."
             >
-              Remove Chord Fiend clips
+              Remove Theoryaoke clips
             </button>
             <h4>Activity</h4>
             <div className="activity">{activity.join("\n") || "-"}</div>

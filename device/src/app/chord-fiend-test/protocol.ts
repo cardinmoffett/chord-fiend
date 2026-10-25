@@ -5,6 +5,7 @@ export const IN = {
   ...DEVICE_IN,
   ...CHAIN_IN,
   cf_tracks: "cf_tracks",
+  cf_meter: "cf_meter",
   cf_result: "cf_result",
   cf_audition: "cf_audition",
 } as const;
@@ -14,6 +15,7 @@ export const OUT = {
   ...CHAIN_OUT,
   ui_ready: "ui_ready",
   cf_tracks: "cf_tracks",
+  cf_meter: "cf_meter",
   cf_write: "cf_write",
   cf_prune: "cf_prune",
   cf_clear: "cf_clear",
