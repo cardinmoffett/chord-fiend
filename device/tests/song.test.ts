@@ -2,7 +2,7 @@
 // run end to end: planSongWrite's messages go through the built wrapper into a fake
 // Live set, and the test looks at the clips that end up on the fake tracks.
 import { describe, expect, it } from "vitest";
-import { defaultBlock } from "../../engine/src/engine.js";
+import { decodeSharedSong, defaultBlock, encodeSharedSong } from "../../engine/src/engine.js";
 import type { Block } from "../../engine/src/engine.js";
 import {
   DEFAULT_SONG,
@@ -13,7 +13,9 @@ import {
   layoutSong,
   meterFromLive,
   setMeter,
+  sharedToSong,
   slotToNewSection,
+  songToShared,
   normalizeSong,
   planSongWrite,
   barBlock,
@@ -328,5 +330,56 @@ describe("the rename to Theoryaoke", () => {
       t.c.arrangement_clips.push(t.live.add({ kind: "Clip", name, start_time: start, end_time: start + 16, notes: [] }));
     t.write(t.song, true);
     expect(t.clips(t.c).map((x: any) => x[0])).toEqual(["Theoryaoke: 1 Verse - chords", "Theoryaoke: 2 Chorus - chords", "Theoryaoke: 3 Verse - chords", "Theoryaoke: 4 Chorus - chords"]);
+  });
+});
+
+describe("sharing with the phone: Copy for phone and Paste from phone", () => {
+  const tracks = { chords: { id: 11, name: "Keys" }, bass: { id: 12, name: "Bass" }, drums: null };
+
+  it("a song makes the trip to text and back unchanged, and the Set's track choices stay", () => {
+    const song: Song = { ...inlineSlot(SAMPLE, 5), name: "Night Train", beatsPerBar: 4, rootIndex: 2, modeIndex: 1, tracks };
+    const text = encodeSharedSong(songToShared(song, 121.6));
+    const shared = decodeSharedSong(text);
+    expect(shared.tempo).toBe(122);
+    expect(shared.parts.map((p) => [p.section, p.linked])).toEqual([[1, true], [2, true], [1, false], [2, true]]);
+    const other: Song = { ...DEFAULT_SONG, tracks: { chords: { id: 99, name: "Other" }, bass: null, drums: null } };
+    const back = sharedToSong(shared, { ...song, sections: [], slots: [] });
+    expect(back.tracks).toEqual(tracks);
+    expect(sharedToSong(shared, other).tracks).toEqual(other.tracks);
+    expect(back.name).toBe("Night Train");
+    expect([back.rootIndex, back.modeIndex, back.beatsPerBar, back.drumBeat]).toEqual([2, 1, 4, "rock"]);
+    expect(layoutSong(back).map((p) => [p.label, p.start, p.length, p.notes.chords.length])).toEqual(
+      layoutSong(song).map((p) => [p.label, p.start, p.length, p.notes.chords.length]),
+    );
+    expect(back.slots[2].blocks).not.toBe(song.slots[2].blocks);
+  });
+
+  it("a phone song arrives whole: a box that belongs to no section gets a section of its own", () => {
+    const shared = decodeSharedSong(
+      encodeSharedSong({
+        name: "From the phone", rootIndex: 9, modeIndex: 5, beatsPerBar: 3, drumBeat: "waltz", bassWrapLow: 33, tempo: 90,
+        sections: [{ id: 4, name: "Verse", blocks: [blk({ degreeIndex: 3, durationIndex: 3, durationModifier: 1 })] }],
+        parts: [
+          { section: 4, linked: true },
+          { section: null, name: "Tag", blocks: [blk({ degreeIndex: 4, durationIndex: 3, durationModifier: 1 })], linked: false },
+          { section: 4, name: "Verse*", blocks: [blk({ degreeIndex: 1, durationIndex: 3, durationModifier: 1 })], linked: false },
+        ],
+      }),
+    );
+    const s = sharedToSong(shared, DEFAULT_SONG);
+    expect(s.sections.map((x) => x.name)).toEqual(["Verse", "Tag"]);
+    expect(layoutSong(s).map((p) => [p.label, p.start, p.length])).toEqual([["Verse", 0, 3], ["Tag*", 3, 3], ["Verse*", 6, 3]]);
+    expect(s.slots.map((x) => x.id)).toEqual([...new Set(s.slots.map((x) => x.id))]); // ids are unique
+    expect(Math.max(...s.slots.map((x) => x.id), ...s.sections.map((x) => x.id))).toBeLessThan(s.nextId);
+    expect([s.beatsPerBar, s.drumBeat, s.bassWrapLow, s.editing]).toEqual([3, "waltz", 33, { kind: "section", id: 1 }]);
+  });
+
+  it("the wrapper sets Live's time signature for a pasted 3/4 song", () => {
+    const live = fakeLive();
+    const w = loadWrapper(live);
+    w.send("cf_set_meter", 3);
+    expect([live.song.signature_numerator, live.song.signature_denominator]).toEqual([3, 4]);
+    w.send("cf_set_meter", 4);
+    expect(live.song.signature_numerator).toBe(4);
   });
 });

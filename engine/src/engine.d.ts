@@ -164,3 +164,25 @@ export const LENGTH_MOD_LABELS: Record<LengthMod, string>;
 export function lengthParts(block: Block): { base: LengthBase; mod: LengthMod };
 /** The block fields for a base note and modifier. */
 export function lengthChange(base: LengthBase, mod: LengthMod): { durationIndex: number; durationModifier: number; durationMult: number };
+
+/** A song as it travels between the phone app and the Ableton device (see engine.js). */
+export interface SharedSong {
+  name: string;
+  rootIndex: number;
+  modeIndex: number;
+  beatsPerBar: 3 | 4;
+  drumBeat: string;
+  bassWrapLow: number;
+  tempo?: number;
+  sections: { id: number | string; name: string; blocks: Block[] }[];
+  parts: ({ section: number | string; linked: true } | { section: number | string | null; name: string; blocks: Block[]; linked: false })[];
+}
+export const SHARED_SONG_VERSION: number;
+/** Every field present and in range, every block complete; throws if nothing usable is in it. */
+export function normalizeSharedSong(raw: unknown): SharedSong;
+/** The text to copy: a readable line, then the data line. */
+export function encodeSharedSong(song: SharedSong): string;
+/** The song in pasted text; throws an Error whose message can be shown to the person. */
+export function decodeSharedSong(text: string): SharedSong;
+/** "Verse, Chorus · 6 parts · D Dorian · 3/4" */
+export function describeSharedSong(song: SharedSong): string;
