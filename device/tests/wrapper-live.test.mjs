@@ -30,7 +30,7 @@ describe("feel test wrapper against a fake Live set", () => {
     w.send("cf_write", w.b64({ role: "chords", trackId: chords.id, start: 8, length: 16, notes: notes(3) }));
     expect(chords.arrangement_clips).toHaveLength(1);
     const clip = chords.arrangement_clips[0];
-    expect([clip.name, clip.start_time, clip.end_time]).toEqual(["Chord Fiend: chords", 8, 24]);
+    expect([clip.name, clip.start_time, clip.end_time]).toEqual(["Theoryaoke: chords", 8, 24]);
     expect(clip.notes.map((n) => [n.pitch, n.start_time, n.duration, n.velocity, n.mute])).toEqual([
       [60, 0, 1, 100, 0],
       [61, 1, 1, 100, 0],
@@ -62,7 +62,7 @@ describe("feel test wrapper against a fake Live set", () => {
     w.send("cf_write", w.b64({ role: "chords", trackId: chords.id, start: 0, length: 20, notes: notes(2) }));
     expect(chords.arrangement_clips.map((c) => [c.name, c.end_time])).toEqual([
       ["My own clip", 36],
-      ["Chord Fiend: chords", 20],
+      ["Theoryaoke: chords", 20],
     ]);
     expect(w.replies("cf_result")[1]).toMatchObject({ ok: true, action: "recreated", deleted: 1 });
   });
@@ -74,7 +74,7 @@ describe("feel test wrapper against a fake Live set", () => {
     const theirs = live.add({ kind: "Clip", name: "keep me", start_time: 40, end_time: 44, notes: [] });
     d.arrangement_clips.push(theirs);
     for (const [role, t] of [["chords", c], ["bass", b], ["drums", d]]) w.send("cf_write", w.b64({ role, trackId: t.id, start: 0, length: 8, notes: notes(2) }));
-    expect([c, b, d].map((t) => t.arrangement_clips.map((x) => x.name))).toEqual([["Chord Fiend: chords"], ["Chord Fiend: bass"], ["keep me", "Chord Fiend: drums"]]);
+    expect([c, b, d].map((t) => t.arrangement_clips.map((x) => x.name))).toEqual([["Theoryaoke: chords"], ["Theoryaoke: bass"], ["keep me", "Theoryaoke: drums"]]);
     w.send("cf_clear", w.b64({ trackIds: [c.id, b.id, d.id] }));
     expect([c, b, d].map((t) => t.arrangement_clips.map((x) => x.name))).toEqual([[], [], ["keep me"]]);
     expect(w.replies("cf_result").at(-1)).toMatchObject({ role: "clear", ok: true, deleted: 3 });

@@ -19,7 +19,7 @@ export function fakeLive() {
     objects.set(o.id, o);
     return o;
   };
-  const song = add({ kind: "Song", is_playing: 0, current_song_time: 0, loop: 1, loop_start: 16, loop_length: 8, back_to_arranger: 1, tracks: [] });
+  const song = add({ kind: "Song", is_playing: 0, current_song_time: 0, loop: 1, loop_start: 16, loop_length: 8, back_to_arranger: 1, signature_numerator: 4, signature_denominator: 4, tracks: [] });
   for (const [name, midi] of [["Chords", 1], ["Bass Line", 1], ["Drums", 1], ["Vox", 0]]) {
     song.tracks.push(add({ kind: "Track", name, has_midi_input: midi, arrangement_clips: [] }));
   }

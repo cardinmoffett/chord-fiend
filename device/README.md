@@ -1,6 +1,6 @@
-# device/ : the Chord Fiend Max for Live device
+# device/ : the Theoryaoke Max for Live device
 
-An [m4l-jweb](https://github.com/alienmind/m4l-jweb) 1.6.1 project. For now it builds one device, **chord-fiend-test**, for the feel tests in step 3 of the build plan. How to use it in Live is in [`../feel-test/README.md`](../feel-test/README.md).
+An [m4l-jweb](https://github.com/alienmind/m4l-jweb) 1.6.1 project. For now it builds one device, **chord-fiend-test** (shown as Theoryaoke), for the feel tests in step 3 of the build plan. How to use it in Live is in [`../feel-test/README.md`](../feel-test/README.md).
 
 ```bash
 pnpm install

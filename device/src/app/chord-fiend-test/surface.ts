@@ -10,6 +10,6 @@ export default defineSurface({
     song: state<Song | Record<string, unknown>>({ default: DEFAULT_SONG }),
   },
   windows: {
-    editor: window({ title: "Chord Fiend (feel test)", width: 1200, height: 760, entry: "Editor" }),
+    editor: window({ title: "Theoryaoke (feel test)", width: 1200, height: 760, entry: "Editor" }),
   },
 });

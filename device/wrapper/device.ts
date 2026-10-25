@@ -1,5 +1,5 @@
 /**
- * device.ts - the Live side of the Chord Fiend feel test.
+ * device.ts - the Live side of the Theoryaoke feel test.
  *
  * Concatenated after the packaged wrapper into ONE [js] script, so it must compile to
  * ES5: var and function only, no console, no setTimeout (see the m4l-jweb CLAUDE.md).
@@ -9,16 +9,18 @@
  * payloads cross the bridge as base64 JSON, because Max splits messages on commas.
  *
  *   cf_tracks                      -> cf_tracks <b64 [{id, name, midi}]>
+ *   cf_meter                       -> cf_meter <b64 {numerator, denominator}>  Live's time signature
  *   cf_prune <b64 {role, trackId, keep:[{name, start, length}]}>
  *                                  -> cf_result <b64 {role, op:"prune", ok, deleted, error}>
  *   cf_write <b64 {role, name, trackId, start, length, color, notes:[[p,s,d,v]...]}>
  *                                  -> cf_result <b64 {role, name, ok, action, clipId, notes, error}>
  *   cf_clear <b64 {trackIds:[...]}> -> cf_result
  *
- * Our clips are named "Chord Fiend: <name>", where the window makes <name> unique per
+ * Our clips are named "Theoryaoke: <name>", where the window makes <name> unique per
  * track ("2 Chorus - bass"). A song write is one cf_prune per track, which deletes our
  * clips for that role that are no longer in the song, then a cf_write per clip that is new
- * or changed.
+ * or changed. Clips from before the rename ("Chord Fiend: <name>") still count as ours, so
+ * the first sync tidies them away and Remove clears them.
  *   cf_loop <start> <length> [jump] [from]  Live's loop on that range; with jump (default) the
  *                                  playhead goes to `from` (default the loop start) and plays
  *   cf_audition <b64 {pitches, velocity, durationMs}>  passed to the device page, which plays it
@@ -27,7 +29,12 @@
  *   cf_stop                        stop, and restore the user's loop
  */
 
-var CLIP_TAG = "Chord Fiend: ";
+var CLIP_TAG = "Theoryaoke: ";
+var OLD_CLIP_TAG = "Chord Fiend: ";
+
+function cfIsOurs(name: string): boolean {
+  return name.indexOf(CLIP_TAG) === 0 || name.indexOf(OLD_CLIP_TAG) === 0;
+}
 var EDITOR_WINDOW = "editor";
 
 /* ---------------- base64 and UTF-8, both ways ---------------- */
@@ -137,7 +144,7 @@ function cfTaggedClips(track: LiveAPI): { id: number; start: number; end: number
   for (var i = 0; i < ids.length; i++) {
     var clip = new LiveAPI("id " + ids[i]);
     var name = cfGet(clip, "name");
-    if (name.indexOf(CLIP_TAG) !== 0) continue;
+    if (!cfIsOurs(name)) continue;
     out.push({ id: ids[i], start: cfNum(clip, "start_time"), end: cfNum(clip, "end_time"), name: name });
   }
   return out;
@@ -164,6 +171,12 @@ function cf_tracks(): void {
   cfReply("cf_tracks", tracks);
 }
 
+/** Live's time signature. The window asks on opening and every few seconds after. */
+function cf_meter(): void {
+  var song = new LiveAPI("live_set");
+  cfReply("cf_meter", { numerator: cfNum(song, "signature_numerator"), denominator: cfNum(song, "signature_denominator") });
+}
+
 /**
  * Put one role's notes on its track, as one Arrangement clip.
  *
@@ -176,7 +189,7 @@ function cf_write(b64: unknown): void {
   try {
     req = cfDecode(b64);
   } catch (e) {
-    post("chord-fiend: cf_write could not read its request - " + (e as Error).message + "\n");
+    post("theoryaoke: cf_write could not read its request - " + (e as Error).message + "\n");
     return;
   }
   var result: any = { role: req.role, name: req.name, ok: false };
@@ -216,7 +229,7 @@ function cf_write(b64: unknown): void {
         var all = cfIdList(track.get("arrangement_clips"));
         for (var k = 0; k < all.length; k++) {
           var probe = new LiveAPI("id " + all[k]);
-          if (Math.abs(cfNum(probe, "start_time") - start) < 0.001 && cfGet(probe, "name").indexOf(CLIP_TAG) !== 0) clipId = all[k];
+          if (Math.abs(cfNum(probe, "start_time") - start) < 0.001 && !cfIsOurs(cfGet(probe, "name"))) clipId = all[k];
         }
       }
       if (!clipId) throw new Error("create_midi_clip made no clip at beat " + start);
@@ -235,7 +248,7 @@ function cf_write(b64: unknown): void {
   } catch (e2) {
     result.error = (e2 as Error).message;
   }
-  post("chord-fiend: write " + tag + " -> " + (result.ok ? result.action + " clip " + result.clipId + ", " + result.notes + " notes" : "FAILED " + result.error) + "\n");
+  post("theoryaoke: write " + tag + " -> " + (result.ok ? result.action + " clip " + result.clipId + ", " + result.notes + " notes" : "FAILED " + result.error) + "\n");
   cfReply("cf_result", result);
 }
 
@@ -254,7 +267,7 @@ function cf_prune(b64: unknown): void {
     for (var i = 0; i < mine.length; i++) {
       var c = mine[i];
       // Ours for this role: "<name> - <role>", or the first feel test's plain "<role>".
-      var forRole = c.name.slice(-suffix.length) === suffix || c.name === CLIP_TAG + req.role;
+      var forRole = c.name.slice(-suffix.length) === suffix || c.name === CLIP_TAG + req.role || c.name === OLD_CLIP_TAG + req.role;
       if (!forRole) continue;
       var kept = false;
       for (var k = 0; k < req.keep.length; k++) {
@@ -269,7 +282,7 @@ function cf_prune(b64: unknown): void {
   } catch (e) {
     result.error = (e as Error).message;
   }
-  post("chord-fiend: prune " + req.role + " -> " + (result.ok ? "deleted " + result.deleted : "FAILED " + result.error) + "\n");
+  post("theoryaoke: prune " + req.role + " -> " + (result.ok ? "deleted " + result.deleted : "FAILED " + result.error) + "\n");
   cfReply("cf_result", result);
 }
 
@@ -291,7 +304,7 @@ function cf_clear(b64: unknown): void {
   } catch (e) {
     error = (e as Error).message;
   }
-  post("chord-fiend: cleared " + deleted + " clips" + (error ? " (error: " + error + ")" : "") + "\n");
+  post("theoryaoke: cleared " + deleted + " clips" + (error ? " (error: " + error + ")" : "") + "\n");
   cfReply("cf_result", { role: "clear", ok: !error, deleted: deleted, error: error });
 }
 
@@ -329,7 +342,7 @@ function cfPlayFrom(song: LiveAPI, beats: number): void {
     song.call("start_playing");
     song.set("current_song_time", beats);
   }
-  post("chord-fiend: play from beat " + beats + "\n");
+  post("theoryaoke: play from beat " + beats + "\n");
 }
 
 function cf_loop(start: number, length: number, jump?: number, from?: number): void {
@@ -341,7 +354,7 @@ function cf_loop(start: number, length: number, jump?: number, from?: number): v
   if (jump === 0) return;
   song.set("back_to_arranger", 0);
   cfPlayFrom(song, from === undefined || isNaN(from) ? Number(start) : Number(from));
-  post("chord-fiend: loop " + start + " + " + length + " beats\n");
+  post("theoryaoke: loop " + start + " + " + length + " beats\n");
 }
 
 function cf_play(start: number): void {
@@ -367,6 +380,7 @@ function cf_stop(): void {
 function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: unknown, a3?: unknown, a4?: unknown): void {
   try {
     if (selector === "cf_tracks") cf_tracks();
+    else if (selector === "cf_meter") cf_meter();
     else if (selector === "cf_write") cf_write(a1);
     else if (selector === "cf_prune") cf_prune(a1);
     else if (selector === "cf_clear") cf_clear(a1);
@@ -377,9 +391,9 @@ function onWindowMessage(windowId: string, selector: string, a1?: unknown, a2?: 
     else if (selector === "cf_unloop") cf_unloop();
     else if (selector === "cf_play") cf_play(Number(a1));
     else if (selector === "cf_stop") cf_stop();
-    else post("chord-fiend: window " + windowId + " sent unhandled '" + selector + "'\n");
+    else post("theoryaoke: window " + windowId + " sent unhandled '" + selector + "'\n");
   } catch (e) {
-    post("chord-fiend: " + selector + " failed - " + (e as Error).message + "\n");
+    post("theoryaoke: " + selector + " failed - " + (e as Error).message + "\n");
   }
 }
 
