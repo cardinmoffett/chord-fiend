@@ -377,9 +377,13 @@ export default function Editor() {
 
   const setBlocks = (next: Block[]) => save(withEditingBlocks(songRef.current, next));
   const changeBlock = (i: number, change: Partial<Block>) => setBlocks(blocks.map((b, j) => (j === i ? { ...b, ...change } : b)));
+  // + Add duplicates: a copy of the selected chord (the last one, with several selected) goes
+  // right after it; with nothing selected, a copy of the last chord goes at the end.
   function addBlock() {
-    const at = range ? range[1] + 1 : blocks.length;
-    setBlocks([...blocks.slice(0, at), barBlock(perBar), ...blocks.slice(at)]);
+    const from = range ? range[1] : blocks.length - 1;
+    const at = from + 1;
+    const copy = blocks[from] ? { ...blocks[from] } : barBlock(perBar);
+    setBlocks([...blocks.slice(0, at), copy, ...blocks.slice(at)]);
     setSelectedBlock(at);
     setAnchor(null);
   }
@@ -647,7 +651,7 @@ export default function Editor() {
             <button onClick={paste} disabled={locked || !clipboard.length} title="Paste after the selected chords (⌘V)">
               Paste{clipboard.length > 1 ? ` ${clipboard.length}` : ""}
             </button>
-            <button onClick={addBlock} disabled={locked} title="Insert a chord after the selected one">
+            <button onClick={addBlock} disabled={locked} title="Add a copy of the selected chord after it">
               + Add
             </button>
           </div>
