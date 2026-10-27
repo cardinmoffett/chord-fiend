@@ -590,6 +590,8 @@
   /* The editor, top to bottom: tabs, chord pads, Length, Shape / Inversion / Spread, then
      Alter (collapsed). The drawer never restates the chord; the selected block does. */
   .editor-grid {
+    max-width: 640px; /* on a wide screen, as wide as the blocks above it */
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -4252,7 +4254,19 @@ document.getElementById("timeline").addEventListener("scroll", function () {
     handle.setPointerCapture(e.pointerId);
   });
   handle.addEventListener("pointermove", function (e) { moveDrag(e, false); });
-  handle.addEventListener("pointerup", endDrag);
+  // A click on the handle (no drag) opens or closes the drawer: with a mouse, the handle is
+  // the only way to move it, and dragging a thin bar with a mouse is fiddly.
+  handle.addEventListener("pointerup", function (e) {
+    if (dragging && Math.abs(startY - e.clientY) < 4) {
+      dragging = false;
+      editorExpanded = !editorExpanded;
+      if (!editorExpanded) editorEl.scrollTop = 0;
+      if (editorGridEl && editorGridEl.classList) editorGridEl.classList.toggle("expanded", editorExpanded);
+      snapEditorPanel();
+      return;
+    }
+    endDrag(e);
+  });
   handle.addEventListener("pointercancel", endDrag);
 
   // The whole shelf, but ONLY while collapsed -- there's nothing to scroll
@@ -4263,6 +4277,10 @@ document.getElementById("timeline").addEventListener("scroll", function () {
   // resize gesture there.
   editorEl.addEventListener("pointerdown", function (e) {
     if (editorExpanded) return;
+    // Touch only. With a mouse, capturing the pointer here sends the click to the drawer
+    // instead of the pad or button under it (desktop Chrome), so nothing in the drawer
+    // responded. Mouse users move the drawer with the handle.
+    if (e.pointerType === "mouse") return;
     beginDrag(e);
     editorEl.setPointerCapture(e.pointerId); // keeps every subsequent event targeted here even if a fast
       // flick's finger position momentarily lands over a child control -- without this, a quick enough
